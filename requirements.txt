@@ -1,2 +1,15 @@
 Django>=3.2.4,<3.3
 djangorestframework>=3.12.4,<3.13
+djangorestframework-simplejwt>=5.0.0
+django-cors-headers>=4.0.0
+psycopg2>=2.8.6,<2.9
+Pillow>=8.0.0
+# Additional libraries for khovattu app
+django-filter>=23.0.0
+django-import-export>=3.0.0
+openpyxl>=3.0.0
+pandas>=2.0.0
+qrcode>=7.0.0
+requests>=2.25.0
+xlsxwriter>=3.0.0
+numpy>=1.20.0
