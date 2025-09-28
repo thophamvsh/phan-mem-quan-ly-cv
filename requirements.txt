@@ -2,8 +2,9 @@ Django>=3.2.4,<3.3
 djangorestframework>=3.12.4,<3.13
 djangorestframework-simplejwt>=5.0.0
 django-cors-headers>=4.0.0
-psycopg2>=2.8.6,<2.9
+psycopg2==2.9.9
 Pillow>=8.0.0
+drf-spectacular>=0.22.1,<0.23
 # Additional libraries for khovattu app
 django-filter>=23.0.0
 django-import-export>=3.0.0

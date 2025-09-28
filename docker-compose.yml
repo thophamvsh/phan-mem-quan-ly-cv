@@ -1,32 +1,79 @@
 version: "3.9"
 
+name: vsh-dev # cố định tên project để tránh đổi tên volumes ngoài ý muốn
+
 services:
+  db:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-devdb}
+      POSTGRES_USER: ${DB_USER:-devuser}
+      POSTGRES_PASSWORD: ${DB_PASS:-changeme}
+      # Khởi tạo DB với UTF-8 (ổn định sort/like, đặc biệt tiếng Việt)
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - dev-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-devuser} -d ${DB_NAME:-devdb} -q",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - vsh-net
+
   app:
     build:
       context: .
+      dockerfile: Dockerfile # hoặc Dockerfile.improved nếu bạn tách riêng
+      target: ${BUILD_TARGET:-development}
       args:
-        - DEV=true
+        DEV: ${DEV:-true}
+    env_file:
+      - .env # ưu tiên đọc từ .env (DEBUG, DB_*, v.v.)
+    environment:
+      # fallback an toàn cho local nếu .env thiếu
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-devdb}
+      DB_USER: ${DB_USER:-devuser}
+      DB_PASS: ${DB_PASS:-changeme}
+      DEBUG: ${DEBUG:-True}
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     volumes:
-      - ./app:/app
+      - ./app:/app # hot-reload code
+      - dev-media-data:/vol/web/media # user uploads
+      - dev-static-data:/vol/web/static
+      - dev-logs-data:/vol/web/logs
     command: >
-      sh -c "python manage.py wait_for_db &&
-             python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
-    environment:
-      - DB_HOST=db
-      - DB_NAME=devdb
-      - DB_USER=devuser
-      - DB_PASS=changeme
+      sh -c "
+        python manage.py wait_for_db &&
+        python manage.py migrate &&
+        python manage.py runserver 0.0.0.0:8000
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vsh-net
 
-  db:
-    image: postgres:13-alpine
-    volumes:
-      - ./data/db:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=devdb
-      - POSTGRES_USER=devuser
-      - POSTGRES_PASSWORD=changeme
+networks:
+  vsh-net:
+    driver: bridge
+
+volumes:
+  dev-db-data:
+  dev-media-data:
+  dev-static-data:
+  dev-logs-data:
