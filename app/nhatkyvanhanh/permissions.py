@@ -4,7 +4,7 @@ from rest_framework import permissions
 def has_profile_permission(user, permission_name):
     if not user or not user.is_authenticated:
         return False
-    if user.is_superuser or user.is_staff:
+    if user.is_superuser:
         return True
 
     try:
@@ -44,3 +44,27 @@ class CanConfirmOperationEvents(UserProfilePermission):
 
 class CanAddEventDevelopments(UserProfilePermission):
     permission_name = "can_add_event_developments"
+
+
+class CanViewShiftHandoverLogs(UserProfilePermission):
+    permission_name = "can_view_shift_handover_logs"
+
+
+class CanCreateShiftHandoverLogs(UserProfilePermission):
+    permission_name = "can_create_shift_handover_logs"
+
+
+class CanReceiveShiftHandoverLogs(UserProfilePermission):
+    permission_name = "can_receive_shift_handover_logs"
+
+
+class CanViewAdminShiftHandoverLogs(UserProfilePermission):
+    permission_name = "can_view_admin_shift_handover_logs"
+
+
+class CanCreateAdminShiftHandoverLogs(UserProfilePermission):
+    permission_name = "can_create_admin_shift_handover_logs"
+
+
+class CanReceiveAdminShiftHandoverLogs(UserProfilePermission):
+    permission_name = "can_receive_admin_shift_handover_logs"

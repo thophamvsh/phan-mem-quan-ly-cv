@@ -309,6 +309,48 @@ class UserProfile(models.Model):
         help_text="Co quyen sua tat ca noi dung khac phuc khi chua xac nhan"
     )
 
+    # Phan quyen nhat ky van hanh - so giao nhan ca
+    can_view_shift_handover_logs = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so giao nhan ca van hanh"
+    )
+    can_create_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao so giao nhan ca van hanh"
+    )
+    can_receive_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen ky nhan ca trong so giao nhan ca van hanh"
+    )
+    can_edit_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so giao nhan ca van hanh"
+    )
+    can_delete_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so giao nhan ca van hanh"
+    )
+    can_view_admin_shift_handover_logs = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so giao nhan ca hanh chinh"
+    )
+    can_create_admin_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao so giao nhan ca hanh chinh"
+    )
+    can_receive_admin_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen ky nhan ca trong so giao nhan ca hanh chinh"
+    )
+    can_edit_admin_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so giao nhan ca hanh chinh"
+    )
+    can_delete_admin_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so giao nhan ca hanh chinh"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

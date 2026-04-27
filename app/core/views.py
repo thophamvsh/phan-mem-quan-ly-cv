@@ -88,7 +88,11 @@ class UserProfileAPIView(APIView):
     def get(self, request):
         """Lấy thông tin profile của user hiện tại"""
         try:
-            serializer = UserProfileSerializer(request.user)
+            profile, created = UserProfile.objects.get_or_create(
+                user=request.user,
+                defaults={'is_mobile_user': True}
+            )
+            serializer = UserProfileSerializer(profile, context={'request': request})
             return Response({
                 "ok": True,
                 "data": serializer.data
@@ -102,7 +106,11 @@ class UserProfileAPIView(APIView):
     def patch(self, request):
         """Cập nhật thông tin profile của user hiện tại"""
         try:
-            serializer = UserProfileSerializer(request.user, data=request.data, partial=True)
+            profile, created = UserProfile.objects.get_or_create(
+                user=request.user,
+                defaults={'is_mobile_user': True}
+            )
+            serializer = UserProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return Response({

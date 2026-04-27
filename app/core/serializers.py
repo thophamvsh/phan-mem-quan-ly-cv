@@ -170,6 +170,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source='user.id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
+    is_staff = serializers.BooleanField(source='user.is_staff', read_only=True)
+    is_superuser = serializers.BooleanField(source='user.is_superuser', read_only=True)
     first_name = serializers.CharField(source='user.first_name', required=False)
     last_name = serializers.CharField(source='user.last_name', required=False)
     full_name = serializers.CharField(read_only=True)
@@ -214,7 +216,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ('id', 'user_id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'is_mobile_user',
+        fields = ('id', 'user_id', 'username', 'email', 'is_staff', 'is_superuser', 'first_name', 'last_name', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'is_mobile_user',
                  'avatar', 'avatar_url', 'chuc_danh', 'chu_ky', 'chu_ky_url', 'nha_may', 'nha_may_code', 'nha_may_name', 'is_all_factories',
                  'created_at', 'updated_at',
                  # Permissions - thêm để đồng nhất với khovattu serializer
@@ -228,8 +230,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_acknowledge_operation_events', 'can_process_operation_events',
                  'can_confirm_operation_events', 'can_add_event_developments',
                  'can_edit_own_event_developments', 'can_edit_all_event_developments',
-                 'can_edit_own_remediations', 'can_edit_all_remediations')
-        read_only_fields = ('id', 'user_id', 'username', 'email', 'full_name', 'avatar_url', 'chu_ky_url', 'nha_may_code',
+                 'can_edit_own_remediations', 'can_edit_all_remediations',
+                 'can_view_shift_handover_logs', 'can_create_shift_handover_logs',
+                 'can_receive_shift_handover_logs', 'can_edit_shift_handover_logs',
+                 'can_delete_shift_handover_logs',
+                 'can_view_admin_shift_handover_logs', 'can_create_admin_shift_handover_logs',
+                 'can_receive_admin_shift_handover_logs', 'can_edit_admin_shift_handover_logs',
+                 'can_delete_admin_shift_handover_logs')
+        read_only_fields = ('id', 'user_id', 'username', 'email', 'is_staff', 'is_superuser', 'full_name', 'avatar_url', 'chu_ky_url', 'nha_may_code',
                            'created_at', 'updated_at')
 
     def update(self, instance, validated_data):

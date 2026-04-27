@@ -54,6 +54,26 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyen thao tac tren SuKien, KhacPhucSuKien va DienBienSuKien.'
         }),
+        ('Quyen so giao nhan ca van hanh', {
+            'fields': (
+                'can_view_shift_handover_logs',
+                'can_create_shift_handover_logs',
+                'can_receive_shift_handover_logs',
+                'can_edit_shift_handover_logs',
+                'can_delete_shift_handover_logs',
+            ),
+            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca VH.'
+        }),
+        ('Quyen so giao nhan ca hanh chinh', {
+            'fields': (
+                'can_view_admin_shift_handover_logs',
+                'can_create_admin_shift_handover_logs',
+                'can_receive_admin_shift_handover_logs',
+                'can_edit_admin_shift_handover_logs',
+                'can_delete_admin_shift_handover_logs',
+            ),
+            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca HC.'
+        }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
@@ -151,6 +171,26 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_all_remediations',
             ),
             'description': 'Quyen thao tac tren SuKien, KhacPhucSuKien va DienBienSuKien.'
+        }),
+        ('Quyen so giao nhan ca van hanh', {
+            'fields': (
+                'can_view_shift_handover_logs',
+                'can_create_shift_handover_logs',
+                'can_receive_shift_handover_logs',
+                'can_edit_shift_handover_logs',
+                'can_delete_shift_handover_logs',
+            ),
+            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca VH.'
+        }),
+        ('Quyen so giao nhan ca hanh chinh', {
+            'fields': (
+                'can_view_admin_shift_handover_logs',
+                'can_create_admin_shift_handover_logs',
+                'can_receive_admin_shift_handover_logs',
+                'can_edit_admin_shift_handover_logs',
+                'can_delete_admin_shift_handover_logs',
+            ),
+            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca HC.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
