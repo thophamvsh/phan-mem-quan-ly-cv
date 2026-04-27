@@ -107,6 +107,7 @@ def _normalize_header(h: str) -> str:
         "đơn vị": "don_vi", "don vi": "don_vi",
         "ngày đề nghị": "ngay_de_nghi", "ngay de nghi": "ngay_de_nghi",
         "ngày đề nghị xuất": "ngay_de_nghi_xuat", "ngay de nghi xuat": "ngay_de_nghi_xuat",
+        "người đề nghị": "nguoi_de_nghi", "nguoi de nghi": "nguoi_de_nghi",
         "stt": "stt",
         "tên vật tư": "ten_vat_tu", "ten vat tu": "ten_vat_tu",
     }
@@ -295,11 +296,12 @@ class BangDeNghiNhapResource(AlwaysCreateResource):
         widget=DateTimeWidget(format="%Y-%m-%d %H:%M:%S"),
     )
     bo_phan    = fields.Field(column_name="bo_phan", attribute="bo_phan")
+    nguoi_de_nghi = fields.Field(column_name="nguoi_de_nghi", attribute="nguoi_de_nghi")
     ghi_chu    = fields.Field(column_name="ghi_chu", attribute="ghi_chu")
 
     class Meta(AlwaysCreateResource.Meta):
         model = Bang_de_nghi_nhap
-        fields = ("stt", "vat_tu", "ten_vat_tu", "don_vi", "so_luong", "don_gia", "thanh_tien", "so_de_nghi_cap", "ngay_de_nghi", "bo_phan", "ghi_chu")
+        fields = ("stt", "vat_tu", "ten_vat_tu", "don_vi", "so_luong", "don_gia", "thanh_tien", "so_de_nghi_cap", "ngay_de_nghi", "nguoi_de_nghi", "bo_phan", "ghi_chu")
         export_order = fields
 
     def before_import(self, dataset, *args, **kwargs):
@@ -346,6 +348,7 @@ class BangDeNghiNhapResource(AlwaysCreateResource):
         if not row.get("thanh_tien"):  row["thanh_tien"] = 0
         if not row.get("so_de_nghi_cap"): row["so_de_nghi_cap"] = ""
         if not row.get("bo_phan"):     row["bo_phan"] = ""
+        if not row.get("nguoi_de_nghi"): row["nguoi_de_nghi"] = ""
         if not row.get("ghi_chu"):     row["ghi_chu"] = ""
 
         return super().before_import_row(row, *args, **kwargs)
@@ -388,11 +391,12 @@ class BangDeNghiXuatResource(AlwaysCreateResource):
         attribute="ngay_de_nghi_xuat",
         widget=DateTimeWidget(format="%Y-%m-%d %H:%M:%S"),
     )
+    nguoi_de_nghi = fields.Field(column_name="nguoi_de_nghi", attribute="nguoi_de_nghi")
     ghi_chu = fields.Field(column_name="ghi_chu", attribute="ghi_chu")
 
     class Meta(AlwaysCreateResource.Meta):
         model = Bang_de_nghi_xuat
-        fields = ("stt","vat_tu","ten_vat_tu","don_vi","so_luong","ngay_de_nghi_xuat","ghi_chu")
+        fields = ("stt","vat_tu","ten_vat_tu","don_vi","so_luong","ngay_de_nghi_xuat","nguoi_de_nghi","ghi_chu")
         export_order = fields
 
     def before_import(self, dataset, *args, **kwargs):
@@ -441,6 +445,7 @@ class BangDeNghiXuatResource(AlwaysCreateResource):
         if not row.get("ten_vat_tu"): row["ten_vat_tu"] = vt.ten_vat_tu
         if not row.get("ngay_de_nghi_xuat"):
             row["ngay_de_nghi_xuat"] = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+        if not row.get("nguoi_de_nghi"): row["nguoi_de_nghi"] = ""
         if not row.get("ghi_chu"):    row["ghi_chu"] = ""
 
         return super().before_import_row(row, *args, **kwargs)
@@ -562,7 +567,7 @@ class BangKiemKeAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 class BangDeNghiNhapAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = BangDeNghiNhapResource
     list_select_related = ("vat_tu__bang_nha_may",)
-    list_display = ("stt", "vat_tu", "don_vi", "so_luong", "don_gia", "thanh_tien", "bo_phan", "ngay_de_nghi", "nha_may")
+    list_display = ("stt", "vat_tu", "don_vi", "so_luong", "don_gia", "thanh_tien", "nguoi_de_nghi", "bo_phan", "ngay_de_nghi", "nha_may")
     search_fields = ("vat_tu__ma_bravo", "ten_vat_tu")
     list_filter = ("vat_tu__bang_nha_may",)
     list_per_page = 200  # Hiển thị 200 đề nghị nhập mỗi trang
@@ -576,7 +581,7 @@ class BangDeNghiNhapAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 class BangDeNghiXuatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = BangDeNghiXuatResource
     list_select_related = ("vat_tu__bang_nha_may",)
-    list_display = ("stt", "vat_tu", "don_vi", "so_luong", "ngay_de_nghi_xuat", "ghi_chu", "nha_may")
+    list_display = ("stt", "vat_tu", "don_vi", "so_luong", "nguoi_de_nghi", "ngay_de_nghi_xuat", "ghi_chu", "nha_may")
     search_fields = ("vat_tu__ma_bravo", "ten_vat_tu")
     # list_filter = ("vat_tu__bang_nha_may",)
     list_per_page = 200  # Hiển thị 200 đề nghị xuất mỗi trang

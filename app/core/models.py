@@ -69,32 +69,56 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def save(self, *args, **kwargs):
         """Override save to sync name with UserProfile"""
+        sync_from_profile = kwargs.pop('sync_from_profile', False)
+
         # Save the user first
         super().save(*args, **kwargs)
+
+        if sync_from_profile:
+            return
 
         # Update UserProfile if it exists
         try:
             profile = self.profile
+
+            # Admin inline can attach an unsaved profile instance to the reverse cache.
+            # update_fields on an object without pk triggers force_update and crashes.
+            if not profile.pk:
+                return
+
+            update_fields = []
+
             # Update profile fields based on User model first_name and last_name
             if self.first_name and self.last_name:
-                # Update ho_ten with combined name
-                profile.ho_ten = f"{self.first_name} {self.last_name}".strip()
-                # Update ho and ten
-                profile.ho = self.first_name
-                profile.ten = self.last_name
+                new_ho_ten = f"{self.first_name} {self.last_name}".strip()
+                new_ho = self.first_name
+                new_ten = self.last_name
             elif self.first_name:
-                # Only first_name provided
-                profile.ho_ten = self.first_name
-                profile.ho = self.first_name
-                profile.ten = ""
+                new_ho_ten = self.first_name
+                new_ho = self.first_name
+                new_ten = ""
             elif self.last_name:
-                # Only last_name provided
-                profile.ho_ten = self.last_name
-                profile.ho = ""
-                profile.ten = self.last_name
+                new_ho_ten = self.last_name
+                new_ho = ""
+                new_ten = self.last_name
+            else:
+                new_ho_ten = profile.ho_ten
+                new_ho = profile.ho
+                new_ten = profile.ten
 
-            # Save the profile without triggering User save again
-            profile.save(update_fields=['ho_ten', 'ho', 'ten', 'updated_at'])
+            if profile.ho_ten != new_ho_ten:
+                profile.ho_ten = new_ho_ten
+                update_fields.append('ho_ten')
+            if profile.ho != new_ho:
+                profile.ho = new_ho
+                update_fields.append('ho')
+            if profile.ten != new_ten:
+                profile.ten = new_ten
+                update_fields.append('ten')
+
+            if update_fields:
+                # Save the profile without triggering User save again
+                profile.save(sync_from_user=True, update_fields=update_fields + ['updated_at'])
         except UserProfile.DoesNotExist:
             # No profile exists yet, skip sync
             pass
@@ -164,6 +188,127 @@ class UserProfile(models.Model):
         default=False,
         help_text="User có quyền truy cập tất cả nhà máy"
     )
+
+    # Phân quyền chi tiết cho kho
+    can_view_materials = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem danh sách vật tư"
+    )
+    can_add_materials = models.BooleanField(
+        default=False,
+        help_text="Có quyền thêm vật tư mới"
+    )
+    can_edit_materials = models.BooleanField(
+        default=False,
+        help_text="Có quyền sửa thông tin vật tư"
+    )
+    can_delete_materials = models.BooleanField(
+        default=False,
+        help_text="Có quyền xóa vật tư"
+    )
+    can_import_excel = models.BooleanField(
+        default=False,
+        help_text="Có quyền import dữ liệu từ Excel"
+    )
+    can_export_excel = models.BooleanField(
+        default=True,
+        help_text="Có quyền export dữ liệu ra Excel"
+    )
+    can_create_export_request = models.BooleanField(
+        default=False,
+        help_text="Có quyền tạo đề nghị xuất"
+    )
+    can_approve_export_request = models.BooleanField(
+        default=False,
+        help_text="Có quyền phê duyệt đề nghị xuất"
+    )
+    can_create_import_request = models.BooleanField(
+        default=False,
+        help_text="Có quyền tạo đề nghị nhập"
+    )
+    can_approve_import_request = models.BooleanField(
+        default=False,
+        help_text="Có quyền phê duyệt đề nghị nhập"
+    )
+    can_view_inventory = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem kiểm kê"
+    )
+    can_edit_inventory = models.BooleanField(
+        default=False,
+        help_text="Có quyền sửa thông tin kiểm kê"
+    )
+    can_view_reports = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem báo cáo thống kê"
+    )
+    can_view_import_requests = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem đề nghị nhập"
+    )
+    can_view_export_requests = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem đề nghị xuất"
+    )
+
+    # Phan quyen nhat ky van hanh - su kien
+    can_view_operation_events = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem nhat ky su kien van hanh"
+    )
+    can_create_operation_events = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao moi su kien van hanh"
+    )
+    can_edit_own_operation_events = models.BooleanField(
+        default=True,
+        help_text="Co quyen sua su kien van hanh do minh tao khi chua ghi nhan"
+    )
+    can_edit_all_operation_events = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua tat ca su kien van hanh"
+    )
+    can_delete_own_operation_events = models.BooleanField(
+        default=True,
+        help_text="Co quyen xoa su kien van hanh do minh tao khi chua khoa"
+    )
+    can_delete_all_operation_events = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa tat ca su kien van hanh"
+    )
+    can_acknowledge_operation_events = models.BooleanField(
+        default=False,
+        help_text="Co quyen ghi nhan su kien van hanh"
+    )
+    can_process_operation_events = models.BooleanField(
+        default=False,
+        help_text="Co quyen xu ly/khac phuc su kien van hanh"
+    )
+    can_confirm_operation_events = models.BooleanField(
+        default=False,
+        help_text="Co quyen xac nhan xu ly su kien van hanh"
+    )
+    can_add_event_developments = models.BooleanField(
+        default=False,
+        help_text="Co quyen them dien bien su kien van hanh"
+    )
+    can_edit_own_event_developments = models.BooleanField(
+        default=True,
+        help_text="Co quyen sua dien bien su kien do minh tao"
+    )
+    can_edit_all_event_developments = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua tat ca dien bien su kien"
+    )
+    can_edit_own_remediations = models.BooleanField(
+        default=True,
+        help_text="Co quyen sua noi dung khac phuc do minh tao khi chua xac nhan"
+    )
+    can_edit_all_remediations = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua tat ca noi dung khac phuc khi chua xac nhan"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -207,12 +352,15 @@ class UserProfile(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save to sync name with User model"""
+        sync_from_user = kwargs.pop('sync_from_user', False)
+
         # Save the profile first
         super().save(*args, **kwargs)
 
-        # Check if this is a sync from User model (to avoid infinite loop)
-        if kwargs.get('update_fields'):
-            # This is a sync from User model, don't sync back
+        if sync_from_user:
+            return
+
+        if not self.user_id:
             return
 
         # Update User model first_name and last_name based on profile fields
@@ -220,26 +368,41 @@ class UserProfile(models.Model):
             # Use ho_ten if available - split into first_name and last_name
             name_parts = self.ho_ten.strip().split(' ', 1)
             if len(name_parts) == 2:
-                self.user.first_name = name_parts[0]
-                self.user.last_name = name_parts[1]
+                new_first_name = name_parts[0]
+                new_last_name = name_parts[1]
                 # Also update ho and ten to match
                 self.ho = name_parts[0]
                 self.ten = name_parts[1]
             else:
-                self.user.first_name = name_parts[0]
-                self.user.last_name = ""
+                new_first_name = name_parts[0]
+                new_last_name = ""
                 self.ho = name_parts[0]
                 self.ten = ""
         elif self.ho and self.ten:
             # Use ho + ten if available
-            self.user.first_name = self.ho
-            self.user.last_name = self.ten
+            new_first_name = self.ho
+            new_last_name = self.ten
         elif self.ten:
             # Use ten if available
-            self.user.first_name = ""
-            self.user.last_name = self.ten
+            new_first_name = ""
+            new_last_name = self.ten
+        else:
+            new_first_name = self.user.first_name
+            new_last_name = self.user.last_name
+
+        update_fields = []
+        if self.user.first_name != new_first_name:
+            self.user.first_name = new_first_name
+            update_fields.append('first_name')
+        if self.user.last_name != new_last_name:
+            self.user.last_name = new_last_name
+            update_fields.append('last_name')
+
+        if not update_fields:
+            return
 
         # Save the user model without triggering UserProfile sync
-        self.user.save(update_fields=['first_name', 'last_name'])
-
-
+        if self.user.pk:
+            self.user.save(sync_from_profile=True, update_fields=update_fields)
+        else:
+            self.user.save(sync_from_profile=True)

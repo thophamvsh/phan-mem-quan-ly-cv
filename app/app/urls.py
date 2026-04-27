@@ -17,11 +17,15 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from core.views import health_check
 
 urlpatterns = [
+    path('health/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
     path("api/khovattu/", include("khovattu.urls")),
+    path("api/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
+    path("api/quanlyvanhanh/", include("quanlyvanhanh.urls")),
 ]
 
 # Serve media files in development

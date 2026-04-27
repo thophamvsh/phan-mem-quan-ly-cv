@@ -26,6 +26,7 @@ urlpatterns = [
     path('auth/profile/update/', views.update_user_profile, name='update_user_profile'),
     path('auth/change-password/', views.change_password, name='change_password'),
     path('auth/upload-avatar/', views.upload_avatar, name='upload_avatar'),
+    path('auth/upload-signature/', views.upload_signature, name='upload_signature'),
     path('auth/logout/', views.logout_user, name='logout_user'),
 
     # ===== KHOVATTU COMPATIBILITY URLs (cho VshProject) =====
@@ -37,5 +38,6 @@ urlpatterns = [
     path('khovattu/auth/profile/update/', views.update_user_profile, name='khovattu-profile-update'),
     path('khovattu/auth/change-password/', views.change_password, name='khovattu-change-password'),
     path('khovattu/auth/upload-avatar/', views.upload_avatar, name='khovattu-upload-avatar'),
+    path('khovattu/auth/upload-signature/', views.upload_signature, name='khovattu-upload-signature'),
     path('khovattu/auth/logout/', views.logout_user, name='khovattu-logout'),
 ]

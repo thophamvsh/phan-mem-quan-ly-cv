@@ -280,6 +280,7 @@ class Bang_de_nghi_nhap(models.Model):
     thanh_tien = models.BigIntegerField(default=0)
     so_de_nghi_cap = models.CharField(max_length=50, blank=True)  # Số đề nghị cung cấp (String)
     ngay_de_nghi = models.DateTimeField()
+    nguoi_de_nghi = models.CharField(max_length=255, blank=True, null=True, help_text="Người đề nghị nhập")  # Thêm mới
     bo_phan = models.CharField(max_length=100, blank=True)  # Bộ phận đề nghị
     ghi_chu = models.CharField(max_length=500, blank=True, null=True)
 
@@ -297,6 +298,7 @@ class Bang_de_nghi_xuat(models.Model):
     don_vi = models.CharField(max_length=50)
     so_luong = models.IntegerField()
     ngay_de_nghi_xuat = models.DateTimeField()
+    nguoi_de_nghi = models.CharField(max_length=255, blank=True, null=True, help_text="Người đề nghị xuất")  # Thêm mới
     ghi_chu = models.CharField(max_length=500, blank=True, null=True)
 
     class Meta:

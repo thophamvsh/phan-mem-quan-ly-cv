@@ -6,12 +6,33 @@ from django.db.models import F, Sum, Q, Count
 from django.db.models.functions import Greatest
 from django.utils import timezone
 from django.conf import settings
+from django.http import HttpResponse
 
 from rest_framework import status, permissions
 from rest_framework.permissions import IsAuthenticated
-from .permissions import HasFactoryAccess, HasSpecificFactoryAccess
+from .permissions import (
+    HasFactoryAccess, HasSpecificFactoryAccess, HasFactoryAccessStrict,
+    CanViewMaterials, CanAddMaterials, CanEditMaterials, CanDeleteMaterials,
+    CanImportExcel, CanExportExcel, CanCreateExportRequest, CanApproveExportRequest,
+    CanCreateImportRequest, CanApproveImportRequest, CanViewImportRequest, CanViewExportRequest,
+    CanViewInventory, CanEditInventory, CanViewReports
+)
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.renderers import JSONRenderer, BaseRenderer
+
+class ExcelRenderer(BaseRenderer):
+    media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    format = 'xlsx'
+
+    def render(self, data, media_type=None, renderer_context=None):
+        return data
+
+class ExcelResponse(HttpResponse):
+    def __init__(self, content, filename, *args, **kwargs):
+        super().__init__(content, *args, **kwargs)
+        self['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        self['Content-Disposition'] = f'attachment; filename="{filename}"'
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
 from django.db.models.deletion import ProtectedError
@@ -21,6 +42,7 @@ from .models import (
     Bang_vat_tu, Bang_vi_tri, Bang_kiem_ke,
     Bang_de_nghi_nhap, Bang_de_nghi_xuat, Bang_nha_may, Bang_xuat_xu
 )
+from core.factory_scope import ensure_factory_allowed, filter_queryset_by_factory
 from core.models import UserProfile
 from .bravo_parser import extract_position_from_bravo, get_vi_tri_from_bravo
 from .serializers import (
@@ -39,7 +61,7 @@ from .serializers import (
 # ===================== CUSTOM PAGINATION =====================
 
 class CustomPageNumberPagination(PageNumberPagination):
-    page_size = 10
+    page_size = 20  # ✅ Thay đổi từ 20 thành 50
     page_size_query_param = 'limit'
     max_page_size = 200
 
@@ -158,7 +180,7 @@ class ImportVatTuAPIView(APIView):
     Tối thiểu: ma_nha_may | ma_bravo | ten_vat_tu | don_vi
     Tuỳ chọn: thong_so_ky_thuat | ton_kho | so_luong_kh | ma_vi_tri / (ma_he_thong,kho,ke,ngan,tang)
     """
-    permission_classes = [HasFactoryAccess]
+    permission_classes = [HasFactoryAccess, CanImportExcel]
 
     def post(self, request):
         ser = FileUploadSerializer(data=request.data)
@@ -423,7 +445,7 @@ class KiemKeListAPIView(ListAPIView):
     """
     serializer_class = None  # Sẽ tạo custom serializer
     permission_classes = [HasFactoryAccess]
-    pagination_class = PageNumberPagination
+    pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
         from .models import Bang_kiem_ke
@@ -621,58 +643,6 @@ class KiemKeStatsAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class DownloadKiemKeTemplateAPIView(APIView):
-    """
-    Download template Excel cho import kiểm kê
-    """
-    permission_classes = [HasFactoryAccess]
-
-    def get(self, request):
-        import io
-        from django.http import HttpResponse
-
-        # Tạo DataFrame mẫu (không có ma_nha_may)
-        template_data = {
-            'so_thu_tu': [1, 2, 3],
-            'ma_bravo': ['1.26.46.001.000.00.000', '1.26.46.002.000.00.000', '1.26.46.003.000.00.000'],
-            'ten_vat_tu': ['Khí SF6', 'Vật tư 2', 'Vật tư 3'],
-            'don_vi': ['Kg', 'Cái', 'Mét'],
-            'so_luong': [10, 5, 15],
-            'so_luong_thuc_te': [0, 0, 0]  # Mặc định là 0, người dùng sẽ nhập khi kiểm kê
-        }
-
-        df = pd.DataFrame(template_data)
-
-        # Tạo file Excel
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Template', index=False)
-
-            # Định dạng cột
-            worksheet = writer.sheets['Template']
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column_letter].width = adjusted_width
-
-        output.seek(0)
-
-        response = HttpResponse(
-            output.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = 'attachment; filename="template_kiem_ke.xlsx"'
-
-        return response
-
-
 class UpdateSoLuongThucTeAPIView(APIView):
     """
     API endpoint để cập nhật số lượng thực tế cho kiểm kê
@@ -732,202 +702,6 @@ class UpdateSoLuongThucTeAPIView(APIView):
                 "ok": False,
                 "error": f"Lỗi cập nhật: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class ExportKiemKeAPIView(APIView):
-    """
-    Export dữ liệu kiểm kê ra file Excel
-    """
-    permission_classes = [HasFactoryAccess]
-
-    def get(self, request):
-        import io
-        from django.http import HttpResponse
-        from .models import Bang_kiem_ke
-
-        # Lấy tất cả dữ liệu kiểm kê
-        kiem_ke_data = Bang_kiem_ke.objects.select_related('vat_tu__bang_nha_may').all().order_by('id')
-
-        # Tạo dữ liệu export
-        export_data = []
-        for item in kiem_ke_data:
-            vat_tu = item.vat_tu
-            # Chênh lệch = Số lượng thực tế - Số lượng kiểm kê (dự kiến)
-            chenh_lech = item.so_luong_thuc_te - item.so_luong
-
-            export_data.append({
-                'ID': item.id,
-                'Số TT': item.so_thu_tu,
-                'Mã nhà máy': item.ma_nha_may,
-                'Mã Bravo': item.ma_bravo,
-                'Tên vật tư': item.ten_vat_tu,
-                'Đơn vị': item.don_vi,
-                'Số lượng kiểm kê': item.so_luong,
-                'Số lượng thực tế': item.so_luong_thuc_te,
-                'Số lượng tồn kho': vat_tu.ton_kho if vat_tu else 0,  # Giữ lại để tham khảo
-                'Chênh lệch': chenh_lech,
-                'Trạng thái': self._get_trang_thai_new(item.so_luong, item.so_luong_thuc_te),
-                'Tên nhà máy': vat_tu.bang_nha_may.ten_nha_may if vat_tu and vat_tu.bang_nha_may else None
-            })
-
-        df = pd.DataFrame(export_data)
-
-        # Tạo file Excel
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Kiểm kê', index=False)
-
-            # Định dạng cột
-            worksheet = writer.sheets['Kiểm kê']
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column_letter].width = adjusted_width
-
-        output.seek(0)
-
-        response = HttpResponse(
-            output.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = 'attachment; filename="kiem_ke_export.xlsx"'
-
-        return response
-
-    def _get_trang_thai(self, so_luong_kiem_ke, so_luong_ton_kho):
-        """Xác định trạng thái chênh lệch"""
-        chenh_lech = so_luong_kiem_ke - so_luong_ton_kho
-        if chenh_lech == 0:
-            return "Đúng"
-        elif chenh_lech > 0:
-            return "Thừa"
-        else:
-            return "Thiếu"
-
-    def _get_trang_thai_new(self, so_luong_kiem_ke, so_luong_thuc_te):
-        """Xác định trạng thái chênh lệch mới (so_luong_thuc_te - so_luong_kiem_ke)"""
-        chenh_lech = so_luong_thuc_te - so_luong_kiem_ke
-        if chenh_lech == 0:
-            return "Đúng"
-        elif chenh_lech > 0:
-            return "Thừa"
-        else:
-            return "Thiếu"
-
-
-class ImportDeNghiNhapAPIView(APIView):
-    """Cộng ton_kho và trừ so_luong_kh (không âm) theo (ma_nha_may, ma_bravo)."""
-    permission_classes = [HasFactoryAccess]
-
-    def post(self, request):
-        ser = FileUploadSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        df = pd.read_excel(ser.validated_data["file"], dtype=str).fillna("")
-        created, errors = 0, []
-
-        # Lấy ma_nha_may từ FormData
-        ma_nha_may = request.data.get("ma_nha_may")
-        if not ma_nha_may:
-            return Response({"error": "Thiếu ma_nha_may"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            nm = Bang_nha_may.objects.get(ma_nha_may=ma_nha_may)
-        except Bang_nha_may.DoesNotExist:
-            return Response({"error": f"Không tồn tại nhà máy với ma_nha_may='{ma_nha_may}'"}, status=status.HTTP_400_BAD_REQUEST)
-
-        with transaction.atomic():
-            for i, row in df.iterrows():
-                try:
-                    ma_bravo = str(row.get("ma_bravo") or "").strip()
-                    so_luong = _to_int(row.get("so_luong"), 0)
-                    vt = Bang_vat_tu.objects.select_for_update().get(
-                        ma_bravo=ma_bravo,
-                        bang_nha_may__ma_nha_may=nm.ma_nha_may,
-                    )
-
-                    Bang_de_nghi_nhap.objects.create(
-                        stt=_to_int(row.get("stt"), 0),
-                        vat_tu=vt,
-                        ma_bravo_text=ma_bravo,
-                        ten_vat_tu=str(row.get("ten_vat_tu") or vt.ten_vat_tu),
-                        don_vi=str(row.get("don_vi") or vt.don_vi),
-                        so_luong=so_luong,
-                        don_gia=_to_int(row.get("don_gia"), 0),
-                        thanh_tien=_to_int(row.get("thanh_tien"), 0),
-                        so_de_nghi_cap=str(row.get("so_de_nghi_cap") or ""),
-                        ngay_de_nghi=_parse_dt(row.get("ngay_de_nghi")),
-                        bo_phan=str(row.get("bo_phan") or ""),
-                        ghi_chu=str(row.get("ghi_chu") or ""),
-                    )
-                    Bang_vat_tu.objects.filter(pk=vt.pk).update(
-                        ton_kho=F("ton_kho") + so_luong,
-                        so_luong_kh=Greatest(F("so_luong_kh") - so_luong, 0),
-                    )
-                    created += 1
-                except Exception as ex:
-                    errors.append(f"Row {i+2}: {ex}")
-
-        return Response({"created": created, "errors": errors}, status=status.HTTP_200_OK)
-
-
-class ImportDeNghiXuatAPIView(APIView):
-    """Trừ ton_kho (không cho âm) theo (ma_nha_may, ma_bravo)."""
-    permission_classes = [HasFactoryAccess]
-
-    def post(self, request):
-        ser = FileUploadSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        df = pd.read_excel(ser.validated_data["file"], dtype=str).fillna("")
-        created, errors = 0, []
-
-        # Lấy ma_nha_may từ FormData
-        ma_nha_may = request.data.get("ma_nha_may")
-        if not ma_nha_may:
-            return Response({"error": "Thiếu ma_nha_may"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            nm = Bang_nha_may.objects.get(ma_nha_may=ma_nha_may)
-        except Bang_nha_may.DoesNotExist:
-            return Response({"error": f"Không tồn tại nhà máy với ma_nha_may='{ma_nha_may}'"}, status=status.HTTP_400_BAD_REQUEST)
-
-        with transaction.atomic():
-            for i, row in df.iterrows():
-                try:
-                    ma_bravo = str(row.get("ma_bravo") or "").strip()
-                    so_luong = _to_int(row.get("so_luong"), 0)
-                    vt = Bang_vat_tu.objects.select_for_update().get(
-                        ma_bravo=ma_bravo,
-                        bang_nha_may__ma_nha_may=nm.ma_nha_may,
-                    )
-
-                    if vt.ton_kho < so_luong:
-                        raise ValueError(f"Tồn kho ({vt.ton_kho}) < số lượng xuất ({so_luong})")
-
-                    Bang_de_nghi_xuat.objects.create(
-                        stt=_to_int(row.get("stt"), 0),
-                        vat_tu=vt,
-                        ma_bravo_text=ma_bravo,
-                        ten_vat_tu=str(row.get("ten_vat_tu") or vt.ten_vat_tu),
-                        don_vi=str(row.get("don_vi") or vt.don_vi),
-                        so_luong=so_luong,
-                        ngay_de_nghi_xuat=_parse_dt(row.get("ngay_de_nghi_xuat")),
-                        ghi_chu=str(row.get("ghi_chu") or ""),
-                    )
-                    Bang_vat_tu.objects.filter(pk=vt.pk).update(
-                        ton_kho=F("ton_kho") - so_luong
-                    )
-                    created += 1
-                except Exception as ex:
-                    errors.append(f"Row {i+2}: {ex}")
-
-        return Response({"created": created, "errors": errors}, status=status.HTTP_200_OK)
 
 
 class ImportViTriAPIView(APIView):
@@ -1017,69 +791,6 @@ class BravoPositionAnalyzeAPIView(APIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
-class DownloadVatTuTemplateAPIView(APIView):
-    """
-    Download template Excel cho import vật tư (ĐÃ BỎ CỘT VỊ TRÍ)
-    """
-    permission_classes = [HasFactoryAccess]
-
-    def get(self, request):
-        import io
-        from django.http import HttpResponse
-
-        # Template mới - KHÔNG CÓ CỘT VỊ TRÍ VÀ MÃ NHÀ MÁY - Tự động từ dropdown!
-        template_data = {
-            'ten_vat_tu': ['Ví dụ: Khí SF6', 'Ví dụ: Cầu chì 10A', 'Vật tư VIE', 'Vật tư USA'],
-            'ma_bravo': ['1.26.46.001.000.A8.000', '1.26.46.002.000.A8.000', '1.61.66.006.VIE.C3.000', '1.71.07.001.USA.C3.000'],
-            'don_vi': ['Kg', 'Cái', 'Thùng', 'Bộ'],
-            'thong_so_ky_thuat': ['Khí SF6, áp suất cao', 'Cầu chì 10A, 250V', 'Vật tư nhập khẩu VIE', 'Vật tư nhập khẩu USA'],
-            'ton_kho': [5, 10, 8, 3],
-            'so_luong_kh': [15, 20, 12, 5]
-        }
-
-        df = pd.DataFrame(template_data)
-
-        # Tạo file Excel
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Template_VatTu', index=False)
-
-            # Định dạng cột
-            worksheet = writer.sheets['Template_VatTu']
-
-            # Auto-fit column widths
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column_letter].width = adjusted_width
-
-            # Thêm ghi chú
-            worksheet['A8'] = '🎯 HƯỚNG DẪN MỚI - TEMPLATE ĐƠN GIẢN NHẤT:'
-            worksheet['A9'] = '✅ Cột VỊ TRÍ đã được BỎ - Tự động trích xuất từ mã Bravo!'
-            worksheet['A10'] = '✅ Cột MÃ NHÀ MÁY đã được BỎ - Chọn từ dropdown!'
-            worksheet['A11'] = '📋 Chỉ cần điền: ten_vat_tu | ma_bravo | don_vi | ton_kho | so_luong_kh'
-            worksheet['A12'] = '🔍 Ví dụ: 1.26.46.001.000.A8.000 → Vị trí A8 (Đập tràn)'
-            worksheet['A13'] = '🔍 Ví dụ: 1.61.66.006.VIE.C3.000 → Vị trí C3 (Đập tràn)'
-            worksheet['A14'] = '🏭 Nhà máy: Chọn từ dropdown trong giao diện import!'
-            worksheet['A15'] = '⚡ Hỗ trợ cả country code (VIE, KOR, USA) và format cũ!'
-            worksheet['A16'] = '🎉 Template đơn giản nhất - Tiết kiệm thời gian tối đa!'
-
-        output.seek(0)
-
-        response = HttpResponse(
-            output.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = 'attachment; filename="template_vat_tu_v2.xlsx"'
-
-        return response
 
 # ===================== VỊ TRÍ: GET list + detail =====================
 
@@ -1158,15 +869,63 @@ class HeThongListAPIView(APIView):
 
         return Response(result, status=status.HTTP_200_OK)
 
+
+class HeThongByFactoryListAPIView(APIView):
+    """
+    GET /api/khovattu/he-thong/by-factory/?ma_nha_may=SH
+    Lấy danh sách hệ thống theo nhà máy cụ thể với số lượng vật tư chính xác
+    """
+    permission_classes = [IsAuthenticated, HasFactoryAccess]
+
+    def get(self, request):
+        ma_nha_may = request.GET.get('ma_nha_may')
+
+        if not ma_nha_may:
+            return Response({'error': 'Thiếu tham số ma_nha_may'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Lấy danh sách hệ thống có vật tư của nhà máy cụ thể
+        systems = Bang_vat_tu.objects.filter(
+            bang_nha_may__ma_nha_may=ma_nha_may
+        ).values('ma_vi_tri__ma_he_thong').annotate(
+            count=models.Count('id')
+        ).filter(
+            ma_vi_tri__ma_he_thong__isnull=False
+        ).order_by('ma_vi_tri__ma_he_thong')
+
+        result = []
+        for system in systems:
+            system_name = system['ma_vi_tri__ma_he_thong']
+            count = system['count']
+            result.append({
+                'ma_he_thong': system_name,
+                'so_luong_vat_tu': count
+            })
+
+        return Response(result, status=status.HTTP_200_OK)
+
 # ===================== VẬT TƯ: GET list + detail + overview =====================
 
 class VatTuListAPIView(ListAPIView):
     """
     GET /api/khovattu/vat-tu/?q=&ma_nha_may=&ma_bravo=&don_vi=&ma_vi_tri=&he_thong=&page=1
+    POST /api/khovattu/vat-tu/ - Tạo vật tư mới
     """
     serializer_class = VatTuSerializer
     permission_classes = [HasFactoryAccess]
     pagination_class = CustomPageNumberPagination
+
+    def get_permissions(self):
+        """
+        Override để áp dụng permission khác nhau cho từng method
+        """
+        if self.request.method == 'GET':
+            permission_classes = [HasFactoryAccess, CanViewMaterials]
+        elif self.request.method == 'POST':
+            permission_classes = [HasFactoryAccess, CanAddMaterials]
+        else:
+            permission_classes = self.permission_classes
+
+        return [permission() for permission in permission_classes]
 
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -1286,6 +1045,7 @@ class VatTuListAPIView(ListAPIView):
         ser.is_valid(raise_exception=True)
 
         nm = ser.validated_data["bang_nha_may"]
+        ensure_factory_allowed(request.user, nm)
         ma_bravo = ser.validated_data["ma_bravo"]
         vtpos = ser.validated_data.get("ma_vi_tri_obj")
 
@@ -1325,7 +1085,12 @@ class VatTuDetailByIdAPIView(APIView):
     permission_classes = [HasFactoryAccess]
 
     def get(self, request, pk: int):
-        vt = Bang_vat_tu.objects.select_related("ma_vi_tri", "bang_nha_may").filter(pk=pk).first()
+        vt = filter_queryset_by_factory(
+            Bang_vat_tu.objects.select_related("ma_vi_tri", "bang_nha_may").filter(pk=pk),
+            request.user,
+            "bang_nha_may",
+            "fk",
+        ).first()
         if not vt:
             return Response({"error": "Không tìm thấy vật tư"}, status=status.HTTP_404_NOT_FOUND)
         return Response(VatTuSerializer(vt).data, status=status.HTTP_200_OK)
@@ -1340,6 +1105,21 @@ class VatTuDetailByBravoAPIView(APIView):
 
     """
     permission_classes = [HasFactoryAccess]
+
+    def get_permissions(self):
+        """
+        Override để áp dụng permission khác nhau cho từng method
+        """
+        if self.request.method == 'GET':
+            permission_classes = [HasFactoryAccess, CanViewMaterials]
+        elif self.request.method == 'PATCH':
+            permission_classes = [HasFactoryAccess, CanEditMaterials]
+        elif self.request.method == 'DELETE':
+            permission_classes = [HasFactoryAccess, CanDeleteMaterials]
+        else:
+            permission_classes = self.permission_classes
+
+        return [permission() for permission in permission_classes]
 
     def get_object(self, ma_nha_may, ma_bravo):
         return Bang_vat_tu.objects.select_related("ma_vi_tri","bang_nha_may").filter(
@@ -1531,7 +1311,7 @@ class DeNghiNhapByBravoPlantAPIView(APIView):
     """
     GET /api/khovattu/de-nghi-nhap/<ma_nha_may>/<ma_bravo>/?date_from=&date_to=&limit=50&offset=0&q=
     """
-    permission_classes = [HasFactoryAccess]
+    permission_classes = [HasFactoryAccess, CanCreateImportRequest]
 
     def get(self, request, ma_nha_may: str, ma_bravo: str):
         qs = (
@@ -1616,10 +1396,16 @@ class DeNghiNhapDetailAPIView(APIView):
     PATCH  /api/khovattu/de-nghi-nhap/<int:pk>/
     DELETE /api/khovattu/de-nghi-nhap/<int:pk>/
     """
-    permission_classes = [HasFactoryAccess]
+    permission_classes = [HasFactoryAccess, CanCreateImportRequest]
+
+    def get_object(self, pk, for_update=False):
+        qs = Bang_de_nghi_nhap.objects.select_related("vat_tu", "vat_tu__bang_nha_may").filter(pk=pk)
+        if for_update:
+            qs = qs.select_for_update()
+        return filter_queryset_by_factory(qs, self.request.user, "vat_tu__bang_nha_may", "fk").first()
 
     def patch(self, request, pk):
-        obj = Bang_de_nghi_nhap.objects.select_related("vat_tu").filter(pk=pk).first()
+        obj = self.get_object(pk)
         if not obj: return Response({"error":"Không tìm thấy"}, status=404)
 
         old = obj.so_luong
@@ -1655,7 +1441,7 @@ class DeNghiNhapDetailAPIView(APIView):
         return Response(DeNghiNhapSerializer(obj).data)
 
     def delete(self, request, pk):
-        obj = Bang_de_nghi_nhap.objects.select_related("vat_tu").filter(pk=pk).first()
+        obj = self.get_object(pk)
         if not obj: return Response(status=204)
         with transaction.atomic():
             vt = Bang_vat_tu.objects.select_for_update().get(pk=obj.vat_tu_id)
@@ -1762,8 +1548,14 @@ class DeNghiXuatDetailAPIView(APIView):
     """
     permission_classes = [HasFactoryAccess]
 
+    def get_object(self, pk, for_update=False):
+        qs = Bang_de_nghi_xuat.objects.select_related("vat_tu", "vat_tu__bang_nha_may").filter(pk=pk)
+        if for_update:
+            qs = qs.select_for_update()
+        return filter_queryset_by_factory(qs, self.request.user, "vat_tu__bang_nha_may", "fk").first()
+
     def patch(self, request, pk):
-        obj = Bang_de_nghi_xuat.objects.select_related("vat_tu").filter(pk=pk).first()
+        obj = self.get_object(pk)
         if not obj: return Response({"error":"Không tìm thấy"}, status=404)
 
         old = obj.so_luong
@@ -1793,7 +1585,7 @@ class DeNghiXuatDetailAPIView(APIView):
         return Response(DeNghiXuatSerializer(obj).data)
 
     def delete(self, request, pk):
-        obj = Bang_de_nghi_xuat.objects.select_related("vat_tu").filter(pk=pk).first()
+        obj = self.get_object(pk)
         if not obj: return Response(status=204)
         with transaction.atomic():
             vt = Bang_vat_tu.objects.select_for_update().get(pk=obj.vat_tu_id)
@@ -1808,7 +1600,7 @@ class DeNghiNhapListAPIView(ListAPIView):
     GET /api/khovattu/de-nghi-nhap/?q=&nha_may=&ma_bravo=&don_vi=&he_thong=&page=1&ngay_de_nghi__gte=&ngay_de_nghi__lte=
     """
     serializer_class = DeNghiNhapSerializer
-    permission_classes = [HasFactoryAccess]
+    permission_classes = [HasFactoryAccess, CanViewImportRequest]
     pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
@@ -1872,7 +1664,7 @@ class DeNghiXuatListAPIView(ListAPIView):
     GET /api/khovattu/de-nghi-xuat/?q=&nha_may=&ma_bravo=&don_vi=&he_thong=&page=1&ngay_de_nghi_xuat__gte=&ngay_de_nghi_xuat__lte=
     """
     serializer_class = DeNghiXuatSerializer
-    permission_classes = [HasFactoryAccess]
+    permission_classes = [HasFactoryAccess, CanViewExportRequest]
     pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
@@ -1966,23 +1758,33 @@ class SystemCategoriesAPIView(APIView):
 # ===================== ACTION cho FE: bấm Nhập / Xuất =====================
 
 class TaoDeNghiNhapAPIView(APIView):
-    permission_classes = [HasFactoryAccess]  # Temporarily allow for testing
+    permission_classes = [HasFactoryAccess, CanCreateImportRequest]
 
     def post(self, request):
         ser = NhapSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
 
+
         with transaction.atomic():
             vt = _get_vattu_by_nm_bravo(data["ma_nha_may"], data["ma_bravo"])
-            Bang_de_nghi_nhap.objects.create(
+
+            # Tự động tạo số thứ tự
+            max_stt = Bang_de_nghi_nhap.objects.aggregate(max_stt=models.Max('stt'))['max_stt'] or 0
+            next_stt = max_stt + 1
+
+            de_nghi_nhap = Bang_de_nghi_nhap.objects.create(
+                stt=next_stt,
                 vat_tu=vt,
                 ma_bravo_text=vt.ma_bravo,
                 ten_vat_tu=vt.ten_vat_tu,
                 don_vi=vt.don_vi,
                 so_luong=data["so_luong"],
-                ngay_de_nghi=data.get("ngay") or timezone.now(),
+                ngay_de_nghi=data.get("ngay_de_nghi") or timezone.now(),
+                nguoi_de_nghi=data.get("nguoi_de_nghi", ""),
+                ghi_chu=data.get("ghi_chu", ""),
             )
+
             Bang_vat_tu.objects.filter(pk=vt.pk).update(
                 ton_kho=F("ton_kho") + data["so_luong"],
                 so_luong_kh=Greatest(F("so_luong_kh") - data["so_luong"], 0),
@@ -1992,17 +1794,19 @@ class TaoDeNghiNhapAPIView(APIView):
 
 
 class TaoDeNghiXuatAPIView(APIView):
-    permission_classes = [HasFactoryAccess]  # Temporarily allow for testing
+    permission_classes = [HasFactoryAccessStrict, CanCreateExportRequest]  # Strict permission requiring factory
     def post(self, request):
+
         ser = XuatSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
+
         with transaction.atomic():
             vt = _get_vattu_by_nm_bravo(data["ma_nha_may"], data["ma_bravo"])
             if vt.ton_kho < data["so_luong"]:
                 return Response({"ok": False, "error": "Tồn kho không đủ"}, status=status.HTTP_400_BAD_REQUEST)
             # === TÍNH STT THEO PHẠM VI (NHÀ MÁY + NGÀY) ===
-            ngay = data.get("ngay") or timezone.now()
+            ngay = data.get("ngay_de_nghi_xuat") or timezone.now()
             scope_qs = (
                 Bang_de_nghi_xuat.objects
                 .select_for_update(skip_locked=True)  # nếu dùng SQLite, bỏ skip_locked
@@ -2014,7 +1818,7 @@ class TaoDeNghiXuatAPIView(APIView):
             last_stt = scope_qs.order_by('-stt').values_list('stt', flat=True).first() or 0
             new_stt = last_stt + 1
 
-            Bang_de_nghi_xuat.objects.create(
+            de_nghi_xuat = Bang_de_nghi_xuat.objects.create(
                 stt=new_stt,
                 vat_tu=vt,
                 ma_bravo_text=vt.ma_bravo,
@@ -2022,8 +1826,10 @@ class TaoDeNghiXuatAPIView(APIView):
                 don_vi=vt.don_vi,
                 so_luong=data["so_luong"],
                 ngay_de_nghi_xuat=ngay,
+                nguoi_de_nghi=data.get("nguoi_de_nghi", ""),
                 ghi_chu=data.get("ghi_chu", ""),
             )
+
             Bang_vat_tu.objects.filter(pk=vt.pk).update(
                 ton_kho=F("ton_kho") - data["so_luong"]
             )
@@ -2035,7 +1841,7 @@ class KiemKeByMaterialAPIView(APIView):
     GET /api/khovattu/kiem-ke/material/{ma_nha_may}/{ma_bravo}/
     Trả về dữ liệu kiểm kê cho một vật tư cụ thể
     """
-    permission_classes = [HasFactoryAccess]
+    permission_classes = [HasFactoryAccess, CanViewInventory]
 
     def get(self, request, ma_nha_may, ma_bravo):
         try:
@@ -2189,3 +1995,233 @@ class XuatXuListAPIView(ListAPIView):
             'count': queryset.count()
         })
 
+
+# ===================== IMPORT EXCEL API VIEWS =====================
+
+class ImportVatTuAPIView(APIView):
+    """
+    Import vật tư từ file Excel
+    """
+    permission_classes = [HasFactoryAccess, CanImportExcel]
+
+    def post(self, request):
+        import pandas as pd
+        import io
+        from django.db import transaction
+        from .models import Bang_vat_tu, Bang_vi_tri, Bang_nha_may
+
+        ser = FileUploadSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        file = ser.validated_data["file"]
+        ma_nha_may = request.data.get("ma_nha_may")
+
+        if not ma_nha_may:
+            return Response({"error": "Mã nhà máy là bắt buộc"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            df = pd.read_excel(file, header=0).fillna("")
+
+            created = 0
+            updated = 0
+            errors = []
+            imported_ids = []
+
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    try:
+                        # Lấy hoặc tạo nhà máy
+                        nha_may, _ = Bang_nha_may.objects.get_or_create(
+                            ma_nha_may=ma_nha_may,
+                            defaults={'ten_nha_may': ma_nha_may}
+                        )
+
+                        # Lấy hoặc tạo vật tư
+                        vat_tu, created_flag = Bang_vat_tu.objects.get_or_create(
+                            bang_nha_may=nha_may,
+                            ma_bravo=row.get("ma_bravo", ""),
+                            defaults={
+                                'ten_vat_tu': row.get("ten_vat_tu", ""),
+                                'don_vi': row.get("don_vi", ""),
+                                'ton_kho': float(row.get("ton_kho", 0)),
+                                'so_luong_kh': float(row.get("so_luong_kh", 0)),
+                                'thong_so_ky_thuat': row.get("thong_so_ky_thuat", ""),
+                            }
+                        )
+
+                        if created_flag:
+                            created += 1
+                            imported_ids.append(vat_tu.id)
+                        else:
+                            # Cập nhật thông tin
+                            vat_tu.ten_vat_tu = row.get("ten_vat_tu", vat_tu.ten_vat_tu)
+                            vat_tu.don_vi = row.get("don_vi", vat_tu.don_vi)
+                            vat_tu.ton_kho = float(row.get("ton_kho", vat_tu.ton_kho))
+                            vat_tu.so_luong_kh = float(row.get("so_luong_kh", vat_tu.so_luong_kh))
+                            vat_tu.thong_so_ky_thuat = row.get("thong_so_ky_thuat", vat_tu.thong_so_ky_thuat)
+                            vat_tu.save()
+                            updated += 1
+
+                    except Exception as e:
+                        errors.append(f"Dòng {index + 2}: {str(e)}")
+
+            return Response({
+                "created": created,
+                "updated": updated,
+                "errors": errors,
+                "imported_ids": imported_ids,
+                "factory": ma_nha_may
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Lỗi đọc file Excel: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ImportKiemKeAPIView(APIView):
+    """
+    Import kiểm kê từ file Excel
+    """
+    permission_classes = [HasFactoryAccess, CanImportExcel]
+
+    def post(self, request):
+        import pandas as pd
+        import io
+        from django.db import transaction
+        from .models import Bang_kiem_ke, Bang_vat_tu, Bang_nha_may
+
+        ser = FileUploadSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        file = ser.validated_data["file"]
+        ma_nha_may = request.data.get("ma_nha_may")
+
+        if not ma_nha_may:
+            return Response({"error": "Mã nhà máy là bắt buộc"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            df = pd.read_excel(file, header=0).fillna("")
+
+            created = 0
+            total_rows = len(df)
+            skipped_empty = 0
+            errors = []
+
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    try:
+                        # Bỏ qua dòng trống
+                        if not row.get("ma_bravo") and not row.get("ten_vat_tu"):
+                            skipped_empty += 1
+                            continue
+
+                        # Tìm vật tư
+                        vat_tu = Bang_vat_tu.objects.filter(
+                            bang_nha_may__ma_nha_may=ma_nha_may,
+                            ma_bravo=row.get("ma_bravo", "")
+                        ).first()
+
+                        if not vat_tu:
+                            errors.append(f"Dòng {index + 2}: Không tìm thấy vật tư với mã Bravo {row.get('ma_bravo', '')}")
+                            continue
+
+                        # Tạo kiểm kê
+                        Bang_kiem_ke.objects.create(
+                            vat_tu=vat_tu,
+                            so_thu_tu=int(row.get("so_thu_tu", index + 1)),
+                            ma_bravo=row.get("ma_bravo", ""),
+                            ten_vat_tu=row.get("ten_vat_tu", vat_tu.ten_vat_tu),
+                            don_vi=row.get("don_vi", vat_tu.don_vi),
+                            so_luong=float(row.get("so_luong", 0)),
+                            so_luong_thuc_te=float(row.get("so_luong_thuc_te", 0)),
+                            ma_nha_may=ma_nha_may
+                        )
+                        created += 1
+
+                    except Exception as e:
+                        errors.append(f"Dòng {index + 2}: {str(e)}")
+
+            total_in_db = Bang_kiem_ke.objects.count()
+            valid_rows = total_rows - skipped_empty
+            success_rate = f"{(created / valid_rows * 100):.1f}%" if valid_rows > 0 else "0%"
+
+            return Response({
+                "created": created,
+                "total_rows": total_rows,
+                "skipped_empty": skipped_empty,
+                "total_in_db": total_in_db,
+                "success_rate": success_rate,
+                "errors": errors
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Lỗi đọc file Excel: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ImportViTriAPIView(APIView):
+    """
+    Import vị trí từ file Excel
+    """
+    permission_classes = [HasFactoryAccess, CanImportExcel]
+
+    def post(self, request):
+        import pandas as pd
+        import io
+        from django.db import transaction
+        from .models import Bang_vi_tri
+
+        ser = FileUploadSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        file = ser.validated_data["file"]
+
+        try:
+            df = pd.read_excel(file, header=0).fillna("")
+
+            created = 0
+            updated = 0
+            errors = []
+
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    try:
+                        # Lấy hoặc tạo vị trí
+                        vi_tri, created_flag = Bang_vi_tri.objects.get_or_create(
+                            ma_vi_tri=row.get("ma_vi_tri", ""),
+                            defaults={
+                                'ma_he_thong': row.get("ma_he_thong", ""),
+                                'kho': row.get("kho", ""),
+                                'ke': row.get("ke", ""),
+                                'ngan': row.get("ngan", ""),
+                                'tang': row.get("tang", ""),
+                                'mo_ta': row.get("mo_ta", ""),
+                            }
+                        )
+
+                        if created_flag:
+                            created += 1
+                        else:
+                            # Cập nhật thông tin
+                            vi_tri.ma_he_thong = row.get("ma_he_thong", vi_tri.ma_he_thong)
+                            vi_tri.kho = row.get("kho", vi_tri.kho)
+                            vi_tri.ke = row.get("ke", vi_tri.ke)
+                            vi_tri.ngan = row.get("ngan", vi_tri.ngan)
+                            vi_tri.tang = row.get("tang", vi_tri.tang)
+                            vi_tri.mo_ta = row.get("mo_ta", vi_tri.mo_ta)
+                            vi_tri.save()
+                            updated += 1
+
+                    except Exception as e:
+                        errors.append(f"Dòng {index + 2}: {str(e)}")
+
+            return Response({
+                "created": created,
+                "updated": updated,
+                "errors": errors
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Lỗi đọc file Excel: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ===================== EXPORT EXCEL API VIEWS =====================
+# Moved to views_excel.py for better maintainability

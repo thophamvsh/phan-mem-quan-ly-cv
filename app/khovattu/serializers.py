@@ -89,7 +89,19 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = ('id', 'username', 'email', 'first_name', 'last_name', 'full_name',
                  'phone', 'nha_may', 'nha_may_name', 'is_mobile_user', 'avatar', 'avatar_url',
-                 'chuc_danh', 'chu_ky', 'chu_ky_url', 'date_joined', 'created_at', 'updated_at')
+                 'chuc_danh', 'chu_ky', 'chu_ky_url', 'date_joined', 'created_at', 'updated_at',
+                 # Permissions
+                 'can_view_materials', 'can_add_materials', 'can_edit_materials', 'can_delete_materials',
+                 'can_import_excel', 'can_export_excel', 'can_create_export_request', 'can_approve_export_request',
+                 'can_create_import_request', 'can_approve_import_request', 'can_view_import_requests', 'can_view_export_requests',
+                 'can_view_inventory', 'can_edit_inventory', 'can_view_reports',
+                 'can_view_operation_events', 'can_create_operation_events',
+                 'can_edit_own_operation_events', 'can_edit_all_operation_events',
+                 'can_delete_own_operation_events', 'can_delete_all_operation_events',
+                 'can_acknowledge_operation_events', 'can_process_operation_events',
+                 'can_confirm_operation_events', 'can_add_event_developments',
+                 'can_edit_own_event_developments', 'can_edit_all_event_developments',
+                 'can_edit_own_remediations', 'can_edit_all_remediations')
         read_only_fields = ('id', 'username', 'email', 'full_name',
                            'nha_may_name', 'date_joined', 'created_at', 'updated_at')
 
@@ -296,14 +308,20 @@ class DeNghiXuatPatchSerializer(serializers.ModelSerializer):
 
 
 class NhapSerializer(serializers.Serializer):
-    pass
+    ma_nha_may = serializers.CharField()
+    ma_bravo = serializers.CharField()
+    so_luong = serializers.IntegerField()
+    ngay_de_nghi = serializers.DateTimeField(required=False)  # Changed from 'ngay' to 'ngay_de_nghi'
+    nguoi_de_nghi = serializers.CharField(required=False, allow_blank=True, help_text="Người đề nghị nhập")
+    ghi_chu = serializers.CharField(required=False, allow_blank=True)
 
 
 class XuatSerializer(serializers.Serializer):
     ma_nha_may = serializers.CharField()
     ma_bravo = serializers.CharField()
     so_luong = serializers.IntegerField()
-    ngay = serializers.DateTimeField(required=False)
+    ngay_de_nghi_xuat = serializers.DateTimeField(required=False)  # Changed from 'ngay' to 'ngay_de_nghi_xuat'
+    nguoi_de_nghi = serializers.CharField(required=False, allow_blank=True, help_text="Người đề nghị xuất")
     ghi_chu = serializers.CharField(required=False, allow_blank=True)
 
 

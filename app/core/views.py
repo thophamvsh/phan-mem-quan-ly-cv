@@ -6,6 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.core.files.storage import default_storage
+from django.http import JsonResponse
 import uuid
 import time
 from .models import User, UserProfile
@@ -15,6 +16,10 @@ from .serializers import (
     UserSerializer,
     UserProfileSerializer
 )
+
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})
 
 
 class UserRegistrationAPIView(APIView):
@@ -440,5 +445,60 @@ def upload_avatar(request):
         return Response({
             'success': False,
             'message': 'Có lỗi xảy ra khi cập nhật hình ảnh',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+def upload_signature(request):
+    """
+    Upload user signature
+    POST /api/core/auth/upload-signature/
+    """
+    try:
+        if 'chu_ky' not in request.FILES:
+            return Response({
+                'success': False,
+                'message': 'KhÃ´ng cÃ³ file chá»¯ kÃ½ Ä‘Æ°á»£c gá»­i'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        signature_file = request.FILES['chu_ky']
+
+        allowed_types = ['image/jpeg', 'image/jpg', 'image/png']
+        if signature_file.content_type not in allowed_types:
+            return Response({
+                'success': False,
+                'message': 'Chá»‰ cháº¥p nháº­n file JPG, JPEG, PNG'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if signature_file.size > 5 * 1024 * 1024:
+            return Response({
+                'success': False,
+                'message': 'KÃ­ch thÆ°á»›c file khÃ´ng Ä‘Æ°á»£c vÆ°á»£t quÃ¡ 5MB'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        file_extension = signature_file.name.split('.')[-1]
+        unique_filename = f"signature_{request.user.id}_{uuid.uuid4().hex[:8]}.{file_extension}"
+        file_path = default_storage.save(f"signatures/{unique_filename}", signature_file)
+
+        user_profile, created = UserProfile.objects.get_or_create(
+            user=request.user,
+            defaults={'is_mobile_user': True}
+        )
+
+        user_profile.chu_ky = file_path
+        user_profile.save()
+
+        signature_url = request.build_absolute_uri(default_storage.url(file_path))
+
+        return Response({
+            'success': True,
+            'message': 'Cáº­p nháº­t chá»¯ kÃ½ thÃ nh cÃ´ng',
+            'chu_ky_url': signature_url
+        })
+
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': 'CÃ³ lá»—i xáº£y ra khi cáº­p nháº­t chá»¯ kÃ½',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

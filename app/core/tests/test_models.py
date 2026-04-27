@@ -4,6 +4,9 @@ Tests for models.
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.urls import reverse
+
+from core.models import UserProfile
 
 
 class ModelTests(TestCase):
@@ -144,3 +147,64 @@ class ModelTests(TestCase):
         # Password should be hashed, not stored as plain text
         self.assertNotEqual(user.password, 'testpass123')
         self.assertTrue(user.password.startswith('pbkdf2_sha256$'))
+
+    def test_user_save_syncs_profile_name_fields(self):
+        """Saving user should sync profile name fields without recursion issues."""
+        user = get_user_model().objects.create_user(
+            email='sync@example.com',
+            password='testpass123',
+            username='syncuser',
+        )
+        profile = UserProfile.objects.create(user=user)
+
+        user.first_name = 'Nguyen'
+        user.last_name = 'An'
+        user.save()
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.ho_ten, 'Nguyen An')
+        self.assertEqual(profile.ho, 'Nguyen')
+        self.assertEqual(profile.ten, 'An')
+
+    def test_profile_save_syncs_user_name_fields(self):
+        """Saving profile should sync user name fields."""
+        user = get_user_model().objects.create_user(
+            email='profile@example.com',
+            password='testpass123',
+            username='profileuser',
+        )
+        profile = UserProfile.objects.create(user=user)
+
+        profile.ho_ten = 'Tran Binh'
+        profile.save()
+
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, 'Tran')
+        self.assertEqual(user.last_name, 'Binh')
+
+    def test_admin_can_add_user(self):
+        """Admin add user should not fail on custom save synchronization."""
+        admin_user = get_user_model().objects.create_superuser(
+            email='admin@example.com',
+            password='admin123456',
+            username='admin',
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.post(
+            reverse('admin:core_user_add'),
+            {
+                'email': 'newuser@example.com',
+                'username': 'newuser',
+                'first_name': 'Le',
+                'last_name': 'Minh',
+                'password1': 'StrongPass123!',
+                'password2': 'StrongPass123!',
+                '_save': 'Save',
+            }
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created_user = get_user_model().objects.get(email='newuser@example.com')
+        self.assertEqual(created_user.first_name, 'Le')
+        self.assertEqual(created_user.last_name, 'Minh')

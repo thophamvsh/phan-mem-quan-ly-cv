@@ -107,7 +107,7 @@ def get_user_profile(request):
             is_mobile_user=True
         )
 
-    serializer = UserProfileSerializer(profile)
+    serializer = UserProfileSerializer(profile, context={'request': request})
     return Response({
         'success': True,
         'user': serializer.data

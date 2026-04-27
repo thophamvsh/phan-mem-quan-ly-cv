@@ -10,18 +10,20 @@ from .auth_views import (
     upload_avatar,
 )
 from .views_upload import UploadMaterialImageView
-from .views import (
+from .views_excel import (
     # ===== Import Excel
     ImportVatTuAPIView, ImportKiemKeAPIView, ImportDeNghiNhapAPIView, ImportDeNghiXuatAPIView, ImportViTriAPIView,
-
+    # ===== Export Excel
+    ExportVatTuAPIView, ExportKiemKeAPIView,
     # ===== Templates
-    DownloadVatTuTemplateAPIView,
-
+    DownloadVatTuTemplateAPIView, DownloadDeNghiXuatTemplateAPIView, DownloadDeNghiNhapTemplateAPIView, DownloadKiemKeTemplateAPIView,
+)
+from .views import (
     # ===== Kiểm kê
-    KiemKeListAPIView, DownloadKiemKeTemplateAPIView, ExportKiemKeAPIView, KiemKeStatsAPIView, UpdateSoLuongThucTeAPIView,
+    KiemKeListAPIView, KiemKeStatsAPIView, UpdateSoLuongThucTeAPIView,
 
     # ===== Vị trí
-    ViTriListAPIView, ViTriDetailAPIView, HeThongListAPIView,
+    ViTriListAPIView, ViTriDetailAPIView, HeThongListAPIView, HeThongByFactoryListAPIView,
 
     # ===== Xuất xứ
     XuatXuListAPIView,
@@ -69,6 +71,12 @@ urlpatterns = [
 
     # ---------- Templates ----------
     path("template/vat-tu/", DownloadVatTuTemplateAPIView.as_view()),
+    path("template/de-nghi-xuat/", DownloadDeNghiXuatTemplateAPIView.as_view()),
+    path("template/de-nghi-nhap/", DownloadDeNghiNhapTemplateAPIView.as_view()),
+    path("template/kiem-ke/", DownloadKiemKeTemplateAPIView.as_view()),
+
+    # ---------- Export ----------
+    path("export/vat-tu/", ExportVatTuAPIView.as_view()),
 
     # ---------- Kiểm kê ----------
     path("kiem-ke/", KiemKeListAPIView.as_view()),
@@ -82,6 +90,7 @@ urlpatterns = [
     path("vi-tri/", ViTriListAPIView.as_view()),
     path("vi-tri/<str:ma_vi_tri>/", ViTriDetailAPIView.as_view()),
     path("he-thong/", HeThongListAPIView.as_view()),
+    path("he-thong/by-factory/", HeThongByFactoryListAPIView.as_view()),
 
     # ---------- Xuất xứ ----------
     path("xuat-xu/", XuatXuListAPIView.as_view()),

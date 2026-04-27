@@ -83,12 +83,13 @@ class UserSerializer(serializers.ModelSerializer):
     phone = serializers.SerializerMethodField()
     chuc_danh = serializers.SerializerMethodField()
     nha_may = serializers.SerializerMethodField()
+    nha_may_code = serializers.SerializerMethodField()
     nha_may_name = serializers.SerializerMethodField()
     is_all_factories = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'username', 'first_name', 'last_name', 'full_name', 'avatar', 'avatar_url', 'phone', 'chuc_danh', 'nha_may', 'nha_may_name', 'is_all_factories', 'is_active', 'is_staff', 'is_superuser', 'last_login')
+        fields = ('id', 'email', 'username', 'first_name', 'last_name', 'full_name', 'avatar', 'avatar_url', 'phone', 'chuc_danh', 'nha_may', 'nha_may_code', 'nha_may_name', 'is_all_factories', 'is_active', 'is_staff', 'is_superuser', 'last_login')
         read_only_fields = ('id', 'email', 'username', 'is_active', 'is_staff', 'is_superuser', 'last_login')
 
     def get_full_name(self, obj):
@@ -147,6 +148,14 @@ class UserSerializer(serializers.ModelSerializer):
         except:
             return None
 
+    def get_nha_may_code(self, obj):
+        """Lấy mã nhà máy từ UserProfile"""
+        try:
+            profile = obj.profile
+            return profile.nha_may.ma_nha_may if profile.nha_may else None
+        except:
+            return None
+
     def get_is_all_factories(self, obj):
         """Lấy is_all_factories từ UserProfile"""
         try:
@@ -158,6 +167,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserProfileSerializer(serializers.ModelSerializer):
     """Serializer cho thông tin user profile giống kho vật tư"""
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     first_name = serializers.CharField(source='user.first_name', required=False)
@@ -168,6 +178,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     ten = serializers.CharField(required=False, help_text="Tên")
     avatar_url = serializers.SerializerMethodField()
     chu_ky_url = serializers.SerializerMethodField()
+    nha_may_code = serializers.SerializerMethodField()
     nha_may_name = serializers.SerializerMethodField()
     # date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)  # Not available in custom User model
 
@@ -197,12 +208,28 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return f"{obj.nha_may.ma_nha_may} - {obj.nha_may.ten_nha_may}"
         return None
 
+    def get_nha_may_code(self, obj):
+        """Lấy mã nhà máy"""
+        return obj.nha_may.ma_nha_may if obj.nha_may else None
+
     class Meta:
         model = UserProfile
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'is_mobile_user',
-                 'avatar', 'avatar_url', 'chuc_danh', 'chu_ky', 'chu_ky_url', 'nha_may', 'nha_may_name', 'is_all_factories',
-                 'created_at', 'updated_at')
-        read_only_fields = ('id', 'username', 'email', 'full_name', 'avatar_url', 'chu_ky_url',
+        fields = ('id', 'user_id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'is_mobile_user',
+                 'avatar', 'avatar_url', 'chuc_danh', 'chu_ky', 'chu_ky_url', 'nha_may', 'nha_may_code', 'nha_may_name', 'is_all_factories',
+                 'created_at', 'updated_at',
+                 # Permissions - thêm để đồng nhất với khovattu serializer
+                 'can_view_materials', 'can_add_materials', 'can_edit_materials', 'can_delete_materials',
+                 'can_import_excel', 'can_export_excel', 'can_create_export_request', 'can_approve_export_request',
+                 'can_create_import_request', 'can_approve_import_request', 'can_view_import_requests', 'can_view_export_requests',
+                 'can_view_inventory', 'can_edit_inventory', 'can_view_reports',
+                 'can_view_operation_events', 'can_create_operation_events',
+                 'can_edit_own_operation_events', 'can_edit_all_operation_events',
+                 'can_delete_own_operation_events', 'can_delete_all_operation_events',
+                 'can_acknowledge_operation_events', 'can_process_operation_events',
+                 'can_confirm_operation_events', 'can_add_event_developments',
+                 'can_edit_own_event_developments', 'can_edit_all_event_developments',
+                 'can_edit_own_remediations', 'can_edit_all_remediations')
+        read_only_fields = ('id', 'user_id', 'username', 'email', 'full_name', 'avatar_url', 'chu_ky_url', 'nha_may_code',
                            'created_at', 'updated_at')
 
     def update(self, instance, validated_data):
