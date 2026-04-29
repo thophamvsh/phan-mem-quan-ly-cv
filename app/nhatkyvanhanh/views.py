@@ -18,6 +18,7 @@ from .models import (
     KhacPhucSuKien,
     NguoiTrucSoGiaoNhanCaHC,
     Sonhatkyvanhanh,
+    SonhatkyvanhanhDiesel,
     SuKien,
     SogiaonhancaHC,
     SogiaonhancaVH,
@@ -29,6 +30,7 @@ from .serializers import (
     KhacPhucSuKienSerializer,
     NhatKySuKienSerializer,
     NguoiTrucSoGiaoNhanCaHCSerializer,
+    SonhatkyvanhanhDieselSerializer,
     SonhatkyvanhanhSerializer,
     SogiaonhancaHCSerializer,
     SogiaonhancaVHSerializer,
@@ -38,6 +40,7 @@ from .permissions import (
     CanConfirmOperationEvents,
     CanConfirmOperationLogbooks,
     CanCreateAdminShiftHandoverLogs,
+    CanCreateDieselOperationLogbooks,
     CanCreateOperationLogbooks,
     CanCreateShiftHandoverLogs,
     CanCreateOperationEvents,
@@ -45,6 +48,7 @@ from .permissions import (
     CanReceiveAdminShiftHandoverLogs,
     CanReceiveShiftHandoverLogs,
     CanViewAdminShiftHandoverLogs,
+    CanViewDieselOperationLogbooks,
     CanViewOperationLogbooks,
     CanViewShiftHandoverLogs,
     CanViewOperationEvents,
@@ -166,6 +170,21 @@ def _can_delete_operation_logbook(user, item):
     )
 
 
+def _is_creator_of_diesel_operation_logbook(user, item):
+    return bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+
+
+def _can_edit_diesel_operation_logbook(user, item):
+    return _is_creator_of_diesel_operation_logbook(user, item)
+
+
+def _can_delete_diesel_operation_logbook(user, item):
+    return (
+        has_profile_permission(user, "can_delete_diesel_operation_logbooks")
+        or _is_creator_of_diesel_operation_logbook(user, item)
+    )
+
+
 def _get_or_create_latest_khac_phuc(su_kien, nguoi_tao=None):
     latest = su_kien.latest_khac_phuc
     if latest:
@@ -177,6 +196,14 @@ class NhatKySuKienFilterSet(django_filters.FilterSet):
     ngay_xay_ra = django_filters.DateFilter(
         field_name="thoi_gian_xay_ra",
         lookup_expr="date",
+    )
+    ngay_xay_ra_tu = django_filters.DateFilter(
+        field_name="thoi_gian_xay_ra",
+        lookup_expr="date__gte",
+    )
+    ngay_xay_ra_den = django_filters.DateFilter(
+        field_name="thoi_gian_xay_ra",
+        lookup_expr="date__lte",
     )
     ben_ghi_nhan_su_kien = django_filters.ModelChoiceFilter(
         queryset=User.objects.all()
@@ -194,6 +221,8 @@ class NhatKySuKienFilterSet(django_filters.FilterSet):
             "ben_ghi_nhan_su_kien",
             "ben_xu_ly_su_kien_thiet_bi",
             "ngay_xay_ra",
+            "ngay_xay_ra_tu",
+            "ngay_xay_ra_den",
         ]
 
 
@@ -570,6 +599,14 @@ class SonhatkyvanhanhFilterSet(django_filters.FilterSet):
         field_name="thoi_gian_tao",
         lookup_expr="date",
     )
+    ngay_tao_tu = django_filters.DateFilter(
+        field_name="thoi_gian_tao",
+        lookup_expr="date__gte",
+    )
+    ngay_tao_den = django_filters.DateFilter(
+        field_name="thoi_gian_tao",
+        lookup_expr="date__lte",
+    )
 
     class Meta:
         model = Sonhatkyvanhanh
@@ -577,6 +614,8 @@ class SonhatkyvanhanhFilterSet(django_filters.FilterSet):
             "nha_may",
             "trang_thai",
             "ngay_tao",
+            "ngay_tao_tu",
+            "ngay_tao_den",
             "nguoi_tao",
             "nguoi_xac_nhan",
         ]
@@ -659,11 +698,89 @@ class SonhatkyvanhanhViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class SonhatkyvanhanhDieselFilterSet(django_filters.FilterSet):
+    ngay_tu = django_filters.DateFilter(field_name="thoi_gian", lookup_expr="date__gte")
+    ngay_den = django_filters.DateFilter(field_name="thoi_gian", lookup_expr="date__lte")
+
+    class Meta:
+        model = SonhatkyvanhanhDiesel
+        fields = ["nha_may", "ca_truc", "ngay_tu", "ngay_den", "nguoi_tao"]
+
+
+class SonhatkyvanhanhDieselViewSet(viewsets.ModelViewSet):
+    serializer_class = SonhatkyvanhanhDieselSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = SonhatkyvanhanhDieselFilterSet
+    search_fields = [
+        "noi_dung",
+        "ca_truc",
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    ]
+    ordering_fields = ["thoi_gian", "created_at", "updated_at"]
+    ordering = ["-thoi_gian", "-created_at"]
+
+    def get_permissions(self):
+        permission_classes = [CanViewDieselOperationLogbooks]
+        if self.action == "create":
+            permission_classes = [CanCreateDieselOperationLogbooks]
+
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = SonhatkyvanhanhDiesel.objects.select_related(
+            "nha_may",
+            "nguoi_tao",
+        ).all()
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def perform_create(self, serializer):
+        item = serializer.save(
+            nguoi_tao=self.request.user,
+            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        )
+        item.save()
+
+    def perform_update(self, serializer):
+        if not _can_edit_diesel_operation_logbook(self.request.user, serializer.instance):
+            raise PermissionDenied("User khong co quyen cap nhat so nhat ky van hanh Diesel.")
+        item = serializer.save(
+            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        )
+        item.save()
+
+    def perform_destroy(self, instance):
+        if not _can_delete_diesel_operation_logbook(self.request.user, instance):
+            raise PermissionDenied("User khong co quyen xoa so nhat ky van hanh Diesel.")
+        return super().perform_destroy(instance)
+
+
+class SogiaonhancaVHFilterSet(django_filters.FilterSet):
+    ngay_truc_tu = django_filters.DateFilter(field_name="ngay_truc", lookup_expr="gte")
+    ngay_truc_den = django_filters.DateFilter(field_name="ngay_truc", lookup_expr="lte")
+
+    class Meta:
+        model = SogiaonhancaVH
+        fields = [
+            "nha_may",
+            "ca_truc",
+            "trang_thai",
+            "ngay_truc",
+            "ngay_truc_tu",
+            "ngay_truc_den",
+            "user_giao_ca",
+            "user_nhan_ca",
+        ]
+
+
 class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
     serializer_class = SogiaonhancaVHSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["nha_may", "ca_truc", "trang_thai", "ngay_truc", "user_giao_ca", "user_nhan_ca"]
+    filterset_class = SogiaonhancaVHFilterSet
     search_fields = [
         "dia_diem",
         "truc_chinh",
@@ -839,11 +956,28 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class SogiaonhancaHCFilterSet(django_filters.FilterSet):
+    ngay_truc_tu = django_filters.DateFilter(field_name="ngay_truc", lookup_expr="gte")
+    ngay_truc_den = django_filters.DateFilter(field_name="ngay_truc", lookup_expr="lte")
+
+    class Meta:
+        model = SogiaonhancaHC
+        fields = [
+            "nha_may",
+            "trang_thai",
+            "ngay_truc",
+            "ngay_truc_tu",
+            "ngay_truc_den",
+            "user_giao_ca",
+            "user_nhan_ca",
+        ]
+
+
 class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     serializer_class = SogiaonhancaHCSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["nha_may", "trang_thai", "ngay_truc", "user_giao_ca", "user_nhan_ca"]
+    filterset_class = SogiaonhancaHCFilterSet
     search_fields = [
         "dia_diem",
         "nguoi_truc",

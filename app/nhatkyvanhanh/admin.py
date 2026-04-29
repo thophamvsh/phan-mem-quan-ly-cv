@@ -7,6 +7,7 @@ from .models import (
     KhacPhucSuKien,
     NguoiTrucSoGiaoNhanCaHC,
     Sonhatkyvanhanh,
+    SonhatkyvanhanhDiesel,
     SuKien,
     SogiaonhancaHC,
     SogiaonhancaVH,
@@ -217,5 +218,39 @@ class SonhatkyvanhanhAdmin(admin.ModelAdmin):
 
     def co_chu_ky(self, obj):
         return bool(obj.chu_ky_nguoi_tao or obj.chu_ky_nguoi_xac_nhan)
+
+    co_chu_ky.boolean = True
+
+
+@admin.register(SonhatkyvanhanhDiesel)
+class SonhatkyvanhanhDieselAdmin(admin.ModelAdmin):
+    list_display = (
+        "thoi_gian",
+        "nha_may",
+        "ca_truc",
+        "noi_dung",
+        "nguoi_tao",
+        "co_chu_ky",
+        "created_at",
+    )
+    list_filter = ("thoi_gian", "created_at", "nha_may", "ca_truc")
+    search_fields = (
+        "noi_dung",
+        "ca_truc",
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    )
+    readonly_fields = (
+        "nguoi_tao",
+        "chu_ky_nguoi_tao",
+        "created_at",
+        "updated_at",
+    )
+    exclude = ("chu_ky_nguoi_tao",)
+
+    def co_chu_ky(self, obj):
+        return bool(obj.chu_ky_nguoi_tao)
 
     co_chu_ky.boolean = True

@@ -639,3 +639,57 @@ class Sonhatkyvanhanh(TimestampedUUIDModel):
 
     def __str__(self):
         return f"So nhat ky van hanh - {self.thoi_gian_tao}"
+
+
+class SonhatkyvanhanhDiesel(TimestampedUUIDModel):
+    thoi_gian = models.DateTimeField(default=timezone.now)
+    nha_may = models.ForeignKey(
+        "khovattu.Bang_nha_may",
+        on_delete=models.PROTECT,
+        related_name="so_nhat_ky_van_hanh_diesel",
+        null=True,
+        blank=True,
+        verbose_name="Nha may",
+    )
+    noi_dung = models.TextField(blank=True)
+    i = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="I (A)")
+    u = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="U (V)")
+    f = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="F (Hz)")
+    i_sac = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="I sac (A)")
+    u_sac = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="U sac (V)")
+    p = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="P (KW)")
+    q = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Q (KVAr)")
+    chi_so_gio_vh = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    t_may = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="T may (C)")
+    muc_dau = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Muc dau (lit)")
+    ap_luc_dau = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    ca_truc = models.CharField(max_length=50, blank=True)
+    nguoi_tao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="so_nhat_ky_van_hanh_diesel_da_tao",
+        null=True,
+        blank=True,
+    )
+    chu_ky_nguoi_tao = models.ImageField(
+        upload_to="operations/so_nhat_ky_van_hanh_diesel/chu_ky/nguoi_tao/",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["-thoi_gian", "-created_at"]
+        verbose_name = "So nhat ky van hanh Diesel"
+        verbose_name_plural = "So nhat ky van hanh Diesel"
+
+    def dong_bo_chu_ky_tu_user(self):
+        if self.nguoi_tao_id and not self.chu_ky_nguoi_tao:
+            chu_ky = _lay_chu_ky_profile(self.nguoi_tao)
+            self.chu_ky_nguoi_tao = chu_ky.name if chu_ky else None
+
+    def save(self, *args, **kwargs):
+        self.dong_bo_chu_ky_tu_user()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Diesel {self.thoi_gian:%Y-%m-%d %H:%M}"

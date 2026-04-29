@@ -9,6 +9,7 @@ from .models import (
     KhacPhucSuKien,
     NguoiTrucSoGiaoNhanCaHC,
     Sonhatkyvanhanh,
+    SonhatkyvanhanhDiesel,
     SuKien,
     SogiaonhancaHC,
     SogiaonhancaVH,
@@ -705,3 +706,61 @@ class SonhatkyvanhanhSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
     def get_chu_ky_nguoi_xac_nhan_url(self, obj):
         return self._build_file_url(obj.chu_ky_nguoi_xac_nhan)
+
+
+class SonhatkyvanhanhDieselSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    nguoi_tao_display = serializers.SerializerMethodField()
+    chu_ky_nguoi_tao_url = serializers.SerializerMethodField()
+    nha_may_code = serializers.SerializerMethodField()
+    nha_may_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SonhatkyvanhanhDiesel
+        fields = [
+            "id",
+            "nha_may",
+            "nha_may_code",
+            "nha_may_name",
+            "thoi_gian",
+            "noi_dung",
+            "i",
+            "u",
+            "f",
+            "i_sac",
+            "u_sac",
+            "p",
+            "q",
+            "chi_so_gio_vh",
+            "t_may",
+            "muc_dau",
+            "ap_luc_dau",
+            "ca_truc",
+            "nguoi_tao",
+            "nguoi_tao_display",
+            "chu_ky_nguoi_tao",
+            "chu_ky_nguoi_tao_url",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "nha_may_code",
+            "nha_may_name",
+            "nguoi_tao",
+            "nguoi_tao_display",
+            "chu_ky_nguoi_tao",
+            "chu_ky_nguoi_tao_url",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_nha_may_code(self, obj):
+        return obj.nha_may.ma_nha_may if obj.nha_may else None
+
+    def get_nha_may_name(self, obj):
+        return obj.nha_may.ten_nha_may if obj.nha_may else None
+
+    def get_nguoi_tao_display(self, obj):
+        return self._get_user_display(obj.nguoi_tao)
+
+    def get_chu_ky_nguoi_tao_url(self, obj):
+        return self._build_file_url(obj.chu_ky_nguoi_tao)

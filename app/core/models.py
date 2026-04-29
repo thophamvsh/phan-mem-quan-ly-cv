@@ -370,6 +370,22 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so nhat ky van hanh"
     )
+    can_view_diesel_operation_logbooks = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so nhat ky van hanh Diesel"
+    )
+    can_create_diesel_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao so nhat ky van hanh Diesel"
+    )
+    can_edit_diesel_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so nhat ky van hanh Diesel"
+    )
+    can_delete_diesel_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so nhat ky van hanh Diesel"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

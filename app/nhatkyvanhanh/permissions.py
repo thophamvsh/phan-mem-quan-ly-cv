@@ -80,3 +80,11 @@ class CanCreateOperationLogbooks(UserProfilePermission):
 
 class CanConfirmOperationLogbooks(UserProfilePermission):
     permission_name = "can_confirm_operation_logbooks"
+
+
+class CanViewDieselOperationLogbooks(UserProfilePermission):
+    permission_name = "can_view_diesel_operation_logbooks"
+
+
+class CanCreateDieselOperationLogbooks(UserProfilePermission):
+    permission_name = "can_create_diesel_operation_logbooks"

@@ -1,4 +1,4 @@
-from django.contrib import admin
+﻿from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.utils.translation import gettext_lazy as _
@@ -32,7 +32,7 @@ class UserProfileInline(admin.StackedInline):
     extra = 0
     readonly_fields = ('created_at', 'updated_at', 'full_name')
     fieldsets = (
-        ('Thông tin hồ sơ', {
+        ('ThÃ´ng tin há»“ sÆ¡', {
             'fields': ('full_name', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
         ('Quyen nhat ky su kien van hanh', {
@@ -84,10 +84,19 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyen xem, tao, xac nhan, sua va xoa So nhat ky van hanh.'
         }),
-        ('Hình ảnh', {
+        ('Quyen so nhat ky van hanh Diesel', {
+            'fields': (
+                'can_view_diesel_operation_logbooks',
+                'can_create_diesel_operation_logbooks',
+                'can_edit_diesel_operation_logbooks',
+                'can_delete_diesel_operation_logbooks',
+            ),
+            'description': 'Quyen xem, tao, sua va xoa So nhat ky van hanh Diesel.'
+        }),
+        ('HÃ¬nh áº£nh', {
             'fields': ('avatar', 'chu_ky')
         }),
-        ('Thời gian', {
+        ('Thá»i gian', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
@@ -132,36 +141,36 @@ class UserProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
     fieldsets = (
-        ('Thông tin cơ bản', {
+        ('ThÃ´ng tin cÆ¡ báº£n', {
             'fields': ('user', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
-        ('Phân quyền nhà máy', {
+        ('PhÃ¢n quyá»n nhÃ  mÃ¡y', {
             'fields': ('nha_may', 'is_all_factories'),
-            'description': 'Gán nhà máy cho user. Nếu chọn "Tất cả nhà máy" thì user có quyền truy cập mọi nhà máy.'
+            'description': 'GÃ¡n nhÃ  mÃ¡y cho user. Náº¿u chá»n "Táº¥t cáº£ nhÃ  mÃ¡y" thÃ¬ user cÃ³ quyá»n truy cáº­p má»i nhÃ  mÃ¡y.'
         }),
-        ('Quyền xem dữ liệu', {
+        ('Quyá»n xem dá»¯ liá»‡u', {
             'fields': ('can_view_materials', 'can_view_inventory', 'can_view_reports'),
-            'description': 'Quyền xem các loại dữ liệu khác nhau'
+            'description': 'Quyá»n xem cÃ¡c loáº¡i dá»¯ liá»‡u khÃ¡c nhau'
         }),
-        ('Quyền thao tác vật tư', {
+        ('Quyá»n thao tÃ¡c váº­t tÆ°', {
             'fields': ('can_add_materials', 'can_edit_materials', 'can_delete_materials'),
-            'description': 'Quyền thêm, sửa, xóa vật tư'
+            'description': 'Quyá»n thÃªm, sá»­a, xÃ³a váº­t tÆ°'
         }),
-        ('Quyền Excel', {
+        ('Quyá»n Excel', {
             'fields': ('can_import_excel', 'can_export_excel'),
-            'description': 'Quyền import và export dữ liệu Excel'
+            'description': 'Quyá»n import vÃ  export dá»¯ liá»‡u Excel'
         }),
-        ('Quyền đề nghị xuất', {
+        ('Quyá»n Ä‘á» nghá»‹ xuáº¥t', {
             'fields': ('can_create_export_request', 'can_approve_export_request', 'can_view_export_requests'),
-            'description': 'Quyền tạo, duyệt và xem đề nghị xuất'
+            'description': 'Quyá»n táº¡o, duyá»‡t vÃ  xem Ä‘á» nghá»‹ xuáº¥t'
         }),
-        ('Quyền đề nghị nhập', {
+        ('Quyá»n Ä‘á» nghá»‹ nháº­p', {
             'fields': ('can_create_import_request', 'can_approve_import_request', 'can_view_import_requests'),
-            'description': 'Quyền tạo, duyệt và xem đề nghị nhập'
+            'description': 'Quyá»n táº¡o, duyá»‡t vÃ  xem Ä‘á» nghá»‹ nháº­p'
         }),
-        ('Quyền kiểm kê', {
+        ('Quyá»n kiá»ƒm kÃª', {
             'fields': ('can_edit_inventory',),
-            'description': 'Quyền sửa thông tin kiểm kê'
+            'description': 'Quyá»n sá»­a thÃ´ng tin kiá»ƒm kÃª'
         }),
         ('Quyen nhat ky su kien van hanh', {
             'fields': (
@@ -212,10 +221,19 @@ class UserProfileAdmin(admin.ModelAdmin):
             ),
             'description': 'Quyen xem, tao, xac nhan, sua va xoa So nhat ky van hanh.'
         }),
-        ('Hình ảnh', {
+        ('Quyen so nhat ky van hanh Diesel', {
+            'fields': (
+                'can_view_diesel_operation_logbooks',
+                'can_create_diesel_operation_logbooks',
+                'can_edit_diesel_operation_logbooks',
+                'can_delete_diesel_operation_logbooks',
+            ),
+            'description': 'Quyen xem, tao, sua va xoa So nhat ky van hanh Diesel.'
+        }),
+        ('HÃ¬nh áº£nh', {
             'fields': ('avatar', 'chu_ky')
         }),
-        ('Thời gian', {
+        ('Thá»i gian', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
@@ -223,13 +241,13 @@ class UserProfileAdmin(admin.ModelAdmin):
 
     def full_name(self, obj):
         return obj.full_name
-    full_name.short_description = 'Tên đầy đủ'
+    full_name.short_description = 'TÃªn Ä‘áº§y Ä‘á»§'
 
     def nha_may(self, obj):
         if obj.is_all_factories:
-            return "Tất cả nhà máy"
+            return "Táº¥t cáº£ nhÃ  mÃ¡y"
         elif obj.nha_may:
             return f"{obj.nha_may.ma_nha_may} - {obj.nha_may.ten_nha_may}"
         else:
-            return "Chưa gán"
-    nha_may.short_description = 'Nhà máy'
+            return "ChÆ°a gÃ¡n"
+    nha_may.short_description = 'NhÃ  mÃ¡y'
