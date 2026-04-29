@@ -7,7 +7,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import serializers
+from rest_framework.permissions import IsAuthenticated
 
+from core.factory_scope import filter_queryset_by_factory
 from .models import ThietBi, ThongSoVanHanh, ThongSoToMay
 
 
@@ -146,6 +148,7 @@ class ThongSoByDayView(APIView):
       ]
     }
     """
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         tb_id = request.GET.get("thiet_bi_id")
@@ -165,12 +168,18 @@ class ThongSoByDayView(APIView):
         except Exception:
             return Response({"detail": "Định dạng ngày không hợp lệ, dùng YYYY-MM-DD"}, status=400)
 
-        # Lấy thiết bị
+        # Lấy thiết bị trong phạm vi nhà máy được phân quyền cho user.
+        thiet_bi_queryset = filter_queryset_by_factory(
+            ThietBi.objects.all(),
+            request.user,
+            "nha_may",
+            "string",
+        )
         try:
             if tb_id:
-                tb = ThietBi.objects.get(pk=tb_id)
+                tb = thiet_bi_queryset.get(pk=tb_id)
             else:
-                tb = ThietBi.objects.get(ma_day_du=tb_ma)
+                tb = thiet_bi_queryset.get(ma_day_du=tb_ma)
         except ThietBi.DoesNotExist:
             return Response({"detail": "Không tìm thấy thiết bị"}, status=404)
 
@@ -182,8 +191,12 @@ class ThongSoByDayView(APIView):
         end = slots[-1] + timedelta(minutes=30)
 
         # Lấy tất cả bản ghi thuộc NGÀY chọn, dựa vào cả thoi_diem_nhap__date và ngay_nhap
-        qs = (ThongSoVanHanh.objects
-              .filter(thiet_bi=tb)
+        qs = (filter_queryset_by_factory(
+                ThongSoVanHanh.objects.filter(thiet_bi=tb),
+                request.user,
+                "nha_may",
+                "string",
+              )
               .filter(Q(thoi_diem_nhap__date=ngay) | Q(ngay_nhap=ngay))
               .values_list("ma_thong_so", "thoi_diem_nhap", "gia_tri", "ten_thong_so", "don_vi"))
 
@@ -323,6 +336,7 @@ class ThongSoToMayByDayView(APIView):
       ]
     }
     """
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         tb_id = request.GET.get("thiet_bi_id")
@@ -342,12 +356,18 @@ class ThongSoToMayByDayView(APIView):
         except Exception:
             return Response({"detail": "Định dạng ngày không hợp lệ, dùng YYYY-MM-DD"}, status=400)
 
-        # Lấy thiết bị
+        # Lấy thiết bị trong phạm vi nhà máy được phân quyền cho user.
+        thiet_bi_queryset = filter_queryset_by_factory(
+            ThietBi.objects.all(),
+            request.user,
+            "nha_may",
+            "string",
+        )
         try:
             if tb_id:
-                tb = ThietBi.objects.get(pk=tb_id)
+                tb = thiet_bi_queryset.get(pk=tb_id)
             else:
-                tb = ThietBi.objects.get(ma_day_du=tb_ma)
+                tb = thiet_bi_queryset.get(ma_day_du=tb_ma)
         except ThietBi.DoesNotExist:
             return Response({"detail": "Không tìm thấy thiết bị"}, status=404)
 
@@ -355,8 +375,12 @@ class ThongSoToMayByDayView(APIView):
         slots = day_slots_h1(ngay)
 
         # Query các bản ghi trong ngày
-        qs = (ThongSoToMay.objects
-              .filter(thiet_bi=tb)
+        qs = (filter_queryset_by_factory(
+                ThongSoToMay.objects.filter(thiet_bi=tb),
+                request.user,
+                "nha_may",
+                "string",
+              )
               .filter(Q(thoi_diem_nhap__date=ngay) | Q(ngay_nhap=ngay))
               .values_list("ma_thong_so", "thoi_diem_nhap", "gia_tri", "ten_thong_so", "don_vi"))
 

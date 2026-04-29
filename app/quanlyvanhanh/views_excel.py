@@ -1,18 +1,19 @@
 import os
 import io
 from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 import pandas as pd
 from datetime import datetime
 from django.utils import timezone
-from .models import ThongSoVanHanh
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from core.factory_scope import filter_queryset_by_factory, get_user_factory_name
+from .models import ThongSoVanHanh, ThietBi
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def excel_template(request):
     """
     Tạo template Excel cho thông số vận hành điện
@@ -134,8 +135,8 @@ def excel_template(request):
         return JsonResponse({'error': error_msg}, status=500)
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def excel_import(request):
     """
     Import dữ liệu từ file Excel
@@ -147,8 +148,9 @@ def excel_import(request):
         file = request.FILES['file']
 
         # Lấy ngày và thời điểm từ form
-        import_date = request.POST.get('selected_date')
-        time_slots_json = request.POST.get('time_slots', '[]')
+        request_data = getattr(request, "data", request.POST)
+        import_date = request_data.get('selected_date')
+        time_slots_json = request_data.get('time_slots', '[]')
 
         if not import_date:
             return JsonResponse({'error': 'Vui lòng chọn ngày import'}, status=400)
@@ -239,8 +241,6 @@ def excel_import(request):
         ]
 
         # Lấy danh sách thiết bị cần thiết
-        from .models import ThietBi, ThongSoVanHanh
-
         # Tìm hoặc tạo thiết bị theo mã
         thiet_bi_map = {}
         device_names = {
@@ -248,27 +248,22 @@ def excel_import(request):
             'SH.TB.H2': 'Tổ máy H2',
             'SH.TB.TPP': 'Trạm phân phối'
         }
+        scoped_thiet_bi = filter_queryset_by_factory(
+            ThietBi.objects.all(),
+            request.user,
+            'nha_may',
+            'string',
+        )
 
         for ma_thiet_bi in ['SH.TB.H1', 'SH.TB.H2', 'SH.TB.TPP']:
             try:
-                thiet_bi = ThietBi.objects.get(ma_day_du=ma_thiet_bi)
+                thiet_bi = scoped_thiet_bi.get(ma_day_du=ma_thiet_bi)
                 thiet_bi_map[ma_thiet_bi] = thiet_bi
             except ThietBi.DoesNotExist:
-                try:
-                    # Tạo thiết bị mới
-                    thiet_bi = ThietBi.objects.create(
-                        ten=device_names[ma_thiet_bi],
-                        ma=ma_thiet_bi.split('.')[-1],  # H1, H2, TPP
-                        ma_day_du=ma_thiet_bi,
-                        loai='Thiết bị điện',
-                        trang_thai='Hoạt động'
-                    )
-                    thiet_bi_map[ma_thiet_bi] = thiet_bi
-                except Exception as e:
-                    continue
+                continue
 
         if not thiet_bi_map:
-            return JsonResponse({'error': 'Không thể tìm hoặc tạo thiết bị nào'}, status=400)
+            return JsonResponse({'error': 'Không tìm thấy thiết bị trong phạm vi nhà máy được phân quyền'}, status=403)
 
         # Xử lý từng dòng (48 chu kỳ)
         for index, row in df.iterrows():
@@ -325,6 +320,7 @@ def excel_import(request):
                                 'don_vi': unit,
                                 'ten_thong_so': param_name,
                                 'ngay_nhap': ngay,
+                                'nha_may': get_user_factory_name(request.user) or thiet_bi.nha_may,
                             }
                         )
 
@@ -333,6 +329,7 @@ def excel_import(request):
                             thong_so.don_vi = unit
                             thong_so.ten_thong_so = param_name
                             thong_so.ngay_nhap = ngay
+                            thong_so.nha_may = get_user_factory_name(request.user) or thiet_bi.nha_may
                             thong_so.save()
 
                         imported_count += 1

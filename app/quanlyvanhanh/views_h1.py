@@ -2,14 +2,15 @@ import io
 import pandas as pd
 from datetime import datetime, time
 from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from core.factory_scope import filter_queryset_by_factory, get_user_factory_name
 from .models import ThietBi, ThongSoToMay
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def excel_template_h1(request):
     """Tạo template Excel cho thông số tổ máy (H1/H2)"""
     try:
@@ -146,8 +147,8 @@ def excel_template_h1(request):
         )
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def import_excel_h1(request):
     """Import dữ liệu từ Excel cho thông số tổ máy"""
     try:
@@ -157,7 +158,8 @@ def import_excel_h1(request):
             return HttpResponse('Không có file Excel', status=400)
 
         # Lấy thông tin từ form
-        selected_date = request.POST.get('selected_date')
+        request_data = getattr(request, "data", request.POST)
+        selected_date = request_data.get('selected_date')
         if not selected_date:
             return HttpResponse('Không có ngày được chọn', status=400)
 
@@ -372,9 +374,14 @@ def import_excel_h1(request):
         # ===== VALIDATION HOÀN TẤT =====
 
         # Lấy thiết bị (có thể là H1 hoặc H2)
-        device_code = request.POST.get('device_code', 'SH.TB.H1.GE')  # Default to H1
+        device_code = request_data.get('device_code', 'SH.TB.H1.GE')  # Default to H1
         try:
-            thiet_bi = ThietBi.objects.get(ma_day_du=device_code)
+            thiet_bi = filter_queryset_by_factory(
+                ThietBi.objects.all(),
+                request.user,
+                'nha_may',
+                'string',
+            ).get(ma_day_du=device_code)
         except ThietBi.DoesNotExist:
             return HttpResponse(f'Không tìm thấy thiết bị {device_code}', status=400)
 
@@ -452,7 +459,7 @@ def import_excel_h1(request):
                             'ma_thong_so': mapping["ma"],
                             'don_vi': mapping["don_vi"],
                             'gia_tri': numeric_value,
-                            'nha_may': 'Vĩnh Sơn-Sông Hinh',
+                            'nha_may': get_user_factory_name(request.user) or thiet_bi.nha_may,
                             'ky_hieu_van_hanh': f'{device_code.split(".")[-2]}_{mapping["ma"]}',
                             'ghi_chu': f'Import từ Excel - {target_date}'
                         }
@@ -460,7 +467,8 @@ def import_excel_h1(request):
                     if not created:
                         # Cập nhật giá trị nếu đã tồn tại
                         obj.gia_tri = numeric_value
-                        obj.save(update_fields=['gia_tri'])
+                        obj.nha_may = get_user_factory_name(request.user) or thiet_bi.nha_may
+                        obj.save(update_fields=['gia_tri', 'nha_may'])
 
                     imported_count += 1
                 except Exception:

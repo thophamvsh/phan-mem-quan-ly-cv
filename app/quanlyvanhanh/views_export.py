@@ -1,25 +1,39 @@
 import io
 from django.http import HttpResponse
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
 from datetime import datetime, timedelta, time
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from core.factory_scope import filter_queryset_by_factory
 from .models import ThongSoVanHanh, ThongSoToMay, ThietBi
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
+def _query_params(request):
+    return getattr(request, "query_params", request.GET)
+
+
+def _scoped_thiet_bi_queryset(user):
+    return filter_queryset_by_factory(
+        ThietBi.objects.all(),
+        user,
+        "nha_may",
+        "string",
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def export_thong_so(request):
     """Xuất dữ liệu thông số vận hành ra file Excel"""
     try:
         # Lấy tham số từ request
-        date = request.GET.get('date')
-        thiet_bi = request.GET.get('thiet_bi', 'all')
-        format_type = request.GET.get('format', 'xlsx')
+        params = _query_params(request)
+        date = params.get('date')
+        thiet_bi = params.get('thiet_bi', 'all')
+        format_type = params.get('format', 'xlsx')
 
 
         if not date:
@@ -38,7 +52,12 @@ def export_thong_so(request):
             )
 
         # Lấy dữ liệu thông số vận hành
-        queryset = ThongSoVanHanh.objects.select_related('thiet_bi').filter(ngay_nhap=export_date)
+        queryset = filter_queryset_by_factory(
+            ThongSoVanHanh.objects.select_related('thiet_bi').filter(ngay_nhap=export_date),
+            request.user,
+            "nha_may",
+            "string",
+        )
 
         # Filter theo thiết bị nếu không phải "all"
         if thiet_bi != 'all':
@@ -123,14 +142,15 @@ def export_thong_so(request):
         )
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def export_thong_so_to_may_h1(request):
     """Xuất dữ liệu thông số tổ máy H1 ra file Excel"""
     try:
         # Lấy tham số từ request
-        date = request.GET.get('date')
-        format_type = request.GET.get('format', 'xlsx')
+        params = _query_params(request)
+        date = params.get('date')
+        format_type = params.get('format', 'xlsx')
 
         if not date:
             return HttpResponse(
@@ -149,7 +169,7 @@ def export_thong_so_to_may_h1(request):
 
         # Lấy thiết bị H1
         try:
-            thiet_bi = ThietBi.objects.get(ma_day_du='SH.TB.H1.GE')
+            thiet_bi = _scoped_thiet_bi_queryset(request.user).get(ma_day_du='SH.TB.H1.GE')
         except ThietBi.DoesNotExist:
             return HttpResponse(
                 'Không tìm thấy thiết bị H1',
@@ -157,9 +177,14 @@ def export_thong_so_to_may_h1(request):
             )
 
         # Lấy dữ liệu thông số tổ máy H1
-        queryset = ThongSoToMay.objects.select_related('thiet_bi').filter(
-            thiet_bi=thiet_bi,
-            ngay_nhap=export_date
+        queryset = filter_queryset_by_factory(
+            ThongSoToMay.objects.select_related('thiet_bi').filter(
+                thiet_bi=thiet_bi,
+                ngay_nhap=export_date
+            ),
+            request.user,
+            "nha_may",
+            "string",
         ).order_by('thoi_diem_nhap', 'ten_thong_so')
 
         if not queryset.exists():
@@ -287,14 +312,15 @@ def export_thong_so_to_may_h1(request):
         )
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def export_thong_so_to_may_h2(request):
     """Xuất dữ liệu thông số tổ máy H2 ra file Excel"""
     try:
         # Lấy tham số từ request
-        date = request.GET.get('date')
-        format_type = request.GET.get('format', 'xlsx')
+        params = _query_params(request)
+        date = params.get('date')
+        format_type = params.get('format', 'xlsx')
 
         if not date:
             return HttpResponse(
@@ -313,7 +339,7 @@ def export_thong_so_to_may_h2(request):
 
         # Lấy thiết bị H2
         try:
-            thiet_bi = ThietBi.objects.get(ma_day_du='SH.TB.H2.GE')
+            thiet_bi = _scoped_thiet_bi_queryset(request.user).get(ma_day_du='SH.TB.H2.GE')
         except ThietBi.DoesNotExist:
             return HttpResponse(
                 'Không tìm thấy thiết bị H2',
@@ -321,9 +347,14 @@ def export_thong_so_to_may_h2(request):
             )
 
         # Lấy dữ liệu thông số tổ máy H2
-        queryset = ThongSoToMay.objects.select_related('thiet_bi').filter(
-            thiet_bi=thiet_bi,
-            ngay_nhap=export_date
+        queryset = filter_queryset_by_factory(
+            ThongSoToMay.objects.select_related('thiet_bi').filter(
+                thiet_bi=thiet_bi,
+                ngay_nhap=export_date
+            ),
+            request.user,
+            "nha_may",
+            "string",
         ).order_by('thoi_diem_nhap', 'ten_thong_so')
 
         if not queryset.exists():
@@ -449,8 +480,3 @@ def export_thong_so_to_may_h2(request):
             f'Lỗi khi xuất dữ liệu H2: {str(e)}',
             status=500
         )
-
-
-def test_export(request):
-    """Test endpoint để kiểm tra"""
-    return HttpResponse("Test export endpoint working!", content_type='text/plain')

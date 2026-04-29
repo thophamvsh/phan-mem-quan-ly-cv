@@ -37,6 +37,17 @@ def _ensure_thiet_bi_access(user, thiet_bi):
         raise PermissionDenied("Bạn không có quyền thao tác với thiết bị của nhà máy này.")
 
 
+def _get_scoped_thiet_bi(user, thiet_bi_id):
+    if not thiet_bi_id:
+        return None
+    return filter_queryset_by_factory(
+        ThietBi.objects.all(),
+        user,
+        'nha_may',
+        'string',
+    ).filter(id=thiet_bi_id).first()
+
+
 class ThietBiViewSet(viewsets.ModelViewSet):
     """ViewSet cho quản lý thiết bị"""
     queryset = ThietBi.objects.all()
@@ -98,11 +109,16 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        _ensure_thiet_bi_access(self.request.user, serializer.validated_data.get('cha'))
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, 'nha_may', 'string')
         )
 
     def perform_update(self, serializer):
+        _ensure_thiet_bi_access(
+            self.request.user,
+            serializer.validated_data.get('cha', serializer.instance.cha),
+        )
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, 'nha_may', 'string')
         )
@@ -537,6 +553,8 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                 'message': f'Đã tạo {len(created_objects)} bản ghi mới, cập nhật {len(updated_objects)} bản ghi'
             }, status=status.HTTP_201_CREATED)
 
+        except PermissionDenied:
+            raise
         except Exception as e:
             return Response(
                 {'error': str(e)},
@@ -570,14 +588,32 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
             for item in data:
                 obj_id = item.get('id')
                 if obj_id in instances:
+                    thiet_bi_id_val = item.get('thiet_bi') or item.get('thiet_bi_id')
+                    if thiet_bi_id_val:
+                        thiet_bi_obj = _get_scoped_thiet_bi(request.user, thiet_bi_id_val)
+                        if not thiet_bi_obj:
+                            raise PermissionDenied("Báº¡n khÃ´ng cÃ³ quyá»n cáº­p nháº­t thÃ´ng sá»‘ cho thiáº¿t bá»‹ nÃ y.")
+                        item['thiet_bi'] = thiet_bi_obj.id
+                    if not has_all_factory_access(request.user):
+                        item['nha_may'] = get_user_factory_name(request.user)
+
                     serializer = self.get_serializer(instances[obj_id], data=item, partial=True)
                     if serializer.is_valid():
-                        serializer.save()
+                        serializer.save(
+                            **apply_request_factory_to_serializer(
+                                request.user,
+                                serializer,
+                                'nha_may',
+                                'string',
+                            )
+                        )
                         updated_data.append(serializer.data)
                     else:
                         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
             return Response(updated_data)
+        except PermissionDenied:
+            raise
         except Exception as e:
             return Response(
                 {'error': str(e)},
@@ -747,6 +783,8 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
                 'message': f'Đã tạo {created_count} bản ghi mới, cập nhật {updated_count} bản ghi'
             }, status=status.HTTP_201_CREATED if created_count > 0 else status.HTTP_200_OK)
 
+        except PermissionDenied:
+            raise
         except Exception as e:
             return Response(
                 {'error': f'Lỗi khi xử lý dữ liệu: {str(e)}'},
