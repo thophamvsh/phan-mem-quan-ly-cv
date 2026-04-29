@@ -74,10 +74,18 @@ class UserLoginAPIView(APIView):
                 'user': user_data
             }, status=status.HTTP_200_OK)
         else:
+            errors = serializer.errors
+            error_message = (
+                errors.get('non_field_errors', [None])[0]
+                or errors.get('username', [None])[0]
+                or errors.get('email', [None])[0]
+                or errors.get('password', [None])[0]
+                or 'Đăng nhập thất bại'
+            )
             return Response({
                 'ok': False,
-                'message': 'Đăng nhập thất bại',
-                'errors': serializer.errors
+                'message': str(error_message),
+                'errors': errors
             }, status=status.HTTP_400_BAD_REQUEST)
 
 

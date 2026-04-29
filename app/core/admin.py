@@ -74,6 +74,16 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca HC.'
         }),
+        ('Quyen so nhat ky van hanh', {
+            'fields': (
+                'can_view_operation_logbooks',
+                'can_create_operation_logbooks',
+                'can_confirm_operation_logbooks',
+                'can_edit_operation_logbooks',
+                'can_delete_operation_logbooks',
+            ),
+            'description': 'Quyen xem, tao, xac nhan, sua va xoa So nhat ky van hanh.'
+        }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
@@ -191,6 +201,16 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_delete_admin_shift_handover_logs',
             ),
             'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca HC.'
+        }),
+        ('Quyen so nhat ky van hanh', {
+            'fields': (
+                'can_view_operation_logbooks',
+                'can_create_operation_logbooks',
+                'can_confirm_operation_logbooks',
+                'can_edit_operation_logbooks',
+                'can_delete_operation_logbooks',
+            ),
+            'description': 'Quyen xem, tao, xac nhan, sua va xoa So nhat ky van hanh.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

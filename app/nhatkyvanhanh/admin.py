@@ -6,6 +6,7 @@ from .models import (
     DienBienSuKien,
     KhacPhucSuKien,
     NguoiTrucSoGiaoNhanCaHC,
+    Sonhatkyvanhanh,
     SuKien,
     SogiaonhancaHC,
     SogiaonhancaVH,
@@ -180,5 +181,41 @@ class SogiaonhancaHCAdmin(admin.ModelAdmin):
 
     def co_chu_ky(self, obj):
         return bool(obj.chu_ky_user_giao_ca or obj.chu_ky_user_nhan_ca)
+
+    co_chu_ky.boolean = True
+
+
+@admin.register(Sonhatkyvanhanh)
+class SonhatkyvanhanhAdmin(admin.ModelAdmin):
+    list_display = (
+        "thoi_gian_tao",
+        "nha_may",
+        "nguoi_tao",
+        "nguoi_xac_nhan",
+        "trang_thai",
+        "co_chu_ky",
+        "created_at",
+    )
+    list_filter = ("trang_thai", "thoi_gian_tao", "created_at", "nha_may")
+    search_fields = (
+        "noi_dung_tao",
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+        "nguoi_xac_nhan__email",
+        "nguoi_xac_nhan__username",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    )
+    readonly_fields = (
+        "nguoi_tao",
+        "chu_ky_nguoi_tao",
+        "chu_ky_nguoi_xac_nhan",
+        "created_at",
+        "updated_at",
+    )
+    exclude = ("chu_ky_nguoi_tao", "chu_ky_nguoi_xac_nhan")
+
+    def co_chu_ky(self, obj):
+        return bool(obj.chu_ky_nguoi_tao or obj.chu_ky_nguoi_xac_nhan)
 
     co_chu_ky.boolean = True

@@ -68,3 +68,15 @@ class CanCreateAdminShiftHandoverLogs(UserProfilePermission):
 
 class CanReceiveAdminShiftHandoverLogs(UserProfilePermission):
     permission_name = "can_receive_admin_shift_handover_logs"
+
+
+class CanViewOperationLogbooks(UserProfilePermission):
+    permission_name = "can_view_operation_logbooks"
+
+
+class CanCreateOperationLogbooks(UserProfilePermission):
+    permission_name = "can_create_operation_logbooks"
+
+
+class CanConfirmOperationLogbooks(UserProfilePermission):
+    permission_name = "can_confirm_operation_logbooks"

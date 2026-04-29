@@ -350,6 +350,26 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so giao nhan ca hanh chinh"
     )
+    can_view_operation_logbooks = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so nhat ky van hanh"
+    )
+    can_create_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao so nhat ky van hanh"
+    )
+    can_confirm_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen xac nhan so nhat ky van hanh"
+    )
+    can_edit_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so nhat ky van hanh"
+    )
+    can_delete_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so nhat ky van hanh"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

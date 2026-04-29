@@ -44,29 +44,40 @@ class UserLoginSerializer(serializers.Serializer):
 
         # Hỗ trợ cả email và username
         if email:
+            try:
+                found_user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                raise serializers.ValidationError('Email không tồn tại.')
+
             user = authenticate(email=email, password=password)
+            if not user:
+                raise serializers.ValidationError('Mật khẩu không đúng.')
             login_field = 'email'
         elif username:
             # Nếu username là email format, sử dụng email authentication
             if '@' in username:
+                try:
+                    found_user = User.objects.get(email=username)
+                except User.DoesNotExist:
+                    raise serializers.ValidationError('Email không tồn tại.')
+
                 user = authenticate(email=username, password=password)
+                if not user:
+                    raise serializers.ValidationError('Mật khẩu không đúng.')
                 login_field = 'email'
             else:
                 # Nếu không phải email, tìm user theo username field
                 try:
                     user = User.objects.get(username=username)
-                    if user.check_password(password):
-                        pass  # User found and password correct
-                    else:
-                        user = None
                 except User.DoesNotExist:
-                    user = None
+                    raise serializers.ValidationError('Tên đăng nhập không tồn tại.')
+
+                if not user.check_password(password):
+                    raise serializers.ValidationError('Mật khẩu không đúng.')
                 login_field = 'username'
         else:
             raise serializers.ValidationError('Vui lòng nhập email/username và mật khẩu.')
 
-        if not user:
-            raise serializers.ValidationError('Email/username hoặc mật khẩu không đúng.')
         if not user.is_active:
             raise serializers.ValidationError('Tài khoản đã bị vô hiệu hóa.')
 
@@ -236,7 +247,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_delete_shift_handover_logs',
                  'can_view_admin_shift_handover_logs', 'can_create_admin_shift_handover_logs',
                  'can_receive_admin_shift_handover_logs', 'can_edit_admin_shift_handover_logs',
-                 'can_delete_admin_shift_handover_logs')
+                 'can_delete_admin_shift_handover_logs',
+                 'can_view_operation_logbooks', 'can_create_operation_logbooks',
+                 'can_confirm_operation_logbooks', 'can_edit_operation_logbooks',
+                 'can_delete_operation_logbooks')
         read_only_fields = ('id', 'user_id', 'username', 'email', 'is_staff', 'is_superuser', 'full_name', 'avatar_url', 'chu_ky_url', 'nha_may_code',
                            'created_at', 'updated_at')
 
