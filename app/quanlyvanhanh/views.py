@@ -73,6 +73,34 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         queryset = filter_queryset_by_factory(queryset, self.request.user, 'nha_may', 'string')
 
+        factory_param = (
+            self.request.query_params.get('nha_may')
+            or self.request.query_params.get('ma_nha_may')
+        )
+        if factory_param and str(factory_param).lower() != 'all':
+            factory_value = str(factory_param).strip()
+            factory_query = (
+                Q(nha_may__iexact=factory_value)
+                | Q(ma_day_du__istartswith=f"{factory_value}.")
+            )
+
+            try:
+                from khovattu.models import Bang_nha_may
+
+                factory = Bang_nha_may.objects.filter(
+                    Q(ma_nha_may__iexact=factory_value)
+                    | Q(ten_nha_may__iexact=factory_value)
+                ).first()
+                if factory:
+                    factory_query |= Q(nha_may__iexact=factory.ma_nha_may)
+                    factory_query |= Q(nha_may__iexact=factory.ten_nha_may)
+                    factory_query |= Q(nha_may__icontains=factory.ten_nha_may)
+                    factory_query |= Q(ma_day_du__istartswith=f"{factory.ma_nha_may}.")
+            except Exception:
+                pass
+
+            queryset = queryset.filter(factory_query)
+
         # Lấy search parameter từ query params
         search_param = self.request.query_params.get('q', None)
 

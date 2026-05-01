@@ -6,7 +6,7 @@ from django.utils.safestring import mark_safe
 from django.http import HttpResponse
 from import_export import resources, fields, widgets
 from import_export.admin import ImportExportModelAdmin
-from import_export.widgets import ForeignKeyWidget, DateWidget
+from import_export.widgets import ForeignKeyWidget, DateWidget, IntegerWidget, DecimalWidget
 from import_export.formats import base_formats
 from datetime import datetime
 import tablib
@@ -56,6 +56,45 @@ class FlexibleDateWidget(widgets.Widget):
         if value:
             return value.strftime('%Y-%m-%d')
         return ''
+
+
+class SafeIntegerWidget(IntegerWidget):
+    """Integer widget tolerant with blank and Excel float-like values."""
+
+    def clean(self, value, row=None, *args, **kwargs):
+        if value is None or value == "" or str(value).strip() == "":
+            return 0
+        try:
+            return int(float(str(value).strip().replace(",", ".")))
+        except Exception:
+            return 0
+
+
+class SafeDecimalWidget(DecimalWidget):
+    """Decimal widget tolerant with blank, dash, and Vietnamese comma numbers."""
+
+    def __init__(self, default=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default = default
+
+    def clean(self, value, row=None, *args, **kwargs):
+        if value is None:
+            return super().clean(self.default, row, *args, **kwargs) if self.default is not None else None
+
+        value = str(value).strip()
+        if value == "" or value in {"-", "--", "nan", "NaN", "None"}:
+            return super().clean(self.default, row, *args, **kwargs) if self.default is not None else None
+
+        value = value.replace(" ", "")
+        if "," in value and "." in value:
+            value = value.replace(".", "").replace(",", ".")
+        else:
+            value = value.replace(",", ".")
+
+        try:
+            return super().clean(value, row, *args, **kwargs)
+        except Exception:
+            return super().clean(self.default, row, *args, **kwargs) if self.default is not None else None
 
 
 class FlexibleForeignKeyWidget(ForeignKeyWidget):
@@ -160,6 +199,16 @@ class ThietBiResource(resources.ModelResource):
         column_name="ngay_dua_vao_van_hanh",
         attribute="ngay_dua_vao_van_hanh",
         widget=FlexibleDateWidget(),
+    )
+    do_uu_tien = fields.Field(
+        column_name="do_uu_tien",
+        attribute="do_uu_tien",
+        widget=SafeIntegerWidget(),
+    )
+    thu_tu = fields.Field(
+        column_name="thu_tu",
+        attribute="thu_tu",
+        widget=SafeIntegerWidget(),
     )
 
     class Meta:
@@ -328,6 +377,11 @@ class ThietBiVatTuResource(resources.ModelResource):
         column_name="ma_vat_tu",
         attribute="vat_tu",
         widget=ForeignKeyWidget(VatTu, "ma_vat_tu"),
+    )
+    so_luong = fields.Field(
+        column_name="so_luong",
+        attribute="so_luong",
+        widget=SafeDecimalWidget(default="1"),
     )
 
     class Meta:

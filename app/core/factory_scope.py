@@ -77,6 +77,46 @@ def _factory_string_query(field_name, factory):
     return query
 
 
+def _model_field_path_exists(model, field_path):
+    parts = field_path.split("__")
+    current_model = model
+
+    for index, part in enumerate(parts):
+        try:
+            field = current_model._meta.get_field(part)
+        except Exception:
+            return False
+
+        if index == len(parts) - 1:
+            return True
+
+        current_model = getattr(field, "related_model", None)
+        if current_model is None:
+            return False
+
+    return False
+
+
+def _factory_string_query_for_queryset(qs, field_name, factory):
+    query = _factory_string_query(field_name, factory)
+    prefix_lookup = None
+
+    relation_parts = field_name.split("__")[:-1]
+    if relation_parts:
+        candidate = "__".join(relation_parts + ["ma_day_du"])
+        if _model_field_path_exists(qs.model, candidate):
+            prefix_lookup = candidate
+    elif _model_field_path_exists(qs.model, "ma_day_du"):
+        prefix_lookup = "ma_day_du"
+    elif _model_field_path_exists(qs.model, "thiet_bi__ma_day_du"):
+        prefix_lookup = "thiet_bi__ma_day_du"
+
+    if prefix_lookup and factory.ma_nha_may:
+        query |= Q(**{f"{prefix_lookup}__istartswith": f"{factory.ma_nha_may}."})
+
+    return query
+
+
 def filter_queryset_by_factory(qs, user, field_name, field_kind="fk"):
     if has_all_factory_access(user):
         return qs
@@ -90,7 +130,7 @@ def filter_queryset_by_factory(qs, user, field_name, field_kind="fk"):
     if field_kind == "code":
         return qs.filter(**{f"{field_name}__iexact": factory.ma_nha_may})
     if field_kind == "string":
-        return qs.filter(_factory_string_query(field_name, factory))
+        return qs.filter(_factory_string_query_for_queryset(qs, field_name, factory))
 
     raise ValueError(f"Unsupported factory field kind: {field_kind}")
 
