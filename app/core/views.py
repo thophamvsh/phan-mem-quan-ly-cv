@@ -229,7 +229,7 @@ class UserListAPIView(APIView):
 # ===================== USER PROFILE APIs (giống kho vật tư) =====================
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([IsAuthenticated])
 def get_user_profile(request):
     """
     Get current user profile
@@ -264,7 +264,7 @@ def get_user_profile(request):
 
 
 @api_view(['PUT'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([IsAuthenticated])
 def update_user_profile(request):
     """
     Update current user profile
@@ -308,7 +308,7 @@ def update_user_profile(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([IsAuthenticated])
 def change_password(request):
     """
     Change user password
@@ -372,7 +372,7 @@ def change_password(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([IsAuthenticated])
 def logout_user(request):
     """
     Logout user by blacklisting the refresh token
@@ -401,7 +401,7 @@ def logout_user(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([IsAuthenticated])
 def upload_avatar(request):
     """
     Upload user avatar
@@ -464,7 +464,7 @@ def upload_avatar(request):
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([IsAuthenticated])
 def upload_signature(request):
     """
     Upload user signature

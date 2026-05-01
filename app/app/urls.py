@@ -22,10 +22,18 @@ from core.views import health_check
 urlpatterns = [
     path('health/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
+
+    # Legacy API routes (backward compatibility)
     path('api/', include('core.urls')),
     path("api/khovattu/", include("khovattu.urls")),
     path("api/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
     path("api/quanlyvanhanh/", include("quanlyvanhanh.urls")),
+
+    # Versioned API routes (v1)
+    path('api/v1/', include('core.urls')),
+    path("api/v1/khovattu/", include("khovattu.urls")),
+    path("api/v1/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
+    path("api/v1/quanlyvanhanh/", include("quanlyvanhanh.urls")),
 ]
 
 # Serve media files in development

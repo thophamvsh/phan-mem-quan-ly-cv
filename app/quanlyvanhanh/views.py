@@ -9,6 +9,7 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 import pandas as pd
 import io
+import qrcode
 from core.factory_scope import (
     apply_request_factory_to_serializer,
     filter_queryset_by_factory,
@@ -156,7 +157,36 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         """Lấy danh sách thiết bị con"""
         thiet_bi = self.get_object()
         con = thiet_bi.con.all()
-        serializer = ThietBiListSerializer(con, many=True)
+        serializer = ThietBiListSerializer(con, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def qr(self, request, pk=None):
+        """Sinh ảnh QR cho thiết bị từ mã đầy đủ."""
+        thiet_bi = self.get_object()
+        qr_data = thiet_bi.ma_day_du or str(thiet_bi.pk)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=2,
+        )
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
+        response = HttpResponse(buffer.getvalue(), content_type="image/png")
+        response["Content-Disposition"] = f'inline; filename="QR_{thiet_bi.ma_day_du.replace(".", "_")}.png"'
+        return response
+
+    @action(detail=False, methods=['get'])
+    def qr_export_items(self, request):
+        """Lấy toàn bộ thiết bị theo bộ lọc hiện tại để xuất QR ở frontend."""
+        queryset = self.filter_queryset(self.get_queryset()).order_by('ma_day_du')
+        serializer = ThietBiListSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])

@@ -3,11 +3,24 @@ from datetime import time, datetime
 from .models import ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay
 
 
+def get_thiet_bi_qr_payload(obj):
+    return obj.ma_day_du or str(obj.pk)
+
+
+def get_thiet_bi_qr_url(obj, request=None):
+    path = f"/api/quanlyvanhanh/thiet-bi/{obj.pk}/qr/"
+    if request:
+        return request.build_absolute_uri(path)
+    return path
+
+
 class ThietBiSerializer(serializers.ModelSerializer):
     """Serializer cho model ThietBi"""
     cha_ten = serializers.CharField(source='cha.ten', read_only=True)
     con_count = serializers.SerializerMethodField()
     hinh_anh_url = serializers.SerializerMethodField()
+    ma_qr = serializers.SerializerMethodField()
+    qr_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ThietBi
@@ -17,7 +30,8 @@ class ThietBiSerializer(serializers.ModelSerializer):
             'nuoc_san_xuat', 'nha_may', 'do_uu_tien', 'so_serial',
             'ma_van_hanh', 'bo_phan_quan_ly', 'bang_ve',
             'mo_ta_ky_thuat', 'cap', 'thu_tu', 'slug', 'con_count',
-            'ngay_lap_dat', 'ngay_dua_vao_van_hanh', 'hinh_anh', 'hinh_anh_url'
+            'ngay_lap_dat', 'ngay_dua_vao_van_hanh', 'hinh_anh', 'hinh_anh_url',
+            'ma_qr', 'qr_url'
         ]
         read_only_fields = ['ma_day_du', 'cap', 'slug']
 
@@ -32,15 +46,23 @@ class ThietBiSerializer(serializers.ModelSerializer):
             return obj.hinh_anh.url
         return None
 
+    def get_ma_qr(self, obj):
+        return get_thiet_bi_qr_payload(obj)
+
+    def get_qr_url(self, obj):
+        return get_thiet_bi_qr_url(obj, self.context.get('request'))
+
 
 class ThietBiListSerializer(serializers.ModelSerializer):
     """Serializer đơn giản cho danh sách thiết bị"""
     cha_ten = serializers.CharField(source='cha.ten', read_only=True)
     hinh_anh_url = serializers.SerializerMethodField()
+    ma_qr = serializers.SerializerMethodField()
+    qr_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ThietBi
-        fields = ['id', 'ten', 'ma', 'ma_day_du', 'cha_ten', 'loai', 'trang_thai', 'cap', 'hinh_anh_url', 'nha_may']
+        fields = ['id', 'ten', 'ma', 'ma_day_du', 'cha_ten', 'loai', 'trang_thai', 'cap', 'hinh_anh_url', 'nha_may', 'ma_qr', 'qr_url']
 
     def get_hinh_anh_url(self, obj):
         if obj.hinh_anh:
@@ -49,6 +71,12 @@ class ThietBiListSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.hinh_anh.url)
             return obj.hinh_anh.url
         return None
+
+    def get_ma_qr(self, obj):
+        return get_thiet_bi_qr_payload(obj)
+
+    def get_qr_url(self, obj):
+        return get_thiet_bi_qr_url(obj, self.context.get('request'))
 
 
 class VatTuSerializer(serializers.ModelSerializer):
@@ -192,6 +220,8 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
     an_toan = AnToanThietBiSerializer(source='antoanthietbi_set', many=True, read_only=True)
     dinh_kem = DinhKemSerializer(source='dinhkem_set', many=True, read_only=True)
     hinh_anh_url = serializers.SerializerMethodField()
+    ma_qr = serializers.SerializerMethodField()
+    qr_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ThietBi
@@ -202,7 +232,7 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
             'ma_van_hanh', 'bo_phan_quan_ly', 'bang_ve',
             'mo_ta_ky_thuat', 'cap', 'thu_tu', 'slug',
             'ngay_lap_dat', 'ngay_dua_vao_van_hanh', 'hinh_anh', 'hinh_anh_url',
-            'con', 'vat_tu', 'thong_so', 'an_toan', 'dinh_kem'
+            'ma_qr', 'qr_url', 'con', 'vat_tu', 'thong_so', 'an_toan', 'dinh_kem'
         ]
         read_only_fields = ['ma_day_du', 'cap', 'slug']
 
@@ -213,6 +243,12 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.hinh_anh.url)
             return obj.hinh_anh.url
         return None
+
+    def get_ma_qr(self, obj):
+        return get_thiet_bi_qr_payload(obj)
+
+    def get_qr_url(self, obj):
+        return get_thiet_bi_qr_url(obj, self.context.get('request'))
 
 
 # -------------------------
