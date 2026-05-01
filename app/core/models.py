@@ -387,6 +387,40 @@ class UserProfile(models.Model):
         help_text="Co quyen xoa so nhat ky van hanh Diesel"
     )
 
+    # Phan quyen quan ly van hanh - quan ly thiet bi/thong so
+    can_view_equipment = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem danh sach thiet bi van hanh"
+    )
+    can_create_equipment = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao thiet bi van hanh"
+    )
+    can_edit_equipment = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua thiet bi van hanh"
+    )
+    can_delete_equipment = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa thiet bi van hanh"
+    )
+    can_view_operation_parameters = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem thong so van hanh"
+    )
+    can_create_operation_parameters = models.BooleanField(
+        default=False,
+        help_text="Co quyen them thong so van hanh"
+    )
+    can_edit_operation_parameters = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua thong so van hanh"
+    )
+    can_delete_operation_parameters = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa thong so van hanh"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

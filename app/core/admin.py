@@ -32,10 +32,10 @@ class UserProfileInline(admin.StackedInline):
     extra = 0
     readonly_fields = ('created_at', 'updated_at', 'full_name')
     fieldsets = (
-        ('ThÃ´ng tin há»“ sÆ¡', {
+        ('Thông tin hồ sơ', {
             'fields': ('full_name', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
-        ('Quyen nhat ky su kien van hanh', {
+        ('Quyền nhật ký sự kiện vận hành', {
             'fields': (
                 'can_view_operation_events',
                 'can_create_operation_events',
@@ -52,9 +52,9 @@ class UserProfileInline(admin.StackedInline):
                 'can_edit_own_remediations',
                 'can_edit_all_remediations',
             ),
-            'description': 'Quyen thao tac tren SuKien, KhacPhucSuKien va DienBienSuKien.'
+            'description': 'Quyền thao tác trên SựKiện, KhắcPhụcSựKiện và DiễnBiếnSựKiện.'
         }),
-        ('Quyen so giao nhan ca van hanh', {
+        ('Quyền sổ giao nhận ca vận hành', {
             'fields': (
                 'can_view_shift_handover_logs',
                 'can_create_shift_handover_logs',
@@ -62,9 +62,9 @@ class UserProfileInline(admin.StackedInline):
                 'can_edit_shift_handover_logs',
                 'can_delete_shift_handover_logs',
             ),
-            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca VH.'
+            'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca VH.'
         }),
-        ('Quyen so giao nhan ca hanh chinh', {
+        ('Quyền sổ giao nhận ca hành chính', {
             'fields': (
                 'can_view_admin_shift_handover_logs',
                 'can_create_admin_shift_handover_logs',
@@ -72,9 +72,9 @@ class UserProfileInline(admin.StackedInline):
                 'can_edit_admin_shift_handover_logs',
                 'can_delete_admin_shift_handover_logs',
             ),
-            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca HC.'
+            'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca HC.'
         }),
-        ('Quyen so nhat ky van hanh', {
+        ('Quyền sổ nhật ký vận hành', {
             'fields': (
                 'can_view_operation_logbooks',
                 'can_create_operation_logbooks',
@@ -82,21 +82,39 @@ class UserProfileInline(admin.StackedInline):
                 'can_edit_operation_logbooks',
                 'can_delete_operation_logbooks',
             ),
-            'description': 'Quyen xem, tao, xac nhan, sua va xoa So nhat ky van hanh.'
+            'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
-        ('Quyen so nhat ky van hanh Diesel', {
+        ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
                 'can_view_diesel_operation_logbooks',
                 'can_create_diesel_operation_logbooks',
                 'can_edit_diesel_operation_logbooks',
                 'can_delete_diesel_operation_logbooks',
             ),
-            'description': 'Quyen xem, tao, sua va xoa So nhat ky van hanh Diesel.'
+            'description': 'Quyền xem, tạo, sửa và xóa Sổ nhật ký vận hành Diesel.'
         }),
-        ('HÃ¬nh áº£nh', {
+        ('Quyền quản lý thiết bị vận hành', {
+            'fields': (
+                'can_view_equipment',
+                'can_create_equipment',
+                'can_edit_equipment',
+                'can_delete_equipment',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa thiết bị trong Quản lý vận hành.'
+        }),
+        ('Quyền thông số vận hành', {
+            'fields': (
+                'can_view_operation_parameters',
+                'can_create_operation_parameters',
+                'can_edit_operation_parameters',
+                'can_delete_operation_parameters',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
+        }),
+        ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
-        ('Thá»i gian', {
+        ('Thời gian', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
@@ -141,38 +159,38 @@ class UserProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
     fieldsets = (
-        ('ThÃ´ng tin cÆ¡ báº£n', {
+        ('Thông tin cơ bản', {
             'fields': ('user', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
-        ('PhÃ¢n quyá»n nhÃ  mÃ¡y', {
+        ('Phân quyền nhà máy', {
             'fields': ('nha_may', 'is_all_factories'),
-            'description': 'GÃ¡n nhÃ  mÃ¡y cho user. Náº¿u chá»n "Táº¥t cáº£ nhÃ  mÃ¡y" thÃ¬ user cÃ³ quyá»n truy cáº­p má»i nhÃ  mÃ¡y.'
+            'description': 'Gán nhà máy cho user. Nếu chọn "Tất cả nhà máy" thì user có quyền truy cập mọi nhà máy.'
         }),
-        ('Quyá»n xem dá»¯ liá»‡u', {
+        ('Quyền xem dữ liệu', {
             'fields': ('can_view_materials', 'can_view_inventory', 'can_view_reports'),
-            'description': 'Quyá»n xem cÃ¡c loáº¡i dá»¯ liá»‡u khÃ¡c nhau'
+            'description': 'Quyền xem các loại dữ liệu khác nhau'
         }),
-        ('Quyá»n thao tÃ¡c váº­t tÆ°', {
+        ('Quyền thao tác vật tư', {
             'fields': ('can_add_materials', 'can_edit_materials', 'can_delete_materials'),
-            'description': 'Quyá»n thÃªm, sá»­a, xÃ³a váº­t tÆ°'
+            'description': 'Quyền thêm, sửa, xóa vật tư'
         }),
-        ('Quyá»n Excel', {
+        ('Quyền Excel', {
             'fields': ('can_import_excel', 'can_export_excel'),
-            'description': 'Quyá»n import vÃ  export dá»¯ liá»‡u Excel'
+            'description': 'Quyền import và export dữ liệu Excel'
         }),
-        ('Quyá»n Ä‘á» nghá»‹ xuáº¥t', {
+        ('Quyền đề nghị xuất', {
             'fields': ('can_create_export_request', 'can_approve_export_request', 'can_view_export_requests'),
-            'description': 'Quyá»n táº¡o, duyá»‡t vÃ  xem Ä‘á» nghá»‹ xuáº¥t'
+            'description': 'Quyền tạo, duyệt và xem đề nghị xuất'
         }),
-        ('Quyá»n Ä‘á» nghá»‹ nháº­p', {
+        ('Quyền đề nghị nhập', {
             'fields': ('can_create_import_request', 'can_approve_import_request', 'can_view_import_requests'),
-            'description': 'Quyá»n táº¡o, duyá»‡t vÃ  xem Ä‘á» nghá»‹ nháº­p'
+            'description': 'Quyền tạo, duyệt và xem đề nghị nhập'
         }),
-        ('Quyá»n kiá»ƒm kÃª', {
+        ('Quyền kiểm kê', {
             'fields': ('can_edit_inventory',),
-            'description': 'Quyá»n sá»­a thÃ´ng tin kiá»ƒm kÃª'
+            'description': 'Quyền sửa thông tin kiểm kê'
         }),
-        ('Quyen nhat ky su kien van hanh', {
+        ('Quyền nhật ký sự kiện vận hành', {
             'fields': (
                 'can_view_operation_events',
                 'can_create_operation_events',
@@ -189,9 +207,9 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_own_remediations',
                 'can_edit_all_remediations',
             ),
-            'description': 'Quyen thao tac tren SuKien, KhacPhucSuKien va DienBienSuKien.'
+            'description': 'Quyền thao tác trên SựKiện, KhắcPhụcSựKiện và DiễnBiếnSựKiện.'
         }),
-        ('Quyen so giao nhan ca van hanh', {
+        ('Quyền sổ giao nhận ca vận hành', {
             'fields': (
                 'can_view_shift_handover_logs',
                 'can_create_shift_handover_logs',
@@ -199,9 +217,9 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_shift_handover_logs',
                 'can_delete_shift_handover_logs',
             ),
-            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca VH.'
+            'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca VH.'
         }),
-        ('Quyen so giao nhan ca hanh chinh', {
+        ('Quyền sổ giao nhận ca hành chính', {
             'fields': (
                 'can_view_admin_shift_handover_logs',
                 'can_create_admin_shift_handover_logs',
@@ -209,9 +227,9 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_admin_shift_handover_logs',
                 'can_delete_admin_shift_handover_logs',
             ),
-            'description': 'Quyen xem, tao, nhan ca, sua va xoa So giao nhan ca HC.'
+            'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca HC.'
         }),
-        ('Quyen so nhat ky van hanh', {
+        ('Quyền sổ nhật ký vận hành', {
             'fields': (
                 'can_view_operation_logbooks',
                 'can_create_operation_logbooks',
@@ -219,21 +237,39 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_operation_logbooks',
                 'can_delete_operation_logbooks',
             ),
-            'description': 'Quyen xem, tao, xac nhan, sua va xoa So nhat ky van hanh.'
+            'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
-        ('Quyen so nhat ky van hanh Diesel', {
+        ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
                 'can_view_diesel_operation_logbooks',
                 'can_create_diesel_operation_logbooks',
                 'can_edit_diesel_operation_logbooks',
                 'can_delete_diesel_operation_logbooks',
             ),
-            'description': 'Quyen xem, tao, sua va xoa So nhat ky van hanh Diesel.'
+            'description': 'Quyền xem, tạo, sửa và xóa Sổ nhật ký vận hành Diesel.'
         }),
-        ('HÃ¬nh áº£nh', {
+        ('Quyền quản lý thiết bị vận hành', {
+            'fields': (
+                'can_view_equipment',
+                'can_create_equipment',
+                'can_edit_equipment',
+                'can_delete_equipment',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa thiết bị trong Quản lý vận hành.'
+        }),
+        ('Quyền thông số vận hành', {
+            'fields': (
+                'can_view_operation_parameters',
+                'can_create_operation_parameters',
+                'can_edit_operation_parameters',
+                'can_delete_operation_parameters',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
+        }),
+        ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
-        ('Thá»i gian', {
+        ('Thời gian', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
@@ -241,13 +277,13 @@ class UserProfileAdmin(admin.ModelAdmin):
 
     def full_name(self, obj):
         return obj.full_name
-    full_name.short_description = 'TÃªn Ä‘áº§y Ä‘á»§'
+    full_name.short_description = 'Tên đầy đủ'
 
     def nha_may(self, obj):
         if obj.is_all_factories:
-            return "Táº¥t cáº£ nhÃ  mÃ¡y"
+            return "Tất cả nhà máy"
         elif obj.nha_may:
             return f"{obj.nha_may.ma_nha_may} - {obj.nha_may.ten_nha_may}"
         else:
-            return "ChÆ°a gÃ¡n"
-    nha_may.short_description = 'NhÃ  mÃ¡y'
+            return "Chưa gán"
+    nha_may.short_description = 'Nhà máy'
