@@ -4,10 +4,14 @@ from django.core.exceptions import ValidationError
 from .models import User, UserProfile
 
 
+from django.contrib.auth.password_validation import validate_password
+
 def simple_password_validator(value):
-    """Custom password validator - chỉ yêu cầu tối thiểu 4 ký tự"""
-    if len(value) < 4:
-        raise ValidationError("Mật khẩu phải có ít nhất 4 ký tự.")
+    """Sử dụng validator chuẩn của hệ thống"""
+    try:
+        validate_password(value)
+    except ValidationError as e:
+        raise serializers.ValidationError(list(e.messages))
     return value
 
 

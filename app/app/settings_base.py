@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     'khovattu',
     'nhatkyvanhanh',
     'quanlyvanhanh',
+    'thongsothuyvan',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -121,6 +123,7 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 AUTH_PASSWORD_VALIDATORS = [

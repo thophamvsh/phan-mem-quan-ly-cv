@@ -92,7 +92,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([permissions.IsAuthenticated])
 def get_user_profile(request):
     """
     Get current user profile
@@ -115,7 +115,7 @@ def get_user_profile(request):
 
 
 @api_view(['PUT'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([permissions.IsAuthenticated])
 def update_user_profile(request):
     """
     Update current user profile
@@ -165,7 +165,7 @@ def get_nha_may_list(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([permissions.IsAuthenticated])
 def change_password(request):
     """
     Change user password
@@ -229,7 +229,7 @@ def change_password(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([permissions.IsAuthenticated])
 def logout_user(request):
     """
     Logout user by blacklisting the refresh token
@@ -258,7 +258,7 @@ def logout_user(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow for testing
+@permission_classes([permissions.IsAuthenticated])
 def upload_avatar(request):
     """
     Upload user avatar

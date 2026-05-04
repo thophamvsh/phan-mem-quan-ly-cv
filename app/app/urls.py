@@ -17,11 +17,17 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from core.views import health_check
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from core.auth_views import health_check
 
 urlpatterns = [
     path('health/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
+
+    # Swagger / OpenAPI
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
     # Legacy API routes (backward compatibility)
     path('api/', include('core.urls')),
@@ -34,6 +40,8 @@ urlpatterns = [
     path("api/v1/khovattu/", include("khovattu.urls")),
     path("api/v1/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
     path("api/v1/quanlyvanhanh/", include("quanlyvanhanh.urls")),
+    path("api/thongsothuyvan/", include("thongsothuyvan.urls")),
+    path("api/v1/thongsothuyvan/", include("thongsothuyvan.urls")),
 ]
 
 # Serve media files in development
