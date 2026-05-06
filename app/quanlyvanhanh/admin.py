@@ -828,7 +828,7 @@ class ThietBiVatTuAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 class ThongSoVanHanhAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = ThongSoVanHanhResource
     list_display = ['thiet_bi', 'ma_thong_so', 'ten_thong_so', 'gia_tri', 'nha_may', 'thoi_diem_nhap_24h']
-    list_filter = [ 'ngay_nhap','thoi_diem_nhap']
+    list_filter = ['nha_may', 'ngay_nhap', 'thoi_diem_nhap']
     search_fields = ['ma_thong_so', 'ten_thong_so', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh']
     autocomplete_fields = ['thiet_bi']
     readonly_fields = ['thoi_diem_nhap', 'ngay_nhap']
@@ -976,7 +976,7 @@ class DinhKemAdmin(admin.ModelAdmin):
 class ThongSoToMayAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = ThongSoToMayResource
     list_display = ['thiet_bi', 'ma_thong_so', 'ten_thong_so', 'gia_tri', 'nha_may', 'thoi_diem_nhap_24h', 'ngay_nhap_24h']
-    # list_filter = ['ngay_nhap', 'thoi_diem_nhap', 'nha_may', 'thiet_bi__loai']
+    list_filter = ['nha_may', 'ngay_nhap', 'thoi_diem_nhap']
     search_fields = ['ma_thong_so', 'ten_thong_so', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh', 'thiet_bi__ten']
     autocomplete_fields = ['thiet_bi']
     readonly_fields = ['thoi_diem_nhap', 'ngay_nhap']

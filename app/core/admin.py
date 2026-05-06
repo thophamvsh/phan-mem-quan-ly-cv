@@ -1,4 +1,4 @@
-﻿from django.contrib import admin
+from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.utils.translation import gettext_lazy as _
@@ -17,8 +17,18 @@ class CustomUserCreationForm(UserCreationForm):
             self.fields['email'].required = True
 
 
+from django.contrib.auth.forms import ReadOnlyPasswordHashField
+
 class CustomUserChangeForm(UserChangeForm):
     """Custom form for changing users"""
+    password = ReadOnlyPasswordHashField(
+        label=_("Password"),
+        help_text=_(
+            "Mật khẩu được mã hóa an toàn nên không thể xem. "
+            "Nhưng bạn có thể thay đổi mật khẩu của người dùng bằng "
+            '<a href="../password/">biểu mẫu này</a>.'
+        ),
+    )
     class Meta:
         model = User
         fields = '__all__'
@@ -110,6 +120,15 @@ class UserProfileInline(admin.StackedInline):
                 'can_delete_operation_parameters',
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
+        }),
+        ('Quyền thủy văn và sản xuất', {
+            'fields': (
+                'can_view_hydrology_data',
+                'can_create_hydrology_data',
+                'can_edit_hydrology_data',
+                'can_delete_hydrology_data',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa dữ liệu thủy văn/sản xuất.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
@@ -265,6 +284,15 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_delete_operation_parameters',
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
+        }),
+        ('Quyền thủy văn và sản xuất', {
+            'fields': (
+                'can_view_hydrology_data',
+                'can_create_hydrology_data',
+                'can_edit_hydrology_data',
+                'can_delete_hydrology_data',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa dữ liệu thủy văn/sản xuất.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

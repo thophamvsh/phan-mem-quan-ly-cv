@@ -420,6 +420,22 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa thong so van hanh"
     )
+    can_view_hydrology_data = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem du lieu thuy van va san xuat"
+    )
+    can_create_hydrology_data = models.BooleanField(
+        default=False,
+        help_text="Co quyen them dong bo du lieu thuy van va san xuat"
+    )
+    can_edit_hydrology_data = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua du lieu thuy van va san xuat"
+    )
+    can_delete_hydrology_data = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa du lieu thuy van va san xuat"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

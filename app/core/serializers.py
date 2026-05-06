@@ -259,7 +259,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_edit_diesel_operation_logbooks', 'can_delete_diesel_operation_logbooks',
                  'can_view_equipment', 'can_create_equipment', 'can_edit_equipment', 'can_delete_equipment',
                  'can_view_operation_parameters', 'can_create_operation_parameters',
-                 'can_edit_operation_parameters', 'can_delete_operation_parameters')
+                 'can_edit_operation_parameters', 'can_delete_operation_parameters',
+                 'can_view_hydrology_data', 'can_create_hydrology_data',
+                 'can_edit_hydrology_data', 'can_delete_hydrology_data')
         read_only_fields = ('id', 'user_id', 'username', 'email', 'is_staff', 'is_superuser', 'full_name', 'avatar_url', 'chu_ky_url', 'nha_may_code',
                            'created_at', 'updated_at')
 

@@ -42,6 +42,20 @@ class SuKien(TimestampedUUIDModel):
     hien_tuong_dien_bien = models.TextField()
     phan_tich_nguyen_nhan = models.TextField(blank=True)
     qua_trinh_kiem_tra = models.TextField(blank=True)
+    qua_trinh_xu_ly = models.TextField(blank=True)
+    chi_dao = models.TextField(blank=True)
+    nguoi_chi_dao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="su_kien_da_chi_dao",
+        null=True,
+        blank=True,
+    )
+    chu_ky_nguoi_chi_dao = models.ImageField(
+        upload_to="operations/nhat_ky_su_kien/chu_ky/chi_dao/",
+        null=True,
+        blank=True,
+    )
     de_xuat_khac_phuc = models.TextField(blank=True)
     bao_cho = models.CharField(max_length=255, blank=True)
     hinh_anh_truoc_su_co = models.ImageField(
@@ -108,10 +122,6 @@ class SuKien(TimestampedUUIDModel):
         return default if value is None else value
 
     @property
-    def qua_trinh_xu_ly(self):
-        return self._get_latest_attr("qua_trinh_xu_ly", "")
-
-    @property
     def thoi_gian_xu_ly(self):
         return self._get_latest_attr("thoi_gian_xu_ly")
 
@@ -163,6 +173,10 @@ class SuKien(TimestampedUUIDModel):
             chu_ky = _lay_chu_ky_profile(self.ben_ghi_nhan_su_kien)
             if chu_ky:
                 self.chu_ky_ben_ghi_nhan_su_kien = chu_ky.name
+        if self.nguoi_chi_dao_id and not self.chu_ky_nguoi_chi_dao:
+            chu_ky = _lay_chu_ky_profile(self.nguoi_chi_dao)
+            if chu_ky:
+                self.chu_ky_nguoi_chi_dao = chu_ky.name
         self.full_clean()
         return super().save(*args, **kwargs)
 

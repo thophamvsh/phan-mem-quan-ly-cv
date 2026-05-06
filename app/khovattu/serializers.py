@@ -101,7 +101,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_acknowledge_operation_events', 'can_process_operation_events',
                  'can_confirm_operation_events', 'can_add_event_developments',
                  'can_edit_own_event_developments', 'can_edit_all_event_developments',
-                 'can_edit_own_remediations', 'can_edit_all_remediations')
+                 'can_edit_own_remediations', 'can_edit_all_remediations',
+                 'can_view_hydrology_data', 'can_create_hydrology_data',
+                 'can_edit_hydrology_data', 'can_delete_hydrology_data')
         read_only_fields = ('id', 'username', 'email', 'full_name',
                            'nha_may_name', 'date_joined', 'created_at', 'updated_at')
 

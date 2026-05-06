@@ -1,9 +1,10 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
-from django.db.models import OuterRef, Subquery
+from django.db.models import Count, OuterRef, Subquery
 from django.utils import timezone
 import django_filters
 import unicodedata
+from datetime import datetime
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -11,6 +12,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
+from khovattu.models import Bang_nha_may
 from .models import (
     ChiTietSoGiaoNhanCaHC,
     ChiTietSoGiaoNhanCaVH,
@@ -34,6 +36,7 @@ from .serializers import (
     SonhatkyvanhanhSerializer,
     SogiaonhancaHCSerializer,
     SogiaonhancaVHSerializer,
+    user_can_edit_chi_dao,
 )
 from .permissions import (
     CanAcknowledgeOperationEvents,
@@ -56,6 +59,35 @@ from .permissions import (
 )
 
 User = get_user_model()
+
+HYDROLOGY_FACTORY_CODES = {
+    "songhinh": "SH",
+    "sh": "SH",
+    "vinhson": "VS",
+    "vs": "VS",
+    "thuongkontum": "TKT",
+    "thuong-kon-tum": "TKT",
+    "tkt": "TKT",
+}
+
+
+def _normalize_factory_query_value(value):
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFD", str(value).replace("đ", "d").replace("Đ", "D"))
+    normalized = "".join(
+        character for character in normalized if unicodedata.category(character) != "Mn"
+    )
+    return normalized.strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+
+
+def _factory_from_dashboard_param(value):
+    if not value:
+        return None
+
+    normalized = _normalize_factory_query_value(value)
+    factory_code = HYDROLOGY_FACTORY_CODES.get(normalized, str(value).strip())
+    return Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
 
 
 def _gan_chu_ky_tu_profile(user, model_instance, field_name):
@@ -193,6 +225,7 @@ def _get_or_create_latest_khac_phuc(su_kien, nguoi_tao=None):
 
 
 class NhatKySuKienFilterSet(django_filters.FilterSet):
+    id = django_filters.UUIDFilter(field_name="id")
     ngay_xay_ra = django_filters.DateFilter(
         field_name="thoi_gian_xay_ra",
         lookup_expr="date",
@@ -217,6 +250,7 @@ class NhatKySuKienFilterSet(django_filters.FilterSet):
         model = SuKien
         fields = [
             "nha_may",
+            "id",
             "trang_thai",
             "ben_ghi_nhan_su_kien",
             "ben_xu_ly_su_kien_thiet_bi",
@@ -272,6 +306,7 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
             SuKien.objects.select_related(
                 "nha_may",
                 "nguoi_tao",
+                "nguoi_chi_dao",
                 "ben_ghi_nhan_su_kien",
             )
             .prefetch_related(
@@ -296,8 +331,20 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
-        if not _can_edit_event(self.request.user, serializer.instance):
+        request_fields = {
+            key
+            for key in self.request.data.keys()
+            if key not in {"csrfmiddlewaretoken"}
+        }
+        is_chi_dao_only_update = request_fields and request_fields <= {"chi_dao"}
+        if (
+            not _can_edit_event(self.request.user, serializer.instance)
+            and not (is_chi_dao_only_update and user_can_edit_chi_dao(self.request.user))
+        ):
             raise PermissionDenied("Ban khong co quyen chinh sua su kien nay.")
+        if is_chi_dao_only_update and not _can_edit_event(self.request.user, serializer.instance):
+            serializer.save()
+            return
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk"),
         )
@@ -306,6 +353,76 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         if not _can_delete_event(self.request.user, instance):
             raise PermissionDenied("Ban khong co quyen xoa su kien nay.")
         instance.delete()
+
+    @action(detail=False, methods=["get"], url_path="dashboard-summary")
+    def dashboard_summary(self, request):
+        date_str = request.query_params.get("date")
+        try:
+            target_date = (
+                datetime.strptime(date_str, "%Y-%m-%d").date()
+                if date_str
+                else timezone.localdate()
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        year = int(request.query_params.get("year") or target_date.year)
+        factory = _factory_from_dashboard_param(request.query_params.get("nhamay"))
+
+        events_qs = self.filter_queryset(self.get_queryset()).filter(
+            thoi_gian_xay_ra__year=year,
+        )
+        logbooks_qs = Sonhatkyvanhanh.objects.all()
+
+        if factory:
+            events_qs = events_qs.filter(nha_may=factory)
+            logbooks_qs = logbooks_qs.filter(nha_may=factory)
+        else:
+            logbooks_qs = filter_queryset_by_factory(
+                logbooks_qs,
+                request.user,
+                "nha_may",
+                "fk",
+            )
+
+        status_counts = {
+            SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG: 0,
+            SuKien.TrangThaiXuLy.DANG_XU_LY: 0,
+            SuKien.TrangThaiXuLy.XU_LY_XONG: 0,
+        }
+        for item in events_qs.values("trang_thai").annotate(total=Count("id")):
+            status_counts[item["trang_thai"]] = item["total"]
+
+        open_events = (
+            events_qs.filter(
+                trang_thai__in=[
+                    SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
+                    SuKien.TrangThaiXuLy.DANG_XU_LY,
+                ]
+            )
+            .order_by("-thoi_gian_xay_ra", "-created_at")[:8]
+        )
+
+        serializer = self.get_serializer(open_events, many=True)
+        operation_log_count = logbooks_qs.filter(thoi_gian_tao__date=target_date).count()
+
+        return Response(
+            {
+                "date": target_date.isoformat(),
+                "year": year,
+                "operation_log_count": operation_log_count,
+                "has_operation_log": operation_log_count > 0,
+                "status_counts": {
+                    "chua_xu_ly_xong": status_counts[SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG],
+                    "dang_xu_ly": status_counts[SuKien.TrangThaiXuLy.DANG_XU_LY],
+                    "xu_ly_xong": status_counts[SuKien.TrangThaiXuLy.XU_LY_XONG],
+                },
+                "open_events": serializer.data,
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="khac-phuc")
     def tao_khac_phuc(self, request, pk=None):

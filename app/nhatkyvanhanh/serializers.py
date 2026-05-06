@@ -1,4 +1,5 @@
 from django.utils import timezone
+import unicodedata
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -14,6 +15,31 @@ from .models import (
     SogiaonhancaHC,
     SogiaonhancaVH,
 )
+
+LEADERSHIP_TITLES = {
+    "giam doc",
+    "pho tong giam doc",
+    "tong giam doc",
+    "tgd",
+}
+
+
+def _normalize_title(value):
+    normalized = unicodedata.normalize("NFD", str(value or "").replace("đ", "d").replace("Đ", "D"))
+    without_marks = "".join(
+        character for character in normalized if unicodedata.category(character) != "Mn"
+    )
+    return " ".join(without_marks.casefold().split())
+
+
+def user_can_edit_chi_dao(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return _normalize_title(getattr(profile, "chuc_danh", "")) in LEADERSHIP_TITLES
 
 
 class UserSummaryMixin:
@@ -155,6 +181,8 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
     nguoi_tao_display = serializers.SerializerMethodField()
     chu_ky_nguoi_tao_url = serializers.SerializerMethodField()
+    nguoi_chi_dao_display = serializers.SerializerMethodField()
+    chu_ky_nguoi_chi_dao_url = serializers.SerializerMethodField()
     ben_ghi_nhan_su_kien_display = serializers.SerializerMethodField()
     ben_xu_ly_su_kien_thiet_bi_display = serializers.SerializerMethodField()
     nguoi_xac_nhan_xu_ly_display = serializers.SerializerMethodField()
@@ -167,6 +195,7 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
     dien_bien_su_kiens = DienBienSuKienSerializer(many=True, read_only=True)
     nha_may_code = serializers.SerializerMethodField()
     nha_may_name = serializers.SerializerMethodField()
+    can_edit_chi_dao = serializers.SerializerMethodField()
 
     class Meta:
         model = SuKien
@@ -181,6 +210,11 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "phan_tich_nguyen_nhan",
             "qua_trinh_kiem_tra",
             "qua_trinh_xu_ly",
+            "chi_dao",
+            "nguoi_chi_dao",
+            "nguoi_chi_dao_display",
+            "chu_ky_nguoi_chi_dao",
+            "chu_ky_nguoi_chi_dao_url",
             "de_xuat_khac_phuc",
             "bao_cho",
             "thoi_gian_xu_ly",
@@ -208,15 +242,21 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nguoi_xac_nhan_xu_ly_display",
             "dien_bien_su_kiens",
             "khac_phuc_su_kiens",
+            "can_edit_chi_dao",
             "created_at",
             "updated_at",
         ]
         read_only_fields = [
             "nha_may_code",
             "nha_may_name",
+            "can_edit_chi_dao",
             "nguoi_tao",
             "nguoi_tao_display",
             "chu_ky_nguoi_tao_url",
+            "nguoi_chi_dao",
+            "nguoi_chi_dao_display",
+            "chu_ky_nguoi_chi_dao",
+            "chu_ky_nguoi_chi_dao_url",
             "chu_ky_ben_ghi_nhan_su_kien",
             "chu_ky_ben_ghi_nhan_su_kien_url",
             "chu_ky_ben_xu_ly_su_kien_thiet_bi_url",
@@ -226,7 +266,6 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
         ]
 
     remediation_fields = {
-        "qua_trinh_xu_ly",
         "thoi_gian_xu_ly",
         "ket_qua_kiem_tra_nguyen_nhan",
         "noi_dung_xu_ly_khac_phuc",
@@ -263,19 +302,47 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             raise serializers.ValidationError(
                 {"ben_ghi_nhan_su_kien": "Can ghi nhan su kien truoc khi xu ly."}
             )
+        if "chi_dao" in attrs:
+            request = self.context.get("request")
+            current_user = getattr(request, "user", None)
+            current_value = getattr(instance, "chi_dao", "") if instance else ""
+            if attrs.get("chi_dao", "") != current_value and not user_can_edit_chi_dao(current_user):
+                raise serializers.ValidationError(
+                    {"chi_dao": "Chi lanh dao moi duoc cap nhat noi dung chi dao."}
+                )
         return attrs
 
     def create(self, validated_data):
+        self._apply_chi_dao_signature(validated_data)
         remediation_data = self._pop_remediation_data(validated_data)
         su_kien = super().create(validated_data)
         self._save_remediation(su_kien, remediation_data)
         return su_kien
 
     def update(self, instance, validated_data):
+        if "chi_dao" in validated_data and validated_data.get("chi_dao", "") != instance.chi_dao:
+            self._apply_chi_dao_signature(validated_data)
+
         remediation_data = self._pop_remediation_data(validated_data)
         su_kien = super().update(instance, validated_data)
         self._save_remediation(su_kien, remediation_data)
         return su_kien
+
+    def _apply_chi_dao_signature(self, validated_data):
+        if "chi_dao" not in validated_data:
+            return
+
+        request = self.context.get("request")
+        current_user = getattr(request, "user", None)
+        if current_user and current_user.is_authenticated and validated_data.get("chi_dao", ""):
+            validated_data["nguoi_chi_dao"] = current_user
+            try:
+                validated_data["chu_ky_nguoi_chi_dao"] = current_user.profile.chu_ky
+            except Exception:
+                validated_data["chu_ky_nguoi_chi_dao"] = None
+        else:
+            validated_data["nguoi_chi_dao"] = None
+            validated_data["chu_ky_nguoi_chi_dao"] = None
 
     def _pop_remediation_data(self, validated_data):
         return {
@@ -334,11 +401,21 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
     def get_nha_may_name(self, obj):
         return obj.nha_may.ten_nha_may if obj.nha_may else None
 
+    def get_can_edit_chi_dao(self, obj):
+        request = self.context.get("request")
+        return user_can_edit_chi_dao(getattr(request, "user", None))
+
     def get_chu_ky_nguoi_tao_url(self, obj):
         if not obj.nguoi_tao:
             return None
         profile = getattr(obj.nguoi_tao, "profile", None)
         return self._build_file_url(getattr(profile, "chu_ky", None))
+
+    def get_nguoi_chi_dao_display(self, obj):
+        return self._get_user_display(obj.nguoi_chi_dao)
+
+    def get_chu_ky_nguoi_chi_dao_url(self, obj):
+        return self._build_file_url(obj.chu_ky_nguoi_chi_dao)
 
     def get_ben_ghi_nhan_su_kien_display(self, obj):
         return self._get_user_display(obj.ben_ghi_nhan_su_kien)

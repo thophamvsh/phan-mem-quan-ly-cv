@@ -1,12 +1,136 @@
 from django.contrib import admin
-from import_export import resources
+import inspect
+import math
+from datetime import date, datetime
+from django.contrib.admin.views.main import ChangeList
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
+from django.utils import formats as django_formats
+from import_export import resources, widgets
 from import_export.admin import ImportExportModelAdmin
 from import_export.formats import base_formats
 
-from .models import SonghinhMnh, ThuongKonTumMnh, Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc
+from .models import (
+    SonghinhMnh, ThuongKonTumMnh, Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
+    ThongsoSanxuat, ThongsoGioPhat
+)
+
+
+if not hasattr(django_formats, "sanitize_strftime_format"):
+    django_formats.sanitize_strftime_format = lambda fmt: fmt
+
+
+class SafeFloatWidget(widgets.FloatWidget):
+    def clean(self, value, row=None, **kwargs):
+        if value is None or value == "":
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        value = str(value).strip()
+        if value in {"", "-", "--", "nan", "NaN", "None"}:
+            return None
+
+        value = value.replace(" ", "")
+        if "," in value and "." in value:
+            if value.rfind(",") > value.rfind("."):
+                value = value.replace(".", "").replace(",", ".")
+            else:
+                value = value.replace(",", "")
+        elif "," in value:
+            parts = value.split(",")
+            if len(parts) > 2 or len(parts[-1]) == 3:
+                value = value.replace(",", "")
+            else:
+                value = value.replace(",", ".")
+        elif value.count(".") > 1:
+            value = value.replace(".", "")
+
+        return float(value)
+
+
+class FlexibleDateTimeWidget(widgets.DateTimeWidget):
+    supported_formats = (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+        "%d-%m-%Y",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%Y",
+    )
+
+    def clean(self, value, row=None, **kwargs):
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            dt = value
+        elif isinstance(value, date):
+            dt = datetime.combine(value, datetime.min.time())
+        else:
+            value = str(value).strip()
+            dt = None
+            if dt is None:
+                for fmt in self.supported_formats:
+                    try:
+                        dt = datetime.strptime(value, fmt)
+                        break
+                    except ValueError:
+                        continue
+            if dt is None:
+                dt = parse_datetime(value)
+            if dt is None:
+                parsed_date = parse_date(value)
+                if parsed_date is not None:
+                    dt = datetime.combine(parsed_date, datetime.min.time())
+            if dt is None:
+                raise ValueError("Value could not be parsed using supported datetime formats.")
+
+        if settings.USE_TZ and timezone.is_naive(dt):
+            return timezone.make_aware(dt)
+        return dt
+
+
+class FlexibleDateWidget(widgets.DateWidget):
+    supported_formats = (
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%m/%d/%Y",
+        "%d.%m.%Y",
+        "%Y/%m/%d",
+    )
+
+    def clean(self, value, row=None, **kwargs):
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+
+        value = str(value).strip()
+        for fmt in self.supported_formats:
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+        parsed_date = parse_date(value)
+        if parsed_date is not None:
+            return parsed_date
+        raise ValueError("Value could not be parsed using supported date formats.")
 
 
 class XLSXOnlyMixin:
+    search_help_text = None
+
     # Chỉ dùng các format đã có sẵn dependency trong project
     formats = (base_formats.XLSX, base_formats.CSV)
 
@@ -15,6 +139,40 @@ class XLSXOnlyMixin:
 
     def get_export_formats(self):
         return list(self.formats)
+
+    def get_export_queryset(self, request):
+        list_display = self.get_list_display(request)
+        list_display_links = self.get_list_display_links(request, list_display)
+        list_filter = self.get_list_filter(request)
+        search_fields = self.get_search_fields(request)
+        list_select_related = self.get_list_select_related(request)
+
+        list_editable = getattr(self, "list_editable", ())
+        list_per_page = getattr(self, "list_per_page", 100)
+        list_max_show_all = getattr(self, "list_max_show_all", 200)
+        sortable_by = getattr(self, "sortable_by", None)
+        date_hierarchy = getattr(self, "date_hierarchy", None)
+
+        kwargs = {"sortable_by": sortable_by}
+        if "search_help_text" in inspect.signature(ChangeList.__init__).parameters:
+            kwargs["search_help_text"] = self.search_help_text
+
+        cl = ChangeList(
+            request,
+            self.model,
+            list_display,
+            list_display_links,
+            list_filter,
+            date_hierarchy,
+            search_fields,
+            list_select_related,
+            list_per_page,
+            list_max_show_all,
+            list_editable,
+            self,
+            **kwargs,
+        )
+        return cl.get_queryset(request)
 
 
 class BaseThuyVanResource(resources.ModelResource):
@@ -51,6 +209,135 @@ class Vinhson_HocResource(BaseThuyVanResource):
         model = Vinhson_Hoc
 
 
+class SafeWidgetResource(resources.ModelResource):
+    float_fields = ()
+    datetime_fields = ()
+    date_fields = ()
+    required_import_fields = ()
+    ignored_blank_fields = ("nha_may",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in self.float_fields:
+            if field_name in self.fields:
+                self.fields[field_name].widget = SafeFloatWidget()
+        for field_name in self.datetime_fields:
+            if field_name in self.fields:
+                self.fields[field_name].widget = FlexibleDateTimeWidget()
+        for field_name in self.date_fields:
+            if field_name in self.fields:
+                self.fields[field_name].widget = FlexibleDateWidget()
+
+    @staticmethod
+    def _is_empty_value(value):
+        if value is None:
+            return True
+        if isinstance(value, float) and math.isnan(value):
+            return True
+        if isinstance(value, str):
+            return value.strip() in {"", "-", "--", "nan", "NaN", "None"}
+        return False
+
+    def _has_meaningful_data(self, row):
+        return any(
+            not self._is_empty_value(row.get(field_name))
+            for field_name in self.fields
+            if field_name not in self.ignored_blank_fields
+        )
+
+    def skip_row(self, instance, original, row, import_validation_errors=None):
+        if not self._has_meaningful_data(row):
+            return True
+
+        missing_fields = [
+            field_name
+            for field_name in self.required_import_fields
+            if self._is_empty_value(row.get(field_name))
+        ]
+        if missing_fields:
+            raise ValidationError(
+                "Thiếu dữ liệu bắt buộc: " + ", ".join(missing_fields)
+            )
+
+        return super().skip_row(
+            instance,
+            original,
+            row,
+            import_validation_errors=import_validation_errors,
+        )
+
+
+class ThongsoSanxuatResource(SafeWidgetResource):
+    required_import_fields = ("nha_may", "thoi_gian")
+    datetime_fields = ("thoi_gian",)
+    float_fields = (
+        "cot_d",
+        "cot_f",
+        "cot_g",
+        "cot_h",
+        "cot_i",
+        "cot_j",
+        "cot_k",
+        "cot_l",
+        "cot_m",
+        "cot_n",
+        "cot_o",
+        "cot_p",
+        "cot_q",
+        "cot_r",
+        "cot_s",
+        "cot_t",
+        "cot_u",
+        "cot_v",
+        "cot_w",
+        "cot_x",
+    )
+
+    class Meta:
+        model = ThongsoSanxuat
+        fields = (
+            "nha_may",
+            "thoi_gian",
+            "cot_c",
+            "cot_d",
+            "cot_f",
+            "cot_g",
+            "cot_h",
+            "cot_i",
+            "cot_j",
+            "cot_k",
+            "cot_l",
+            "cot_m",
+            "cot_n",
+            "cot_o",
+            "cot_p",
+            "cot_q",
+            "cot_r",
+            "cot_s",
+            "cot_t",
+            "cot_u",
+            "cot_v",
+            "cot_w",
+            "cot_x",
+        )
+        export_order = fields
+        import_id_fields = ("thoi_gian", "nha_may")
+
+
+class ThongsoGioPhatResource(resources.ModelResource):
+    class Meta:
+        model = ThongsoGioPhat
+        fields = (
+            "nha_may",
+            "ngay",
+            "to_may",
+            "gio_phat_dien",
+            "gio_ngung",
+        )
+        export_order = fields
+        import_id_fields = ("ngay", "to_may", "nha_may")
+
+
 @admin.register(SonghinhMnh)
 class SonghinhMnhAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = SonghinhMnhResource
@@ -79,3 +366,19 @@ class Vinhson_HoBAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 class Vinhson_HocAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = Vinhson_HocResource
     list_display = ("id", "Mucnuoc", "dungtich", "created_at")
+
+@admin.register(ThongsoSanxuat)
+class ThongsoSanxuatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
+    resource_class = ThongsoSanxuatResource
+    list_display = ("thoi_gian", "nha_may","cot_g", "cot_h", "cot_i", "cot_j","cot_k", "cot_m", "cot_n", "cot_q", "cot_r", "cot_u", "cot_v", "created_at")
+    list_filter = ("nha_may", "thoi_gian")
+    search_fields = ("thoi_gian", "nha_may", "cot_c")
+    date_hierarchy = "thoi_gian"
+
+@admin.register(ThongsoGioPhat)
+class ThongsoGioPhatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
+    resource_class = ThongsoGioPhatResource
+    list_display = ("ngay", "nha_may", "to_may", "gio_phat_dien", "gio_ngung", "created_at")
+    list_filter = ("nha_may", "to_may", "ngay")
+    search_fields = ("ngay", "nha_may")
+    date_hierarchy = "ngay"

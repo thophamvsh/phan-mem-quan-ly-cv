@@ -58,16 +58,19 @@ class SuKienAdmin(admin.ModelAdmin):
     search_fields = (
         "ten_he_thong_thiet_bi",
         "hien_tuong_dien_bien",
+        "chi_dao",
+        "nguoi_chi_dao__email",
         "bao_cho",
         "ben_ghi_nhan_su_kien__email",
         "nguoi_tao__email",
     )
     readonly_fields = (
         "chu_ky_ben_ghi_nhan_su_kien",
+        "chu_ky_nguoi_chi_dao",
         "created_at",
         "updated_at",
     )
-    exclude = ("chu_ky_ben_ghi_nhan_su_kien",)
+    exclude = ("chu_ky_ben_ghi_nhan_su_kien", "chu_ky_nguoi_chi_dao")
     inlines = [DienBienSuKienInline, KhacPhucSuKienInline]
 
 
