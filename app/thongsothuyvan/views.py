@@ -127,6 +127,8 @@ SANLUONG_FIELDS = [
     "cot_x",
     "sanluong_kh_thang",
     "mucnuoc_gioihan_tuan",
+    "mucnuoc_gioihan_tuan_ho_a",
+    "mucnuoc_gioihan_tuan_ho_b",
 ]
 
 def user_can_write_hydrology(user):
@@ -182,7 +184,7 @@ def user_can_modify_hydrology_object(user, obj):
         return True
 
     created_by_id = getattr(obj, "created_by_id", None)
-    return created_by_id is not None and created_by_id == user.id
+    return created_by_id is None or created_by_id == user.id
 
 
 def user_can_access_plant(user, nhamay):
@@ -247,9 +249,13 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
 
     def perform_update(self, serializer):
-        if not user_can_modify_hydrology_object(self.request.user, self.get_object()):
+        obj = self.get_object()
+        if not user_can_modify_hydrology_object(self.request.user, obj):
             raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
-        serializer.save(updated_by=self.request.user)
+        save_kwargs = {"updated_by": self.request.user}
+        if obj.created_by_id is None:
+            save_kwargs["created_by"] = self.request.user
+        serializer.save(**save_kwargs)
 
     def perform_destroy(self, instance):
         if not user_can_modify_hydrology_object(self.request.user, instance):
@@ -268,9 +274,13 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
 
     def perform_update(self, serializer):
-        if not user_can_modify_hydrology_object(self.request.user, self.get_object()):
+        obj = self.get_object()
+        if not user_can_modify_hydrology_object(self.request.user, obj):
             raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
-        serializer.save(updated_by=self.request.user)
+        save_kwargs = {"updated_by": self.request.user}
+        if obj.created_by_id is None:
+            save_kwargs["created_by"] = self.request.user
+        serializer.save(**save_kwargs)
 
     def perform_destroy(self, instance):
         if not user_can_modify_hydrology_object(self.request.user, instance):
@@ -584,8 +594,12 @@ class ManualHydrologyDataAPIView(APIView):
                     )
                 for field, value in defaults.items():
                     setattr(existing, field, value)
+                update_fields = [*SANLUONG_FIELDS, "updated_by"]
+                if existing.created_by_id is None:
+                    existing.created_by = request.user
+                    update_fields.append("created_by")
                 existing.updated_by = request.user
-                existing.save(update_fields=[*SANLUONG_FIELDS, "updated_by"])
+                existing.save(update_fields=update_fields)
                 sanluong_created = False
                 sanluong_obj = existing
             else:
@@ -632,7 +646,11 @@ class ManualHydrologyDataAPIView(APIView):
                         "gio_phat_dien": parse_float_or_none(gio_phat),
                         "gio_ngung": parse_float_or_none(gio_ngung),
                         "updated_by": request.user,
-                        **({} if existing_gio_phat else {"created_by": request.user}),
+                        **(
+                            {}
+                            if existing_gio_phat and existing_gio_phat.created_by_id
+                            else {"created_by": request.user}
+                        ),
                     },
                 )
                 gio_phat_results.append(

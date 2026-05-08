@@ -296,6 +296,8 @@ class ThongsoSanxuatResource(SafeWidgetResource):
         "cot_x",
         "sanluong_kh_thang",
         "mucnuoc_gioihan_tuan",
+        "mucnuoc_gioihan_tuan_ho_a",
+        "mucnuoc_gioihan_tuan_ho_b",
     )
 
     class Meta:
@@ -326,6 +328,8 @@ class ThongsoSanxuatResource(SafeWidgetResource):
             "cot_x",
             "sanluong_kh_thang",
             "mucnuoc_gioihan_tuan",
+            "mucnuoc_gioihan_tuan_ho_a",
+            "mucnuoc_gioihan_tuan_ho_b",
         )
         export_order = fields
         import_id_fields = ("thoi_gian", "nha_may")

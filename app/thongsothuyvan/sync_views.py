@@ -19,7 +19,7 @@ def user_can_modify_hydrology_object(user, obj):
         return True
 
     created_by_id = getattr(obj, "created_by_id", None)
-    return created_by_id is not None and created_by_id == user.id
+    return created_by_id is None or created_by_id == user.id
 
 
 def user_can_write_hydrology(user):
@@ -313,7 +313,11 @@ class SaveGoogleSheetDataAPIView(APIView):
                     'cot_w': item.get('cot_w'),
                     'cot_x': item.get('cot_x'),
                     'updated_by': request.user,
-                    **({} if existing else {'created_by': request.user}),
+                    **(
+                        {}
+                        if existing and existing.created_by_id
+                        else {'created_by': request.user}
+                    ),
                 }
             )
             if created:
@@ -447,7 +451,11 @@ class SaveGioPhatAPIView(APIView):
                     'gio_phat_dien': item.get('gio_phat_dien'),
                     'gio_ngung': item.get('gio_ngung'),
                     'updated_by': request.user,
-                    **({} if existing else {'created_by': request.user}),
+                    **(
+                        {}
+                        if existing and existing.created_by_id
+                        else {'created_by': request.user}
+                    ),
                 }
             )
             if created:

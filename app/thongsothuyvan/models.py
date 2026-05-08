@@ -138,6 +138,8 @@ class ThongsoSanxuat(models.Model):
     cot_x = models.FloatField(verbose_name="Sản lượng tự dùng ngày", null=True, blank=True)
     sanluong_kh_thang = models.FloatField(verbose_name="Sản lượng kế hoạch tháng", null=True, blank=True)
     mucnuoc_gioihan_tuan = models.FloatField(verbose_name="Mực nước giới hạn tuần", null=True, blank=True)
+    mucnuoc_gioihan_tuan_ho_a = models.FloatField(verbose_name="Mực nước giới hạn tuần hồ A", null=True, blank=True)
+    mucnuoc_gioihan_tuan_ho_b = models.FloatField(verbose_name="Mực nước giới hạn tuần hồ B", null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
