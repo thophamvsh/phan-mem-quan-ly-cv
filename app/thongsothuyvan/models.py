@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -137,7 +138,20 @@ class ThongsoSanxuat(models.Model):
     cot_x = models.FloatField(verbose_name="Sản lượng tự dùng ngày", null=True, blank=True)
     sanluong_kh_thang = models.FloatField(verbose_name="Sản lượng kế hoạch tháng", null=True, blank=True)
     mucnuoc_gioihan_tuan = models.FloatField(verbose_name="Mực nước giới hạn tuần", null=True, blank=True)
-    
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsosanxuat_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsosanxuat_updated",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -152,6 +166,20 @@ class ThongsoGioPhat(models.Model):
     to_may = models.IntegerField()
     gio_phat_dien = models.FloatField(null=True, blank=True)
     gio_ngung = models.FloatField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsogiophat_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsogiophat_updated",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

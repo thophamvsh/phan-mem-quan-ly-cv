@@ -436,6 +436,14 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa du lieu thuy van va san xuat"
     )
+    can_view_realtime_hydrology = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem trang realtime Song Hinh va Vinh Son"
+    )
+    can_update_realtime_hydrology = models.BooleanField(
+        default=False,
+        help_text="Co quyen bat/tat va cap nhat tay du lieu realtime"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -377,7 +377,7 @@ class Vinhson_HocAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 @admin.register(ThongsoSanxuat)
 class ThongsoSanxuatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = ThongsoSanxuatResource
-    list_display = ("thoi_gian", "nha_may","cot_g", "cot_h", "cot_i", "cot_j","cot_k", "cot_m", "cot_n", "cot_q", "cot_r", "cot_u", "cot_v", "created_at")
+    list_display = ("thoi_gian", "nha_may","cot_g", "cot_h", "cot_i", "cot_j","cot_k", "cot_m", "cot_n", "cot_q", "cot_r", "cot_u", "cot_v", "created_by", "updated_by", "created_at")
     list_filter = ("nha_may", "thoi_gian")
     search_fields = ("thoi_gian", "nha_may", "cot_c")
     date_hierarchy = "thoi_gian"
@@ -385,7 +385,7 @@ class ThongsoSanxuatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 @admin.register(ThongsoGioPhat)
 class ThongsoGioPhatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = ThongsoGioPhatResource
-    list_display = ("ngay", "nha_may", "to_may", "gio_phat_dien", "gio_ngung", "created_at")
+    list_display = ("ngay", "nha_may", "to_may", "gio_phat_dien", "gio_ngung", "created_by", "updated_by", "created_at")
     list_filter = ("nha_may", "to_may", "ngay")
     search_fields = ("ngay", "nha_may")
     date_hierarchy = "ngay"

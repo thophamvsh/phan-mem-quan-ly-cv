@@ -130,6 +130,13 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, thêm, sửa và xóa dữ liệu thủy văn/sản xuất.'
         }),
+        ('Quyền realtime Sông Hinh/Vĩnh Sơn', {
+            'fields': (
+                'can_view_realtime_hydrology',
+                'can_update_realtime_hydrology',
+            ),
+            'description': 'Quyền xem trang realtime và bật/tắt/cập nhật tay dữ liệu realtime.'
+        }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
@@ -172,8 +179,8 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin configuration for UserProfile model"""
-    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'created_at')
-    list_filter = ('is_mobile_user', 'is_all_factories', 'nha_may', 'created_at', 'updated_at')
+    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'created_at')
+    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'nha_may', 'created_at', 'updated_at')
     search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 'phone', 'chuc_danh', 'nha_may__ma_nha_may', 'nha_may__ten_nha_may')
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
@@ -293,6 +300,13 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_delete_hydrology_data',
             ),
             'description': 'Quyền xem, thêm, sửa và xóa dữ liệu thủy văn/sản xuất.'
+        }),
+        ('Quyền realtime Sông Hinh/Vĩnh Sơn', {
+            'fields': (
+                'can_view_realtime_hydrology',
+                'can_update_realtime_hydrology',
+            ),
+            'description': 'Quyền xem trang realtime và bật/tắt/cập nhật tay dữ liệu realtime.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import status, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -144,6 +145,46 @@ def user_can_write_hydrology(user):
     )
 
 
+def user_can_delete_hydrology(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(profile and profile.can_delete_hydrology_data)
+
+
+def user_can_view_realtime_hydrology(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(profile and profile.can_view_realtime_hydrology)
+
+
+def user_can_update_realtime_hydrology(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(profile and profile.can_update_realtime_hydrology)
+
+
+def user_can_modify_hydrology_object(user, obj):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    created_by_id = getattr(obj, "created_by_id", None)
+    return created_by_id is not None and created_by_id == user.id
+
+
 def user_can_access_plant(user, nhamay):
     if not user or not user.is_authenticated:
         return False
@@ -202,6 +243,19 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
         nhamay = normalize_plant_code(self.request.query_params.get('nhamay', 'songhinh'))
         return ThongsoSanxuat.objects.filter(nha_may=nhamay).order_by('-thoi_gian')
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        if not user_can_modify_hydrology_object(self.request.user, self.get_object()):
+            raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
+        serializer.save(updated_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        if not user_can_modify_hydrology_object(self.request.user, instance):
+            raise PermissionDenied("Ban chi duoc xoa du lieu do chinh ban cap nhat.")
+        instance.delete()
+
 class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
     serializer_class = ThongsoGioPhatSerializer
     pagination_class = None
@@ -209,6 +263,19 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         nhamay = normalize_plant_code(self.request.query_params.get('nhamay', 'songhinh'))
         return ThongsoGioPhat.objects.filter(nha_may=nhamay).order_by('-ngay', 'to_may')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        if not user_can_modify_hydrology_object(self.request.user, self.get_object()):
+            raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
+        serializer.save(updated_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        if not user_can_modify_hydrology_object(self.request.user, instance):
+            raise PermissionDenied("Ban chi duoc xoa du lieu do chinh ban cap nhat.")
+        instance.delete()
 
 
 class SongHinhRealtimeSnapshotViewSet(viewsets.ModelViewSet):
@@ -310,6 +377,11 @@ class SongHinhRealtimeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not user_can_view_realtime_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen xem du lieu realtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             return Response(enrich_songhinh_payload(fetch_realtime_payload_data("SONGHINH")))
         except ValueError as exc:
@@ -323,6 +395,11 @@ class VinhSonRealtimeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not user_can_view_realtime_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen xem du lieu realtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             return Response(enrich_vinhson_payload(fetch_realtime_payload_data("VINHSON")))
         except ValueError as exc:
@@ -336,9 +413,19 @@ class RealtimeUpdateStateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not user_can_view_realtime_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen xem trang realtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         return Response(serialize_realtime_state())
 
     def patch(self, request):
+        if not user_can_update_realtime_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen cap nhat realtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         state = RealtimeUpdateState.get_solo()
         state.auto_update_enabled = bool(request.data.get("auto_update_enabled"))
         state.save(update_fields=["auto_update_enabled", "updated_at"])
@@ -350,6 +437,11 @@ class RealtimeManualSaveAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not user_can_update_realtime_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen cap nhat realtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         state, results = save_all_realtime_snapshots(is_manual=True)
         return Response(
             {
@@ -374,6 +466,12 @@ class RealtimeManualSaveAPIView(APIView):
 
 class DeletePlantDataByDateAPIView(APIView):
     def post(self, request):
+        if not user_can_delete_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen xoa du lieu thuy van."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         nhamay = normalize_plant_code(
             request.data.get("nhamay") or request.query_params.get("nhamay", "songhinh")
         )
@@ -395,9 +493,23 @@ class DeletePlantDataByDateAPIView(APIView):
             nha_may=nhamay,
             ngay=target_date,
         )
+        total_available = sanluong_qs.count() + giophat_qs.count()
+        if not request.user.is_superuser:
+            sanluong_qs = sanluong_qs.filter(created_by=request.user)
+            giophat_qs = giophat_qs.filter(created_by=request.user)
 
         sanluong_deleted = sanluong_qs.count()
         giophat_deleted = giophat_qs.count()
+        total_deleted = sanluong_deleted + giophat_deleted
+
+        if total_available > 0 and total_deleted == 0:
+            return Response(
+                {
+                    "success": False,
+                    "error": "Ban chi duoc xoa du lieu do chinh ban cap nhat.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         sanluong_qs.delete()
         giophat_qs.delete()
@@ -409,7 +521,7 @@ class DeletePlantDataByDateAPIView(APIView):
                 "deleted": {
                     "sanluong": sanluong_deleted,
                     "giophat": giophat_deleted,
-                    "total": sanluong_deleted + giophat_deleted,
+                    "total": total_deleted,
                 },
             }
         )
@@ -465,9 +577,15 @@ class ManualHydrologyDataAPIView(APIView):
             )
 
             if existing:
+                if not user_can_modify_hydrology_object(request.user, existing):
+                    return Response(
+                        {"error": "Ban chi duoc sua du lieu do chinh ban cap nhat."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
                 for field, value in defaults.items():
                     setattr(existing, field, value)
-                existing.save(update_fields=SANLUONG_FIELDS)
+                existing.updated_by = request.user
+                existing.save(update_fields=[*SANLUONG_FIELDS, "updated_by"])
                 sanluong_created = False
                 sanluong_obj = existing
             else:
@@ -478,6 +596,8 @@ class ManualHydrologyDataAPIView(APIView):
                 sanluong_obj = ThongsoSanxuat.objects.create(
                     nha_may=nhamay,
                     thoi_gian=thoi_gian,
+                    created_by=request.user,
+                    updated_by=request.user,
                     **defaults,
                 )
                 sanluong_created = True
@@ -490,6 +610,20 @@ class ManualHydrologyDataAPIView(APIView):
                 if gio_phat in (None, "") and gio_ngung in (None, ""):
                     continue
 
+                existing_gio_phat = ThongsoGioPhat.objects.filter(
+                    nha_may=nhamay,
+                    ngay=target_date,
+                    to_may=to_may,
+                ).first()
+                if existing_gio_phat and not user_can_modify_hydrology_object(
+                    request.user,
+                    existing_gio_phat,
+                ):
+                    return Response(
+                        {"error": "Ban chi duoc sua du lieu gio phat do chinh ban cap nhat."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
                 obj, created = ThongsoGioPhat.objects.update_or_create(
                     nha_may=nhamay,
                     ngay=target_date,
@@ -497,6 +631,8 @@ class ManualHydrologyDataAPIView(APIView):
                     defaults={
                         "gio_phat_dien": parse_float_or_none(gio_phat),
                         "gio_ngung": parse_float_or_none(gio_ngung),
+                        "updated_by": request.user,
+                        **({} if existing_gio_phat else {"created_by": request.user}),
                     },
                 )
                 gio_phat_results.append(

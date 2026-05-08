@@ -11,6 +11,32 @@ from .models import ThongsoSanxuat, ThongsoGioPhat
 from .serializers import ThongsoSanxuatSerializer
 from .plants import normalize_plant_code
 
+
+def user_can_modify_hydrology_object(user, obj):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    created_by_id = getattr(obj, "created_by_id", None)
+    return created_by_id is not None and created_by_id == user.id
+
+
+def user_can_write_hydrology(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(
+        profile
+        and (
+            profile.can_create_hydrology_data
+            or profile.can_edit_hydrology_data
+        )
+    )
+
 def get_env_value(name):
     value = os.environ.get(name)
     if value:
@@ -230,6 +256,12 @@ class SaveGoogleSheetDataAPIView(APIView):
     """API lưu dữ liệu đã xem trước vào database"""
     
     def post(self, request):
+        if not user_can_write_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen dong bo du lieu thuy van."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         data_list = request.data.get('data', [])
         nhamay = normalize_plant_code(request.query_params.get('nhamay', 'songhinh'))
         
@@ -245,6 +277,16 @@ class SaveGoogleSheetDataAPIView(APIView):
                 continue
                 
             # Tạo hoặc Cập nhật dựa trên khóa chính là thoi_gian và nha_may
+            existing = ThongsoSanxuat.objects.filter(
+                thoi_gian=thoi_gian,
+                nha_may=nhamay,
+            ).first()
+            if existing and not user_can_modify_hydrology_object(request.user, existing):
+                return Response(
+                    {"error": "Ban chi duoc sua du lieu san xuat do chinh ban cap nhat."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             obj, created = ThongsoSanxuat.objects.update_or_create(
                 thoi_gian=thoi_gian,
                 nha_may=nhamay,
@@ -270,6 +312,8 @@ class SaveGoogleSheetDataAPIView(APIView):
                     'cot_v': item.get('cot_v'),
                     'cot_w': item.get('cot_w'),
                     'cot_x': item.get('cot_x'),
+                    'updated_by': request.user,
+                    **({} if existing else {'created_by': request.user}),
                 }
             )
             if created:
@@ -360,6 +404,12 @@ class SaveGioPhatAPIView(APIView):
     """API lưu dữ liệu Giờ phát vào database"""
     
     def post(self, request):
+        if not user_can_write_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen dong bo du lieu gio phat."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         from .models import ThongsoGioPhat
         data_list = request.data.get('data', [])
         nhamay = normalize_plant_code(request.query_params.get('nhamay', 'songhinh'))
@@ -378,6 +428,17 @@ class SaveGioPhatAPIView(APIView):
                 continue
                 
             # Tạo hoặc Cập nhật dựa trên unique_together (ngay, to_may, nha_may)
+            existing = ThongsoGioPhat.objects.filter(
+                ngay=ngay,
+                to_may=to_may,
+                nha_may=nhamay,
+            ).first()
+            if existing and not user_can_modify_hydrology_object(request.user, existing):
+                return Response(
+                    {"error": "Ban chi duoc sua du lieu gio phat do chinh ban cap nhat."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             obj, created = ThongsoGioPhat.objects.update_or_create(
                 ngay=ngay,
                 to_may=to_may,
@@ -385,6 +446,8 @@ class SaveGioPhatAPIView(APIView):
                 defaults={
                     'gio_phat_dien': item.get('gio_phat_dien'),
                     'gio_ngung': item.get('gio_ngung'),
+                    'updated_by': request.user,
+                    **({} if existing else {'created_by': request.user}),
                 }
             )
             if created:
