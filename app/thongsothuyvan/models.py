@@ -67,6 +67,8 @@ class ThongsoSanxuat(models.Model):
     cot_v = models.FloatField(verbose_name="Thương phẩm năm", null=True, blank=True)
     cot_w = models.FloatField(verbose_name="Sản lượng kế hoạch năm", null=True, blank=True)
     cot_x = models.FloatField(verbose_name="Sản lượng tự dùng ngày", null=True, blank=True)
+    sanluong_kh_thang = models.FloatField(verbose_name="Sản lượng kế hoạch tháng", null=True, blank=True)
+    mucnuoc_gioihan_tuan = models.FloatField(verbose_name="Mực nước giới hạn tuần", null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     

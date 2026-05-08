@@ -1,4 +1,11 @@
+import base64
+import json
+import os
 from datetime import datetime, time
+from decimal import Decimal, InvalidOperation
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +22,65 @@ from .serializers import (
     ThongsoGioPhatSerializer
 )
 from .plants import HYDROLOGY_PLANTS, get_hydrology_plants, normalize_plant_code
+
+def get_env_value(name):
+    value = os.environ.get(name)
+    if value:
+        return value
+
+    env_path = os.path.join(settings.BASE_DIR.parent, ".env")
+    if not os.path.exists(env_path):
+        return None
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for line in env_file:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, raw_value = line.split("=", 1)
+            if key.strip() == name:
+                return raw_value.strip().strip('"').strip("'")
+
+    return None
+
+
+def get_capacity_by_level(model_class, mucnuoc):
+    try:
+        level = Decimal(str(mucnuoc))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+    lower = (
+        model_class.objects.filter(Mucnuoc__lte=level)
+        .order_by("-Mucnuoc")
+        .first()
+    )
+    upper = (
+        model_class.objects.filter(Mucnuoc__gte=level)
+        .order_by("Mucnuoc")
+        .first()
+    )
+
+    if not lower and not upper:
+        return None
+    if lower and not upper:
+        return float(lower.dungtich)
+    if upper and not lower:
+        return float(upper.dungtich)
+
+    lower_level = lower.Mucnuoc
+    upper_level = upper.Mucnuoc
+    if lower_level == upper_level:
+        return float(lower.dungtich)
+
+    ratio = (level - lower_level) / (upper_level - lower_level)
+    capacity = lower.dungtich + ratio * (upper.dungtich - lower.dungtich)
+    return float(capacity)
+
+
+def get_songhinh_capacity_by_level(mucnuoc):
+    return get_capacity_by_level(SonghinhMnh, mucnuoc)
 
 SANLUONG_FIELDS = [
     "cot_c",
@@ -38,6 +104,8 @@ SANLUONG_FIELDS = [
     "cot_v",
     "cot_w",
     "cot_x",
+    "sanluong_kh_thang",
+    "mucnuoc_gioihan_tuan",
 ]
 
 def user_can_write_hydrology(user):
@@ -147,6 +215,86 @@ class HydrologyPlantsAPIView(APIView):
                 ],
             }
         )
+
+
+def fetch_realtime_payload(prefix):
+    realtime_url = get_env_value(f"{prefix}_URL")
+    realtime_user = get_env_value(f"{prefix}_USER") or ""
+    realtime_pass = get_env_value(f"{prefix}_PASS") or ""
+
+    if not realtime_url:
+        return None, Response(
+            {"error": f"Chua cau hinh {prefix}_URL trong .env backend."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    headers = {"Accept": "application/json"}
+    if realtime_user or realtime_pass:
+        token = base64.b64encode(
+            f"{realtime_user}:{realtime_pass}".encode("ascii")
+        ).decode("ascii")
+        headers["Authorization"] = f"Basic {token}"
+
+    try:
+        upstream_request = Request(realtime_url, headers=headers, method="GET")
+        with urlopen(upstream_request, timeout=15) as upstream_response:
+            charset = upstream_response.headers.get_content_charset() or "utf-8"
+            payload = upstream_response.read().decode(charset)
+            return json.loads(payload), None
+    except HTTPError as exc:
+        return None, Response(
+            {"error": f"Realtime API tra ve loi {exc.code}."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except (URLError, TimeoutError) as exc:
+        return None, Response(
+            {"error": f"Khong ket noi duoc realtime API: {exc}"},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except (ValueError, json.JSONDecodeError):
+        return None, Response(
+            {"error": "Realtime API khong tra ve JSON hop le."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+
+class SongHinhRealtimeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        payload_data, error_response = fetch_realtime_payload("SONGHINH")
+        if error_response:
+            return error_response
+
+        capacity = get_songhinh_capacity_by_level(payload_data.get("MNTL"))
+        payload_data["dung_tich_ho"] = (
+            round(capacity, 3) if capacity is not None else None
+        )
+        return Response(payload_data)
+
+
+class VinhSonRealtimeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        payload_data, error_response = fetch_realtime_payload("VINHSON")
+        if error_response:
+            return error_response
+
+        capacity_ho_a = get_capacity_by_level(Vinhson_HoA, payload_data.get("MNTLA"))
+        capacity_ho_b = get_capacity_by_level(Vinhson_HoB, payload_data.get("MNTLB"))
+        capacity_ho_c = get_capacity_by_level(Vinhson_Hoc, payload_data.get("MNTLC"))
+        payload_data["dung_tich_ho_a"] = (
+            round(capacity_ho_a, 3) if capacity_ho_a is not None else None
+        )
+        payload_data["dung_tich_ho_b"] = (
+            round(capacity_ho_b, 3) if capacity_ho_b is not None else None
+        )
+        payload_data["dung_tich_ho_c"] = (
+            round(capacity_ho_c, 3) if capacity_ho_c is not None else None
+        )
+
+        return Response(payload_data)
 
 
 class DeletePlantDataByDateAPIView(APIView):

@@ -49,12 +49,13 @@ class SuKienAdmin(admin.ModelAdmin):
     list_display = (
         "ten_he_thong_thiet_bi",
         "thoi_gian_xay_ra",
+        "loai",
         "trang_thai",
         "ben_ghi_nhan_su_kien",
         "nguoi_tao",
         "created_at",
     )
-    list_filter = ("trang_thai", "thoi_gian_xay_ra", "created_at")
+    list_filter = ("loai", "trang_thai", "thoi_gian_xay_ra", "created_at")
     search_fields = (
         "ten_he_thong_thiet_bi",
         "hien_tuong_dien_bien",

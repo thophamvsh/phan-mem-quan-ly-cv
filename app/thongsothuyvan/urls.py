@@ -11,6 +11,8 @@ from .views import (
     DeletePlantDataByDateAPIView,
     HydrologyPlantsAPIView,
     ManualHydrologyDataAPIView,
+    SongHinhRealtimeAPIView,
+    VinhSonRealtimeAPIView,
 )
 from .sync_views import PreviewGoogleSheetAPIView, SaveGoogleSheetDataAPIView, PreviewGioPhatAPIView, SaveGioPhatAPIView
 
@@ -28,6 +30,8 @@ router.register(r"thongsogiophat", ThongsoGioPhatViewSet, basename="thongsogioph
 urlpatterns = [
     path("", include(router.urls)),
     path("plants/", HydrologyPlantsAPIView.as_view(), name="plants"),
+    path("realtime/songhinh/", SongHinhRealtimeAPIView.as_view(), name="realtime-songhinh"),
+    path("realtime/vinhson/", VinhSonRealtimeAPIView.as_view(), name="realtime-vinhson"),
     path("sync/preview/", PreviewGoogleSheetAPIView.as_view(), name="sync-preview"),
     path("sync/save/", SaveGoogleSheetDataAPIView.as_view(), name="sync-save"),
     path("sync/delete-date/", DeletePlantDataByDateAPIView.as_view(), name="sync-delete-date"),

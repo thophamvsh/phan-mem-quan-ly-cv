@@ -206,6 +206,7 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may_name",
             "thoi_gian_xay_ra",
             "ten_he_thong_thiet_bi",
+            "loai",
             "hien_tuong_dien_bien",
             "phan_tich_nguyen_nhan",
             "qua_trinh_kiem_tra",

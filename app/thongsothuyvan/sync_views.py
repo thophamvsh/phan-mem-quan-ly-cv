@@ -112,8 +112,6 @@ def safe_float(val):
                 parts = val.split('.')
                 if len(parts) > 2:
                     val = val.replace('.', '')
-                elif len(parts) == 2 and len(parts[1]) == 3:
-                    val = val.replace('.', '')
         return float(val)
     except:
         return None

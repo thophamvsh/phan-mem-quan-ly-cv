@@ -24,6 +24,10 @@ def _lay_chu_ky_profile(user):
 
 
 class SuKien(TimestampedUUIDModel):
+    class LoaiSuKien(models.TextChoices):
+        KHIEM_KHUYET = "khiem_khuyet", "Khiem khuyet"
+        SU_CO = "su_co", "Su co"
+
     class TrangThaiXuLy(models.TextChoices):
         CHUA_XU_LY_XONG = "chua_xu_ly_xong", "Chua xu ly xong"
         DANG_XU_LY = "dang_xu_ly", "Dang xu ly"
@@ -39,6 +43,11 @@ class SuKien(TimestampedUUIDModel):
         verbose_name="Nha may",
     )
     ten_he_thong_thiet_bi = models.CharField(max_length=255)
+    loai = models.CharField(
+        max_length=32,
+        choices=LoaiSuKien.choices,
+        default=LoaiSuKien.SU_CO,
+    )
     hien_tuong_dien_bien = models.TextField()
     phan_tich_nguyen_nhan = models.TextField(blank=True)
     qua_trinh_kiem_tra = models.TextField(blank=True)

@@ -251,6 +251,7 @@ class NhatKySuKienFilterSet(django_filters.FilterSet):
         fields = [
             "nha_may",
             "id",
+            "loai",
             "trang_thai",
             "ben_ghi_nhan_su_kien",
             "ben_xu_ly_su_kien_thiet_bi",
@@ -371,6 +372,7 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
 
         year = int(request.query_params.get("year") or target_date.year)
         factory = _factory_from_dashboard_param(request.query_params.get("nhamay"))
+        loai = request.query_params.get("loai")
 
         events_qs = self.filter_queryset(self.get_queryset()).filter(
             thoi_gian_xay_ra__year=year,
@@ -387,6 +389,9 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
                 "nha_may",
                 "fk",
             )
+
+        if loai in dict(SuKien.LoaiSuKien.choices):
+            events_qs = events_qs.filter(loai=loai)
 
         status_counts = {
             SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG: 0,
