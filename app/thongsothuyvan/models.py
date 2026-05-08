@@ -40,6 +40,74 @@ class Vinhson_Hoc(BaseThuyVan):
         verbose_name = "Vĩnh Sơn - Hồ C"
         verbose_name_plural = "Vĩnh Sơn - Hồ C"
 
+class RealtimeUpdateState(models.Model):
+    auto_update_enabled = models.BooleanField(default=False)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_saved_at = models.DateTimeField(null=True, blank=True)
+    last_manual_run_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(null=True, blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Trang thai cap nhat realtime"
+        verbose_name_plural = "Trang thai cap nhat realtime"
+
+    @classmethod
+    def get_solo(cls):
+        state, _ = cls.objects.get_or_create(pk=1)
+        return state
+
+
+class SongHinhRealtimeSnapshot(models.Model):
+    time_stamp = models.DateTimeField()
+    mntl = models.FloatField()
+    mnhl = models.FloatField()
+    ph1 = models.FloatField()
+    ph2 = models.FloatField()
+    pnm = models.FloatField()
+    qcm = models.FloatField()
+    dm1 = models.FloatField()
+    dm2 = models.FloatField()
+    dm3 = models.FloatField()
+    dm4 = models.FloatField()
+    dm5 = models.FloatField()
+    dm6 = models.FloatField()
+    qtran = models.FloatField()
+    dung_tich_ho = models.FloatField()
+    dung_tich_phong_lu = models.FloatField()
+    raw_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-time_stamp"]
+        verbose_name = "Realtime Song Hinh"
+        verbose_name_plural = "Realtime Song Hinh"
+
+
+class VinhSonRealtimeSnapshot(models.Model):
+    time_stamp = models.DateTimeField()
+    mntla = models.FloatField()
+    mntla_td = models.FloatField()
+    mntlb = models.FloatField()
+    mntlc = models.FloatField()
+    mnhl = models.FloatField()
+    ph1 = models.FloatField()
+    ph2 = models.FloatField()
+    qcm = models.FloatField()
+    qtran = models.FloatField()
+    dung_tich_ho_a = models.FloatField()
+    dung_tich_ho_b = models.FloatField()
+    dung_tich_ho_c = models.FloatField()
+    raw_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-time_stamp"]
+        verbose_name = "Realtime Vinh Son"
+        verbose_name_plural = "Realtime Vinh Son"
+
+
 class ThongsoSanxuat(models.Model):
     nha_may = models.CharField(max_length=50, default='songhinh')
     thoi_gian = models.DateTimeField()

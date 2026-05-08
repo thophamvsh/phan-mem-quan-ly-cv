@@ -11,10 +11,23 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import SonghinhMnh, ThuongKonTumMnh, Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc, ThongsoSanxuat, ThongsoGioPhat
+from .models import (
+    RealtimeUpdateState,
+    SongHinhRealtimeSnapshot,
+    SonghinhMnh,
+    ThuongKonTumMnh,
+    VinhSonRealtimeSnapshot,
+    Vinhson_HoA,
+    Vinhson_HoB,
+    Vinhson_Hoc,
+    ThongsoGioPhat,
+    ThongsoSanxuat,
+)
 from .serializers import (
+    SongHinhRealtimeSnapshotSerializer,
     SonghinhMnhSerializer,
     ThuongKonTumMnhSerializer,
+    VinhSonRealtimeSnapshotSerializer,
     Vinhson_HoASerializer,
     Vinhson_HoBSerializer,
     Vinhson_HocSerializer,
@@ -22,6 +35,13 @@ from .serializers import (
     ThongsoGioPhatSerializer
 )
 from .plants import HYDROLOGY_PLANTS, get_hydrology_plants, normalize_plant_code
+from .realtime_services import (
+    enrich_songhinh_payload,
+    enrich_vinhson_payload,
+    fetch_realtime_payload as fetch_realtime_payload_data,
+    save_all_realtime_snapshots,
+    serialize_realtime_state,
+)
 
 def get_env_value(name):
     value = os.environ.get(name)
@@ -191,6 +211,34 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
         return ThongsoGioPhat.objects.filter(nha_may=nhamay).order_by('-ngay', 'to_may')
 
 
+class SongHinhRealtimeSnapshotViewSet(viewsets.ModelViewSet):
+    serializer_class = SongHinhRealtimeSnapshotSerializer
+
+    def get_queryset(self):
+        queryset = SongHinhRealtimeSnapshot.objects.all().order_by("-time_stamp")
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if date_from:
+            queryset = queryset.filter(time_stamp__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(time_stamp__date__lte=date_to)
+        return queryset
+
+
+class VinhSonRealtimeSnapshotViewSet(viewsets.ModelViewSet):
+    serializer_class = VinhSonRealtimeSnapshotSerializer
+
+    def get_queryset(self):
+        queryset = VinhSonRealtimeSnapshot.objects.all().order_by("-time_stamp")
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if date_from:
+            queryset = queryset.filter(time_stamp__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(time_stamp__date__lte=date_to)
+        return queryset
+
+
 class HydrologyPlantsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -262,39 +310,66 @@ class SongHinhRealtimeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        payload_data, error_response = fetch_realtime_payload("SONGHINH")
-        if error_response:
-            return error_response
-
-        capacity = get_songhinh_capacity_by_level(payload_data.get("MNTL"))
-        payload_data["dung_tich_ho"] = (
-            round(capacity, 3) if capacity is not None else None
-        )
-        return Response(payload_data)
+        try:
+            return Response(enrich_songhinh_payload(fetch_realtime_payload_data("SONGHINH")))
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
 
 class VinhSonRealtimeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        payload_data, error_response = fetch_realtime_payload("VINHSON")
-        if error_response:
-            return error_response
+        try:
+            return Response(enrich_vinhson_payload(fetch_realtime_payload_data("VINHSON")))
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        capacity_ho_a = get_capacity_by_level(Vinhson_HoA, payload_data.get("MNTLA"))
-        capacity_ho_b = get_capacity_by_level(Vinhson_HoB, payload_data.get("MNTLB"))
-        capacity_ho_c = get_capacity_by_level(Vinhson_Hoc, payload_data.get("MNTLC"))
-        payload_data["dung_tich_ho_a"] = (
-            round(capacity_ho_a, 3) if capacity_ho_a is not None else None
-        )
-        payload_data["dung_tich_ho_b"] = (
-            round(capacity_ho_b, 3) if capacity_ho_b is not None else None
-        )
-        payload_data["dung_tich_ho_c"] = (
-            round(capacity_ho_c, 3) if capacity_ho_c is not None else None
-        )
 
-        return Response(payload_data)
+class RealtimeUpdateStateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(serialize_realtime_state())
+
+    def patch(self, request):
+        state = RealtimeUpdateState.get_solo()
+        state.auto_update_enabled = bool(request.data.get("auto_update_enabled"))
+        state.save(update_fields=["auto_update_enabled", "updated_at"])
+        state_data = serialize_realtime_state(state)
+        return Response(state_data)
+
+
+class RealtimeManualSaveAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        state, results = save_all_realtime_snapshots(is_manual=True)
+        return Response(
+            {
+                "state": serialize_realtime_state(state),
+                "results": [
+                    {
+                        "plant": result.plant,
+                        "saved": result.saved,
+                        "snapshot_id": result.snapshot_id,
+                        "error": result.error,
+                    }
+                    for result in results
+                ],
+            },
+            status=(
+                status.HTTP_207_MULTI_STATUS
+                if any(not result.saved for result in results)
+                else status.HTTP_201_CREATED
+            ),
+        )
 
 
 class DeletePlantDataByDateAPIView(APIView):

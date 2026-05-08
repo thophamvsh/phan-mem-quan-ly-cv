@@ -13,7 +13,10 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.formats import base_formats
 
 from .models import (
-    SonghinhMnh, ThuongKonTumMnh, Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
+    SongHinhRealtimeSnapshot,
+    SonghinhMnh, ThuongKonTumMnh,
+    VinhSonRealtimeSnapshot,
+    Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
     ThongsoSanxuat, ThongsoGioPhat
 )
 
@@ -386,3 +389,42 @@ class ThongsoGioPhatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     list_filter = ("nha_may", "to_may", "ngay")
     search_fields = ("ngay", "nha_may")
     date_hierarchy = "ngay"
+
+
+@admin.register(SongHinhRealtimeSnapshot)
+class SongHinhRealtimeSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        "time_stamp",
+        "mntl",
+        "mnhl",
+        "pnm",
+        "qcm",
+        "qtran",
+        "dung_tich_ho",
+        "dung_tich_phong_lu",
+        "created_at",
+    )
+    list_filter = ("time_stamp", "created_at")
+    search_fields = ("id", "time_stamp")
+    date_hierarchy = "time_stamp"
+    readonly_fields = ("created_at", "raw_data")
+
+
+@admin.register(VinhSonRealtimeSnapshot)
+class VinhSonRealtimeSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        "time_stamp",
+        "mntla",
+        "mntla_td",
+        "mntlb",
+        "mntlc",
+        "ph1",
+        "ph2",
+        "qcm",
+        "qtran",
+        "created_at",
+    )
+    list_filter = ("time_stamp", "created_at")
+    search_fields = ("id", "time_stamp")
+    date_hierarchy = "time_stamp"
+    readonly_fields = ("created_at", "raw_data")

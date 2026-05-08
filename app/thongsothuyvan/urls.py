@@ -11,8 +11,12 @@ from .views import (
     DeletePlantDataByDateAPIView,
     HydrologyPlantsAPIView,
     ManualHydrologyDataAPIView,
+    RealtimeManualSaveAPIView,
+    RealtimeUpdateStateAPIView,
     SongHinhRealtimeAPIView,
+    SongHinhRealtimeSnapshotViewSet,
     VinhSonRealtimeAPIView,
+    VinhSonRealtimeSnapshotViewSet,
 )
 from .sync_views import PreviewGoogleSheetAPIView, SaveGoogleSheetDataAPIView, PreviewGioPhatAPIView, SaveGioPhatAPIView
 
@@ -26,12 +30,16 @@ router.register(r"vinhson-ho-b", Vinhson_HoBViewSet, basename="vinhson-hob")
 router.register(r"vinhson-ho-c", Vinhson_HocViewSet, basename="vinhson-hoc")
 router.register(r"thongsosanxuat", ThongsoSanxuatViewSet, basename="thongsosanxuat")
 router.register(r"thongsogiophat", ThongsoGioPhatViewSet, basename="thongsogiophat")
+router.register(r"realtime-songhinh-snapshots", SongHinhRealtimeSnapshotViewSet, basename="realtime-songhinh-snapshots")
+router.register(r"realtime-vinhson-snapshots", VinhSonRealtimeSnapshotViewSet, basename="realtime-vinhson-snapshots")
 
 urlpatterns = [
     path("", include(router.urls)),
     path("plants/", HydrologyPlantsAPIView.as_view(), name="plants"),
     path("realtime/songhinh/", SongHinhRealtimeAPIView.as_view(), name="realtime-songhinh"),
     path("realtime/vinhson/", VinhSonRealtimeAPIView.as_view(), name="realtime-vinhson"),
+    path("realtime/state/", RealtimeUpdateStateAPIView.as_view(), name="realtime-state"),
+    path("realtime/manual-save/", RealtimeManualSaveAPIView.as_view(), name="realtime-manual-save"),
     path("sync/preview/", PreviewGoogleSheetAPIView.as_view(), name="sync-preview"),
     path("sync/save/", SaveGoogleSheetDataAPIView.as_view(), name="sync-save"),
     path("sync/delete-date/", DeletePlantDataByDateAPIView.as_view(), name="sync-delete-date"),
