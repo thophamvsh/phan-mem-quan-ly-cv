@@ -140,6 +140,10 @@ class ThongsoSanxuat(models.Model):
     mucnuoc_gioihan_tuan = models.FloatField(verbose_name="Mực nước giới hạn tuần", null=True, blank=True)
     mucnuoc_gioihan_tuan_ho_a = models.FloatField(verbose_name="Mực nước giới hạn tuần hồ A", null=True, blank=True)
     mucnuoc_gioihan_tuan_ho_b = models.FloatField(verbose_name="Mực nước giới hạn tuần hồ B", null=True, blank=True)
+    mucnuoc_thuongluu_ho_b = models.FloatField(verbose_name="Mực nước thượng lưu hồ B (m)", null=True, blank=True)
+    mucnuoc_thuongluu_ho_c = models.FloatField(verbose_name="Mực nước thượng lưu hồ C (m)", null=True, blank=True)
+    luuluong_ve_ho_b = models.FloatField(verbose_name="Lưu lượng nước về hồ B (m3/s)", null=True, blank=True)
+    luuluong_ve_ho_c = models.FloatField(verbose_name="Lưu lượng nước về hồ C (m3/s)", null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

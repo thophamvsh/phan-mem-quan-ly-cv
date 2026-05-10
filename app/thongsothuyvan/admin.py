@@ -298,6 +298,10 @@ class ThongsoSanxuatResource(SafeWidgetResource):
         "mucnuoc_gioihan_tuan",
         "mucnuoc_gioihan_tuan_ho_a",
         "mucnuoc_gioihan_tuan_ho_b",
+        "mucnuoc_thuongluu_ho_b",
+        "mucnuoc_thuongluu_ho_c",
+        "luuluong_ve_ho_b",
+        "luuluong_ve_ho_c",
     )
 
     class Meta:
@@ -330,6 +334,10 @@ class ThongsoSanxuatResource(SafeWidgetResource):
             "mucnuoc_gioihan_tuan",
             "mucnuoc_gioihan_tuan_ho_a",
             "mucnuoc_gioihan_tuan_ho_b",
+            "mucnuoc_thuongluu_ho_b",
+            "mucnuoc_thuongluu_ho_c",
+            "luuluong_ve_ho_b",
+            "luuluong_ve_ho_c",
         )
         export_order = fields
         import_id_fields = ("thoi_gian", "nha_may")

@@ -129,6 +129,10 @@ SANLUONG_FIELDS = [
     "mucnuoc_gioihan_tuan",
     "mucnuoc_gioihan_tuan_ho_a",
     "mucnuoc_gioihan_tuan_ho_b",
+    "mucnuoc_thuongluu_ho_b",
+    "mucnuoc_thuongluu_ho_c",
+    "luuluong_ve_ho_b",
+    "luuluong_ve_ho_c",
 ]
 
 def user_can_write_hydrology(user):
@@ -290,6 +294,7 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
 
 class SongHinhRealtimeSnapshotViewSet(viewsets.ModelViewSet):
     serializer_class = SongHinhRealtimeSnapshotSerializer
+    pagination_class = None
 
     def get_queryset(self):
         queryset = SongHinhRealtimeSnapshot.objects.all().order_by("-time_stamp")
@@ -304,6 +309,7 @@ class SongHinhRealtimeSnapshotViewSet(viewsets.ModelViewSet):
 
 class VinhSonRealtimeSnapshotViewSet(viewsets.ModelViewSet):
     serializer_class = VinhSonRealtimeSnapshotSerializer
+    pagination_class = None
 
     def get_queryset(self):
         queryset = VinhSonRealtimeSnapshot.objects.all().order_by("-time_stamp")
