@@ -1,7 +1,7 @@
 from django.contrib import admin
 import inspect
 import math
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from django.contrib.admin.views.main import ChangeList
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -17,6 +17,7 @@ from .models import (
     SonghinhMnh, ThuongKonTumMnh,
     VinhSonRealtimeSnapshot,
     Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
+    MucnuocQuytrinh,
     ThongsoSanxuat, ThongsoGioPhat
 )
 
@@ -129,6 +130,59 @@ class FlexibleDateWidget(widgets.DateWidget):
         if parsed_date is not None:
             return parsed_date
         raise ValueError("Value could not be parsed using supported date formats.")
+
+
+class MonthDayWidget(widgets.Widget):
+    supported_formats = (
+        "%d/%m",
+        "%d-%m",
+        "%d-%b",
+        "%d-%B",
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d-%m-%Y",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+        "%m/%d/%Y",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+    )
+
+    def clean(self, value, row=None, **kwargs):
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value.strftime("%d/%m")
+        if isinstance(value, date):
+            return value.strftime("%d/%m")
+        if isinstance(value, (int, float)) and not math.isnan(value):
+            # Excel serial date. Day 1 is 1900-01-01, with Excel's leap-year quirk.
+            excel_epoch = datetime(1899, 12, 30)
+            return (excel_epoch + timedelta(days=float(value))).strftime("%d/%m")
+
+        value = str(value).strip()
+        if value.endswith(".0") and value[:-2].isdigit():
+            excel_epoch = datetime(1899, 12, 30)
+            return (excel_epoch + timedelta(days=float(value))).strftime("%d/%m")
+
+        for date_format in self.supported_formats:
+            try:
+                return datetime.strptime(value, date_format).strftime("%d/%m")
+            except ValueError:
+                continue
+
+        parsed_date = parse_date(value)
+        if parsed_date is not None:
+            return parsed_date.strftime("%d/%m")
+
+        raise ValueError("Ngày phải có định dạng dd/MM.")
+
+    def render(self, value, obj=None):
+        return value or ""
 
 
 class XLSXOnlyMixin:
@@ -357,6 +411,29 @@ class ThongsoGioPhatResource(resources.ModelResource):
         import_id_fields = ("ngay", "to_may", "nha_may")
 
 
+class MucnuocQuytrinhResource(SafeWidgetResource):
+    required_import_fields = ("ngay_bat_dau", "ngay_ket_thuc")
+    ignored_blank_fields = ("nha_may",)
+    float_fields = ("muc_nuoc_bat_dau", "muc_nuoc_ket_thuc")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["ngay_bat_dau"].widget = MonthDayWidget()
+        self.fields["ngay_ket_thuc"].widget = MonthDayWidget()
+
+    class Meta:
+        model = MucnuocQuytrinh
+        fields = (
+            "nha_may",
+            "ngay_bat_dau",
+            "ngay_ket_thuc",
+            "muc_nuoc_bat_dau",
+            "muc_nuoc_ket_thuc",
+        )
+        export_order = fields
+        import_id_fields = ("nha_may", "ngay_bat_dau", "ngay_ket_thuc")
+
+
 @admin.register(SonghinhMnh)
 class SonghinhMnhAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = SonghinhMnhResource
@@ -393,6 +470,24 @@ class ThongsoSanxuatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     list_filter = ("nha_may", "thoi_gian")
     search_fields = ("thoi_gian", "nha_may", "cot_c")
     date_hierarchy = "thoi_gian"
+
+
+@admin.register(MucnuocQuytrinh)
+class MucnuocQuytrinhAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
+    resource_class = MucnuocQuytrinhResource
+    list_display = (
+        "ngay_bat_dau",
+        "ngay_ket_thuc",
+        "nha_may",
+        "muc_nuoc_bat_dau",
+        "muc_nuoc_ket_thuc",
+        "created_by",
+        "updated_by",
+        "created_at",
+    )
+    list_filter = ("nha_may", "ngay_bat_dau", "ngay_ket_thuc")
+    search_fields = ("nha_may",)
+
 
 @admin.register(ThongsoGioPhat)
 class ThongsoGioPhatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):

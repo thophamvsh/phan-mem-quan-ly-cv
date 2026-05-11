@@ -88,3 +88,15 @@ class CanViewDieselOperationLogbooks(UserProfilePermission):
 
 class CanCreateDieselOperationLogbooks(UserProfilePermission):
     permission_name = "can_create_diesel_operation_logbooks"
+
+
+class CanViewBCHCSongHinh(UserProfilePermission):
+    permission_name = "can_view_bchc_song_hinh"
+
+
+class CanCreateBCHCSongHinh(UserProfilePermission):
+    permission_name = "can_create_bchc_song_hinh"
+
+
+class CanEditBCHCSongHinh(UserProfilePermission):
+    permission_name = "can_edit_bchc_song_hinh"

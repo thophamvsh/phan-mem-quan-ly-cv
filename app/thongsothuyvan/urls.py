@@ -6,6 +6,7 @@ from .views import (
     Vinhson_HoAViewSet,
     Vinhson_HoBViewSet,
     Vinhson_HocViewSet,
+    MucnuocQuytrinhViewSet,
     ThongsoSanxuatViewSet,
     ThongsoGioPhatViewSet,
     DeletePlantDataByDateAPIView,
@@ -29,6 +30,7 @@ router.register(r"vinhson-ho-a", Vinhson_HoAViewSet, basename="vinhson-hoa")
 router.register(r"vinhson-ho-b", Vinhson_HoBViewSet, basename="vinhson-hob")
 router.register(r"vinhson-ho-c", Vinhson_HocViewSet, basename="vinhson-hoc")
 router.register(r"thongsosanxuat", ThongsoSanxuatViewSet, basename="thongsosanxuat")
+router.register(r"mucnuoc-quytrinh", MucnuocQuytrinhViewSet, basename="mucnuoc-quytrinh")
 router.register(r"thongsogiophat", ThongsoGioPhatViewSet, basename="thongsogiophat")
 router.register(r"realtime-songhinh-snapshots", SongHinhRealtimeSnapshotViewSet, basename="realtime-songhinh-snapshots")
 router.register(r"realtime-vinhson-snapshots", VinhSonRealtimeSnapshotViewSet, basename="realtime-vinhson-snapshots")

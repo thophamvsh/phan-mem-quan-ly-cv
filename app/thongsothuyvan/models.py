@@ -166,6 +166,50 @@ class ThongsoSanxuat(models.Model):
         verbose_name = "Thông số sản xuất"
         verbose_name_plural = "Thông số sản xuất"
 
+
+class MucnuocQuytrinh(models.Model):
+    nha_may = models.CharField(max_length=50, default="songhinh")
+    ngay_bat_dau = models.CharField(
+        verbose_name="Ngày bắt đầu",
+        max_length=5,
+        help_text="Định dạng dd/MM, áp dụng cho tất cả các năm",
+    )
+    ngay_ket_thuc = models.CharField(
+        verbose_name="Ngày kết thúc",
+        max_length=5,
+        help_text="Định dạng dd/MM, áp dụng cho tất cả các năm",
+    )
+    muc_nuoc_bat_dau = models.FloatField(verbose_name="Mực nước hồ từ")
+    muc_nuoc_ket_thuc = models.FloatField(verbose_name="Mực nước hồ kết thúc")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="mucnuocquytrinh_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="mucnuocquytrinh_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["ngay_bat_dau", "ngay_ket_thuc"]
+        unique_together = ("nha_may", "ngay_bat_dau", "ngay_ket_thuc")
+        verbose_name = "Mực nước quy trình"
+        verbose_name_plural = "Mực nước quy trình"
+
+    def __str__(self):
+        return (
+            f"{self.nha_may} {self.ngay_bat_dau} - {self.ngay_ket_thuc}: "
+            f"{self.muc_nuoc_bat_dau} - {self.muc_nuoc_ket_thuc}"
+        )
+
+
 class ThongsoGioPhat(models.Model):
     nha_may = models.CharField(max_length=50, default='songhinh')
     ngay = models.DateField()

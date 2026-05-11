@@ -387,6 +387,20 @@ class UserProfile(models.Model):
         help_text="Co quyen xoa so nhat ky van hanh Diesel"
     )
 
+    # Phan quyen so BCHC Song Hinh
+    can_view_bchc_song_hinh = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so BCHC Song Hinh"
+    )
+    can_create_bchc_song_hinh = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao/dong bo so BCHC Song Hinh"
+    )
+    can_edit_bchc_song_hinh = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so BCHC Song Hinh"
+    )
+
     # Phan quyen quan ly van hanh - quan ly thiet bi/thong so
     can_view_equipment = models.BooleanField(
         default=True,

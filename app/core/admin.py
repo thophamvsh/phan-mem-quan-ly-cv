@@ -103,6 +103,14 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, tạo, sửa và xóa Sổ nhật ký vận hành Diesel.'
         }),
+        ('Quyền Sổ BCHC Sông Hinh', {
+            'fields': (
+                'can_view_bchc_song_hinh',
+                'can_create_bchc_song_hinh',
+                'can_edit_bchc_song_hinh',
+            ),
+            'description': 'Quyền xem, tạo/đồng bộ và sửa Sổ BCHC Sông Hinh.'
+        }),
         ('Quyền quản lý thiết bị vận hành', {
             'fields': (
                 'can_view_equipment',
@@ -273,6 +281,14 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_delete_diesel_operation_logbooks',
             ),
             'description': 'Quyền xem, tạo, sửa và xóa Sổ nhật ký vận hành Diesel.'
+        }),
+        ('Quyền Sổ BCHC Sông Hinh', {
+            'fields': (
+                'can_view_bchc_song_hinh',
+                'can_create_bchc_song_hinh',
+                'can_edit_bchc_song_hinh',
+            ),
+            'description': 'Quyền xem, tạo/đồng bộ và sửa Sổ BCHC Sông Hinh.'
         }),
         ('Quyền quản lý thiết bị vận hành', {
             'fields': (

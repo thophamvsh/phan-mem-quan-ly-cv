@@ -257,6 +257,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_delete_operation_logbooks',
                  'can_view_diesel_operation_logbooks', 'can_create_diesel_operation_logbooks',
                  'can_edit_diesel_operation_logbooks', 'can_delete_diesel_operation_logbooks',
+                 'can_view_bchc_song_hinh', 'can_create_bchc_song_hinh', 'can_edit_bchc_song_hinh',
                  'can_view_equipment', 'can_create_equipment', 'can_edit_equipment', 'can_delete_equipment',
                  'can_view_operation_parameters', 'can_create_operation_parameters',
                  'can_edit_operation_parameters', 'can_delete_operation_parameters',

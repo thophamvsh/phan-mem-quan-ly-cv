@@ -5,6 +5,7 @@ from django.utils import timezone
 import django_filters
 import unicodedata
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -19,6 +20,7 @@ from .models import (
     DienBienSuKien,
     KhacPhucSuKien,
     NguoiTrucSoGiaoNhanCaHC,
+    SoBCHCSongHinh,
     Sonhatkyvanhanh,
     SonhatkyvanhanhDiesel,
     SuKien,
@@ -32,17 +34,20 @@ from .serializers import (
     KhacPhucSuKienSerializer,
     NhatKySuKienSerializer,
     NguoiTrucSoGiaoNhanCaHCSerializer,
+    SoBCHCSongHinhSerializer,
     SonhatkyvanhanhDieselSerializer,
     SonhatkyvanhanhSerializer,
     SogiaonhancaHCSerializer,
     SogiaonhancaVHSerializer,
     user_can_edit_chi_dao,
 )
+from thongsothuyvan.models import MucnuocQuytrinh, ThongsoSanxuat
 from .permissions import (
     CanAcknowledgeOperationEvents,
     CanConfirmOperationEvents,
     CanConfirmOperationLogbooks,
     CanCreateAdminShiftHandoverLogs,
+    CanCreateBCHCSongHinh,
     CanCreateDieselOperationLogbooks,
     CanCreateOperationLogbooks,
     CanCreateShiftHandoverLogs,
@@ -51,6 +56,7 @@ from .permissions import (
     CanReceiveAdminShiftHandoverLogs,
     CanReceiveShiftHandoverLogs,
     CanViewAdminShiftHandoverLogs,
+    CanViewBCHCSongHinh,
     CanViewDieselOperationLogbooks,
     CanViewOperationLogbooks,
     CanViewShiftHandoverLogs,
@@ -88,6 +94,68 @@ def _factory_from_dashboard_param(value):
     normalized = _normalize_factory_query_value(value)
     factory_code = HYDROLOGY_FACTORY_CODES.get(normalized, str(value).strip())
     return Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
+
+
+def _get_song_hinh_factory():
+    return (
+        Bang_nha_may.objects.filter(ma_nha_may__iexact="SH").first()
+        or Bang_nha_may.objects.filter(ten_nha_may__icontains="Sông Hinh").first()
+        or Bang_nha_may.objects.filter(ten_nha_may__icontains="Song Hinh").first()
+    )
+
+
+def _month_day_key(date_value):
+    return date_value.strftime("%d/%m")
+
+
+def _month_day_to_order(value):
+    try:
+        parsed = datetime.strptime(str(value).strip(), "%d/%m")
+    except (TypeError, ValueError):
+        return None
+    return parsed.month * 100 + parsed.day
+
+
+def _find_muc_nuoc_quy_trinh(date_value):
+    day_order = _month_day_to_order(_month_day_key(date_value))
+    if day_order is None:
+        return None
+
+    for item in MucnuocQuytrinh.objects.filter(nha_may="songhinh"):
+        start_order = _month_day_to_order(item.ngay_bat_dau)
+        end_order = _month_day_to_order(item.ngay_ket_thuc)
+        if start_order is None or end_order is None:
+            continue
+        if start_order <= end_order and start_order <= day_order <= end_order:
+            return item
+        if start_order > end_order and (day_order >= start_order or day_order <= end_order):
+            return item
+    return None
+
+
+def _decimal_or_none(value):
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _format_decimal_range(start, end):
+    if start is None or end is None:
+        return ""
+    return f"{start.normalize()}-{end.normalize()}"
+
+
+def _calculate_bchc_qt(muc_nuoc_ho, muc_nuoc_tu, muc_nuoc_den):
+    if muc_nuoc_ho is None or muc_nuoc_tu is None or muc_nuoc_den is None:
+        return ""
+    if muc_nuoc_ho > muc_nuoc_den:
+        return "> 25 m3/s"
+    if muc_nuoc_tu <= muc_nuoc_ho <= muc_nuoc_den:
+        return "20-25 m3/s"
+    return "<20 m3/s"
 
 
 def _gan_chu_ky_tu_profile(user, model_instance, field_name):
@@ -878,6 +946,139 @@ class SonhatkyvanhanhDieselViewSet(viewsets.ModelViewSet):
         if not _can_delete_diesel_operation_logbook(self.request.user, instance):
             raise PermissionDenied("User khong co quyen xoa so nhat ky van hanh Diesel.")
         return super().perform_destroy(instance)
+
+
+class SoBCHCSongHinhFilterSet(django_filters.FilterSet):
+    ngay_tu = django_filters.DateFilter(field_name="ngay_dong_bo", lookup_expr="gte")
+    ngay_den = django_filters.DateFilter(field_name="ngay_dong_bo", lookup_expr="lte")
+
+    class Meta:
+        model = SoBCHCSongHinh
+        fields = ["ngay_dong_bo", "ngay_tu", "ngay_den", "nguoi_dong_bo"]
+
+
+class SoBCHCSongHinhViewSet(viewsets.ModelViewSet):
+    serializer_class = SoBCHCSongHinhSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = SoBCHCSongHinhFilterSet
+    search_fields = [
+        "nguyen_nhan_khong_dap_ung",
+        "nguoi_dong_bo__email",
+        "nguoi_dong_bo__username",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    ]
+    ordering_fields = ["ngay_dong_bo", "created_at", "updated_at"]
+    ordering = ["-ngay_dong_bo", "-created_at"]
+
+    def get_permissions(self):
+        permission_classes = [CanViewBCHCSongHinh]
+        if self.action in ["create", "dong_bo"]:
+            permission_classes = [CanCreateBCHCSongHinh]
+
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = SoBCHCSongHinh.objects.select_related(
+            "nha_may",
+            "nguoi_dong_bo",
+        ).all()
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def perform_create(self, serializer):
+        item = serializer.save(
+            nha_may=_get_song_hinh_factory(),
+            nguoi_dong_bo=self.request.user,
+        )
+        item.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        if not (
+            has_profile_permission(user, "can_edit_bchc_song_hinh")
+            or instance.nguoi_dong_bo_id == user.id
+        ):
+            raise PermissionDenied("Chi user dong bo hoac user co quyen moi duoc cap nhat so BCHC Song Hinh.")
+        item = serializer.save()
+        item.save()
+
+    def perform_destroy(self, instance):
+        if not (
+            has_profile_permission(self.request.user, "can_edit_bchc_song_hinh")
+            or instance.nguoi_dong_bo_id == self.request.user.id
+        ):
+            raise PermissionDenied("Chi user dong bo hoac user co quyen moi duoc xoa so BCHC Song Hinh.")
+        return super().perform_destroy(instance)
+
+    @action(detail=False, methods=["post"], url_path="dong-bo")
+    def dong_bo(self, request):
+        ngay_dong_bo = request.data.get("ngay_dong_bo") or request.data.get("date")
+        if not ngay_dong_bo:
+            return Response(
+                {"detail": "Thieu ngay_dong_bo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            sync_date = datetime.strptime(str(ngay_dong_bo), "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"detail": "ngay_dong_bo phai co dinh dang YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        san_xuat = (
+            ThongsoSanxuat.objects.filter(nha_may="songhinh", thoi_gian__date=sync_date)
+            .order_by("-thoi_gian")
+            .first()
+        )
+        if not san_xuat:
+            return Response(
+                {"detail": "Khong co du lieu ThongsoSanxuat Song Hinh cho ngay nay."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        quy_trinh = _find_muc_nuoc_quy_trinh(sync_date)
+        muc_nuoc_tu = _decimal_or_none(getattr(quy_trinh, "muc_nuoc_bat_dau", None))
+        muc_nuoc_den = _decimal_or_none(getattr(quy_trinh, "muc_nuoc_ket_thuc", None))
+        muc_nuoc_ho = _decimal_or_none(san_xuat.cot_g)
+
+        item, created = SoBCHCSongHinh.objects.get_or_create(
+            ngay_dong_bo=sync_date,
+            defaults={
+                "nha_may": _get_song_hinh_factory(),
+                "nguoi_dong_bo": request.user,
+            },
+        )
+        if (
+            not created
+            and not request.user.is_superuser
+            and item.nguoi_dong_bo_id
+            and item.nguoi_dong_bo_id != request.user.id
+        ):
+            raise PermissionDenied("Chi user dong bo moi duoc dong bo lai ngay nay.")
+
+        item.nha_may = item.nha_may or _get_song_hinh_factory()
+        item.nguoi_dong_bo = request.user
+        item.chu_ky_nguoi_dong_bo = None
+        item.muc_nuoc_quy_trinh_tu = muc_nuoc_tu
+        item.muc_nuoc_quy_trinh_den = muc_nuoc_den
+        item.muc_nuoc_quy_trinh = _format_decimal_range(muc_nuoc_tu, muc_nuoc_den)
+        item.muc_nuoc_ho = muc_nuoc_ho
+        item.luu_luong_ve_ho = _decimal_or_none(san_xuat.cot_i)
+        item.luu_luong_xa_tran = _decimal_or_none(san_xuat.cot_k)
+        item.luu_luong_chay_may = _decimal_or_none(san_xuat.cot_j)
+        item.luu_luong_chay_may_qt = _calculate_bchc_qt(
+            muc_nuoc_ho,
+            muc_nuoc_tu,
+            muc_nuoc_den,
+        )
+        item.save()
+
+        serializer = self.get_serializer(item)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class SogiaonhancaVHFilterSet(django_filters.FilterSet):
