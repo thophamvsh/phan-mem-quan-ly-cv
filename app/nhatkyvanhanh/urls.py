@@ -8,6 +8,7 @@ from .views import (
     SonhatkyvanhanhViewSet,
     SogiaonhancaHCViewSet,
     SogiaonhancaVHViewSet,
+    SoAnToanViewSet,
 )
 
 app_name = "nhatkyvanhanh"
@@ -19,6 +20,7 @@ router.register(r"so-nhat-ky-van-hanh-diesel", SonhatkyvanhanhDieselViewSet, bas
 router.register(r"so-bchc-song-hinh", SoBCHCSongHinhViewSet, basename="sobchcsonghinh")
 router.register(r"so-giao-nhan-ca-vh", SogiaonhancaVHViewSet, basename="sogiaonhancavh")
 router.register(r"so-giao-nhan-ca-hc", SogiaonhancaHCViewSet, basename="sogiaonhancahc")
+router.register(r"so-an-toan-dau-gio", SoAnToanViewSet, basename="soantoadaugio")
 
 urlpatterns = [
     path("", include(router.urls)),

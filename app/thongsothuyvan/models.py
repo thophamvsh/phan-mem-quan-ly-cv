@@ -44,6 +44,7 @@ class Vinhson_Hoc(BaseThuyVan):
 class RealtimeUpdateState(models.Model):
     auto_update_enabled = models.BooleanField(default=False)
     last_run_at = models.DateTimeField(null=True, blank=True)
+    last_hourly_slot = models.DateTimeField(null=True, blank=True)
     last_saved_at = models.DateTimeField(null=True, blank=True)
     last_manual_run_at = models.DateTimeField(null=True, blank=True)
     last_error = models.TextField(null=True, blank=True)
@@ -75,8 +76,8 @@ class SongHinhRealtimeSnapshot(models.Model):
     dm5 = models.FloatField()
     dm6 = models.FloatField()
     qtran = models.FloatField()
-    dung_tich_ho = models.FloatField()
-    dung_tich_phong_lu = models.FloatField()
+    dung_tich_ho = models.FloatField(null=True, blank=True)
+    dung_tich_phong_lu = models.FloatField(null=True, blank=True)
     raw_data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -89,7 +90,7 @@ class SongHinhRealtimeSnapshot(models.Model):
 class VinhSonRealtimeSnapshot(models.Model):
     time_stamp = models.DateTimeField()
     mntla = models.FloatField()
-    mntla_td = models.FloatField()
+    mntla_td = models.FloatField(null=True, blank=True)
     mntlb = models.FloatField()
     mntlc = models.FloatField()
     mnhl = models.FloatField()
@@ -97,9 +98,9 @@ class VinhSonRealtimeSnapshot(models.Model):
     ph2 = models.FloatField()
     qcm = models.FloatField()
     qtran = models.FloatField()
-    dung_tich_ho_a = models.FloatField()
-    dung_tich_ho_b = models.FloatField()
-    dung_tich_ho_c = models.FloatField()
+    dung_tich_ho_a = models.FloatField(null=True, blank=True)
+    dung_tich_ho_b = models.FloatField(null=True, blank=True)
+    dung_tich_ho_c = models.FloatField(null=True, blank=True)
     raw_data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -237,3 +238,22 @@ class ThongsoGioPhat(models.Model):
         unique_together = ('ngay', 'to_may', 'nha_may')
         verbose_name = "Thông số giờ phát"
         verbose_name_plural = "Thông số giờ phát"
+
+
+class TramDoMuaVrain(models.Model):
+    Thoi_gian = models.DateTimeField(verbose_name="Thời gian")
+    Xa_Ea_M_doan = models.FloatField(verbose_name="Xã Ea M'đoan", null=True, blank=True)
+    Thon_10_Xa_Ea_M_Doal = models.FloatField(verbose_name="Thôn 10 - Xã Ea M'Doal", null=True, blank=True)
+    UBND_xa_Song_Hinh = models.FloatField(verbose_name="UBND xã Sông Hinh", null=True, blank=True)
+    Cu_Kroa = models.FloatField(verbose_name="Cư Kroa", null=True, blank=True)
+    Xa_Ea_Trang = models.FloatField(verbose_name="Xã Ea Trang", null=True, blank=True)
+    Dap_Tran = models.FloatField(verbose_name="Đập Tràn", null=True, blank=True)
+    Ho_B_TD_Vinh_Son = models.FloatField(verbose_name="Hồ B - TĐ Vĩnh Sơn", null=True, blank=True)
+    Ho_A_TD_Vinh_Son = models.FloatField(verbose_name="Hồ A - TĐ Vĩnh Sơn", null=True, blank=True)
+    Ho_C_TD_Vinh_Son = models.FloatField(verbose_name="Hồ C - TĐ Vĩnh Sơn", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-Thoi_gian"]
+        verbose_name = "Trạm đo mưa Vrain"
+        verbose_name_plural = "Trạm đo mưa Vrain"

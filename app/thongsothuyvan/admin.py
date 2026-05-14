@@ -18,7 +18,8 @@ from .models import (
     VinhSonRealtimeSnapshot,
     Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
     MucnuocQuytrinh,
-    ThongsoSanxuat, ThongsoGioPhat
+    ThongsoSanxuat, ThongsoGioPhat,
+    TramDoMuaVrain
 )
 
 
@@ -535,3 +536,58 @@ class VinhSonRealtimeSnapshotAdmin(admin.ModelAdmin):
     search_fields = ("id", "time_stamp")
     date_hierarchy = "time_stamp"
     readonly_fields = ("created_at", "raw_data")
+
+
+class TramDoMuaVrainResource(SafeWidgetResource):
+    required_import_fields = ("Thoi_gian",)
+    datetime_fields = ("Thoi_gian",)
+    float_fields = (
+        "Xa_Ea_M_doan",
+        "Thon_10_Xa_Ea_M_Doal",
+        "UBND_xa_Song_Hinh",
+        "Cu_Kroa",
+        "Xa_Ea_Trang",
+        "Dap_Tran",
+        "Ho_B_TD_Vinh_Son",
+        "Ho_A_TD_Vinh_Son",
+        "Ho_C_TD_Vinh_Son",
+    )
+
+    class Meta:
+        model = TramDoMuaVrain
+        fields = (
+            "id",
+            "Thoi_gian",
+            "Xa_Ea_M_doan",
+            "Thon_10_Xa_Ea_M_Doal",
+            "UBND_xa_Song_Hinh",
+            "Cu_Kroa",
+            "Xa_Ea_Trang",
+            "Dap_Tran",
+            "Ho_B_TD_Vinh_Son",
+            "Ho_A_TD_Vinh_Son",
+            "Ho_C_TD_Vinh_Son",
+        )
+        export_order = fields
+        import_id_fields = ("Thoi_gian",)
+
+
+@admin.register(TramDoMuaVrain)
+class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
+    resource_class = TramDoMuaVrainResource
+    list_display = (
+        "Thoi_gian",
+        "Xa_Ea_M_doan",
+        "Thon_10_Xa_Ea_M_Doal",
+        "UBND_xa_Song_Hinh",
+        "Cu_Kroa",
+        "Xa_Ea_Trang",
+        "Dap_Tran",
+        "Ho_B_TD_Vinh_Son",
+        "Ho_A_TD_Vinh_Son",
+        "Ho_C_TD_Vinh_Son",
+    )
+    date_hierarchy = "Thoi_gian"
+
+
+

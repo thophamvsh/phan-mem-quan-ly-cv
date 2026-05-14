@@ -18,47 +18,23 @@ from .views_excel import (
     # ===== Templates
     DownloadVatTuTemplateAPIView, DownloadDeNghiXuatTemplateAPIView, DownloadDeNghiNhapTemplateAPIView, DownloadKiemKeTemplateAPIView,
 )
-from .views import (
-    # ===== Kiểm kê
-    KiemKeListAPIView, KiemKeStatsAPIView, UpdateSoLuongThucTeAPIView,
-
-    # ===== Vị trí
-    ViTriListAPIView, ViTriDetailAPIView, HeThongListAPIView, HeThongByFactoryListAPIView,
-
-    # ===== Xuất xứ
-    XuatXuListAPIView,
-
-    # ===== Bravo Parser
-    BravoPositionAnalyzeAPIView,
-
-    # ===== Vật tư
-    VatTuListAPIView,            # GET (list), POST (tạo/cập nhật theo (ma_nha_may, ma_bravo))
-    VatTuDetailByIdAPIView,      # GET theo id
-    VatTuDetailByBravoAPIView,   # GET/PATCH/DELETE theo (ma_nha_may, ma_bravo)
-    VatTuByQRAPIView,            # GET theo ma_bravo từ QR code
-    VatTuOverviewAPIView,        # GET tổng hợp lịch sử
-    # VatTuImageAPIView removed - using UploadMaterialImageView instead
-
-    # ===== Đề nghị nhập
-    DeNghiNhapListAPIView,           # GET list toàn bộ đề nghị nhập với filter
-    DeNghiNhapByBravoPlantAPIView,   # GET (list theo vật tư), POST (tạo) theo (ma_nha_may, ma_bravo)
-    DeNghiNhapDetailAPIView,         # PATCH/DELETE theo id (nếu muốn, bạn có thể thêm GET trong view)
-
-    # ===== Đề nghị xuất
-    DeNghiXuatListAPIView,           # GET list toàn bộ đề nghị xuất với filter
-    DeNghiXuatByBravoPlantAPIView,   # GET (list theo vật tư), POST (tạo) theo (ma_nha_may, ma_bravo)
-    DeNghiXuatDetailAPIView,         # PATCH/DELETE theo id (nếu muốn, bạn có thể thêm GET trong view)
-
-    # ===== Action nhanh (tuỳ chọn, có thể bỏ vì đã có POST ở các endpoint theo vật tư)
-    TaoDeNghiNhapAPIView, TaoDeNghiXuatAPIView,
-
-    # ===== Cập nhật hình ảnh vật tư (removed - using UploadMaterialImageView instead)
-
-    # ===== Kiểm kê theo vật tư
-    KiemKeByMaterialAPIView,
-
-    # ===== Hệ thống
-    SystemCategoriesAPIView,
+from .views_kiem_ke import (
+    KiemKeListAPIView, KiemKeStatsAPIView, UpdateSoLuongThucTeAPIView, KiemKeByMaterialAPIView
+)
+from .views_vi_tri import (
+    ViTriListAPIView, ViTriDetailAPIView, HeThongListAPIView, HeThongByFactoryListAPIView, BravoPositionAnalyzeAPIView
+)
+from .views_danh_muc import (
+    XuatXuListAPIView, SystemCategoriesAPIView
+)
+from .views_vat_tu import (
+    VatTuListAPIView, VatTuDetailByIdAPIView, VatTuDetailByBravoAPIView, VatTuByQRAPIView, VatTuOverviewAPIView
+)
+from .views_de_nghi_nhap import (
+    DeNghiNhapListAPIView, DeNghiNhapByBravoPlantAPIView, DeNghiNhapDetailAPIView, TaoDeNghiNhapAPIView
+)
+from .views_de_nghi_xuat import (
+    DeNghiXuatListAPIView, DeNghiXuatByBravoPlantAPIView, DeNghiXuatDetailAPIView, TaoDeNghiXuatAPIView
 )
 
 urlpatterns = [

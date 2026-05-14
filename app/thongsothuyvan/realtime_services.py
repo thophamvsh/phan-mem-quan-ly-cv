@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from .models import (
@@ -37,14 +38,11 @@ SONGHINH_REQUIRED_FIELDS = [
     "DM5",
     "DM6",
     "Qtran",
-    "dung_tich_ho",
-    "dung_tich_phong_lu",
 ]
 
 VINHSON_REQUIRED_FIELDS = [
     "time_stamp",
     "MNTLA",
-    "MNTLA_td",
     "MNTLB",
     "MNTLC",
     "MNHL",
@@ -52,9 +50,6 @@ VINHSON_REQUIRED_FIELDS = [
     "PH2",
     "Qcm",
     "Qtran",
-    "dung_tich_ho_a",
-    "dung_tich_ho_b",
-    "dung_tich_ho_c",
 ]
 
 
@@ -64,6 +59,7 @@ class RealtimeSaveResult:
     saved: bool
     snapshot_id: int | None = None
     error: str = ""
+    skipped: bool = False
 
 
 def get_env_value(name):
@@ -188,6 +184,13 @@ def enrich_vinhson_payload(payload_data):
 
 
 def validate_required_fields(payload_data, required_fields, plant_name):
+    data_fields = [field for field in required_fields if field != "time_stamp"]
+    if data_fields and all(
+        payload_data.get(field) is None or payload_data.get(field) == ""
+        for field in data_fields
+    ):
+        raise ValueError(f"{plant_name}: du lieu realtime rong, khong luu.")
+
     missing_fields = [
         field
         for field in required_fields
@@ -230,7 +233,7 @@ def save_vinhson_realtime_snapshot():
     snapshot = VinhSonRealtimeSnapshot.objects.create(
         time_stamp=parse_realtime_timestamp(payload_data["time_stamp"]),
         mntla=payload_data["MNTLA"],
-        mntla_td=payload_data["MNTLA_td"],
+        mntla_td=payload_data.get("MNTLA_td"),
         mntlb=payload_data["MNTLB"],
         mntlc=payload_data["MNTLC"],
         mnhl=payload_data["MNHL"],
@@ -246,16 +249,74 @@ def save_vinhson_realtime_snapshot():
     return RealtimeSaveResult("vinhson", True, snapshot_id=snapshot.id)
 
 
-def save_all_realtime_snapshots(is_manual=False):
+def claim_realtime_snapshot_run(interval_seconds=3600):
+    now = timezone.now()
+
+    with transaction.atomic():
+        state, _ = RealtimeUpdateState.objects.select_for_update().get_or_create(pk=1)
+        if (
+            state.last_run_at
+            and (now - state.last_run_at).total_seconds() < interval_seconds
+        ):
+            return False
+
+        state.last_run_at = now
+        state.save(update_fields=["last_run_at", "updated_at"])
+        return True
+
+
+def claim_realtime_snapshot_hourly_slot(grace_minutes=5):
+    now = timezone.localtime(timezone.now())
+    if now.minute > grace_minutes:
+        return False
+
+    current_slot = now.replace(minute=0, second=0, microsecond=0)
+
+    with transaction.atomic():
+        state, _ = RealtimeUpdateState.objects.select_for_update().get_or_create(pk=1)
+        last_hourly_slot = (
+            timezone.localtime(state.last_hourly_slot).replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+            if state.last_hourly_slot
+            else None
+        )
+
+        if last_hourly_slot == current_slot:
+            return False
+
+        state.last_run_at = timezone.now()
+        state.last_hourly_slot = current_slot
+        state.save(update_fields=["last_run_at", "last_hourly_slot", "updated_at"])
+        return True
+
+
+def save_all_realtime_snapshots(is_manual=False, mark_run=True, plants=None):
     state = RealtimeUpdateState.get_solo()
     now = timezone.now()
-    state.last_run_at = now
+    if mark_run:
+        state.last_run_at = now
     if is_manual:
         state.last_manual_run_at = now
 
     results = []
     errors = []
-    for save_func in (save_songhinh_realtime_snapshot, save_vinhson_realtime_snapshot):
+    save_funcs = {
+        "songhinh": save_songhinh_realtime_snapshot,
+        "vinhson": save_vinhson_realtime_snapshot,
+    }
+    selected_plants = list(save_funcs.keys()) if not plants else plants
+
+    for plant in selected_plants:
+        save_func = save_funcs.get(plant)
+        if not save_func:
+            error = f"Nha may realtime khong hop le: {plant}"
+            errors.append(error)
+            results.append(RealtimeSaveResult(plant, False, error=error))
+            continue
+
         try:
             results.append(save_func())
         except Exception as exc:
@@ -263,9 +324,7 @@ def save_all_realtime_snapshots(is_manual=False):
             errors.append(error)
             results.append(
                 RealtimeSaveResult(
-                    "songhinh"
-                    if save_func is save_songhinh_realtime_snapshot
-                    else "vinhson",
+                    plant,
                     False,
                     error=error,
                 )
@@ -283,14 +342,35 @@ def save_all_realtime_snapshots(is_manual=False):
     return state, results
 
 
+def normalize_realtime_error(error):
+    error = error or ""
+    obsolete_errors = [
+        "Vinh Son: du lieu null, khong luu. Field loi: MNTLA_td",
+    ]
+
+    if error.strip() in obsolete_errors:
+        return ""
+
+    return error
+
+
+def clear_obsolete_realtime_error(state):
+    if state.last_error and not normalize_realtime_error(state.last_error):
+        state.last_error = ""
+        state.last_error_at = None
+        state.save(update_fields=["last_error", "last_error_at", "updated_at"])
+
+
 def serialize_realtime_state(state=None):
     state = state or RealtimeUpdateState.get_solo()
+    clear_obsolete_realtime_error(state)
     return {
         "auto_update_enabled": state.auto_update_enabled,
         "last_run_at": state.last_run_at,
+        "last_hourly_slot": state.last_hourly_slot,
         "last_saved_at": state.last_saved_at,
         "last_manual_run_at": state.last_manual_run_at,
-        "last_error": state.last_error or "",
+        "last_error": normalize_realtime_error(state.last_error),
         "last_error_at": state.last_error_at,
         "updated_at": state.updated_at,
     }

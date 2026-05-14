@@ -12,6 +12,7 @@ from .models import (
     SuKien,
     SogiaonhancaHC,
     SogiaonhancaVH,
+    SoAnToanDauGio,
 )
 
 
@@ -296,3 +297,38 @@ class SoBCHCSongHinhAdmin(admin.ModelAdmin):
         return bool(obj.chu_ky_nguoi_dong_bo)
 
     co_chu_ky.boolean = True
+
+
+@admin.register(SoAnToanDauGio)
+class SoAnToanDauGioAdmin(admin.ModelAdmin):
+    list_display = (
+        "ngay_dong_bo",
+        "ca_truc",
+        "nha_may",
+        "tinh_trang_an_toan",
+        "nguoi_dong_bo",
+        "co_chu_ky",
+        "created_at",
+    )
+    list_filter = ("ngay_dong_bo", "ca_truc", "created_at", "nha_may")
+    search_fields = (
+        "tinh_trang_an_toan",
+        "nguoi_dong_bo__email",
+        "nguoi_dong_bo__username",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    )
+    readonly_fields = (
+        "nguoi_dong_bo",
+        "chu_ky_nguoi_dong_bo",
+        "created_at",
+        "updated_at",
+    )
+    exclude = ("chu_ky_nguoi_dong_bo",)
+    date_hierarchy = "ngay_dong_bo"
+
+    def co_chu_ky(self, obj):
+        return bool(obj.chu_ky_nguoi_dong_bo)
+
+    co_chu_ky.boolean = True
+    co_chu_ky.short_description = "Co chu ky"

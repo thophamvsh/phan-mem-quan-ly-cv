@@ -83,7 +83,7 @@ class UserListAPIView(generics.ListAPIView):
         # Chỉ admin mới có thể xem danh sách user
         if not self.request.user.is_staff:
             return User.objects.none()
-        return User.objects.all()
+        return User.objects.all().select_related('profile__nha_may')
 
     def list(self, request, *args, **kwargs):
         if not request.user.is_staff:

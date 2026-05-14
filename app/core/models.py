@@ -401,6 +401,20 @@ class UserProfile(models.Model):
         help_text="Co quyen sua so BCHC Song Hinh"
     )
 
+    # Phan quyen so an toan dau gio
+    can_view_so_an_toan_dau_gio = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so an toan dau gio"
+    )
+    can_edit_so_an_toan_dau_gio = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so an toan dau gio"
+    )
+    can_delete_so_an_toan_dau_gio = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so an toan dau gio"
+    )
+
     # Phan quyen quan ly van hanh - quan ly thiet bi/thong so
     can_view_equipment = models.BooleanField(
         default=True,

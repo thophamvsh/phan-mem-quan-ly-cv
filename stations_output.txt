@@ -1,0 +1,123 @@
+Keys of first station object:
+["address", "altitude", "area", "city", "code", "latitude", "longitude", "name", "number", "uuid", "waterStationType"]
+
+All stations:
+[
+  {
+    "address": "Đập tràn Thủy điện Sông Hinh",
+    "altitude": null,
+    "area": "Sông Hinh",
+    "city": "Đắk Lắk",
+    "code": "036604",
+    "latitude": 12.92684,
+    "longitude": 108.946392,
+    "name": "Đập Tràn",
+    "number": "84325036604",
+    "uuid": "1717d5b4-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "UBND xã Sơn Lang",
+    "altitude": null,
+    "area": "Sơn Lang",
+    "city": "Gia Lai",
+    "code": "036617",
+    "latitude": 14.358556,
+    "longitude": 108.568786,
+    "name": "Hồ B - TĐ Vĩnh Sơn",
+    "number": "84325036617",
+    "uuid": "170ba0dd-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "UBND xã Ea Trang",
+    "altitude": null,
+    "area": "Ea Trang",
+    "city": "Đắk Lắk",
+    "code": "036607",
+    "latitude": 12.6205,
+    "longitude": 108.829553,
+    "name": "Xã Ea Trang",
+    "number": "84325036607",
+    "uuid": "172ac1b8-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "UBND xã Sông Hinh",
+    "altitude": null,
+    "area": "Sông Hinh",
+    "city": "Đắk Lắk",
+    "code": "036620",
+    "latitude": 12.817322,
+    "longitude": 108.9501,
+    "name": "UBND xã Sông Hinh",
+    "number": "84325036620",
+    "uuid": "171df034-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "Thôn 10 Xã Ea M'Đoal",
+    "altitude": null,
+    "area": "Ea Riêng",
+    "city": "Đắk Lắk",
+    "code": "036605",
+    "latitude": 12.791422,
+    "longitude": 108.929139,
+    "name": "Thôn 10 Xã Ea M'Đoal",
+    "number": "84325036605",
+    "uuid": "1724aee5-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "Cửa nhận nước Hồ A Thủy điện Vĩnh Sơn",
+    "altitude": null,
+    "area": "Vĩnh Sơn",
+    "city": "Gia Lai",
+    "code": "036616",
+    "latitude": 14.365095,
+    "longitude": 108.694488,
+    "name": "Hồ A - TĐ Vĩnh Sơn",
+    "number": "84325036616",
+    "uuid": "170553bd-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "Đập hồ C Thủy điện Vĩnh Sơn",
+    "altitude": null,
+    "area": "Đak Rong",
+    "city": "Gia Lai",
+    "code": "036618",
+    "latitude": 14.424164,
+    "longitude": 108.444031,
+    "name": "Hồ C - TĐ Vĩnh Sơn",
+    "number": "84325036618",
+    "uuid": "1711bab2-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "UBND xã Cư Króa",
+    "altitude": null,
+    "area": "Cư M’ta",
+    "city": "Đắk Lắk",
+    "code": "036608",
+    "latitude": 12.723367,
+    "longitude": 108.793156,
+    "name": "Cư Króa",
+    "number": "84325036608",
+    "uuid": "173316df-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  },
+  {
+    "address": "UBND xã Ea M'Đoal",
+    "altitude": null,
+    "area": "Ea Riêng",
+    "city": "Đắk Lắk",
+    "code": "036606",
+    "latitude": 12.765636,
+    "longitude": 108.889556,
+    "name": "Xã Ea M'doan",
+    "number": "84848957833",
+    "uuid": "17396682-01a1-11f1-8f75-0692ec44dcd5",
+    "waterStationType": null
+  }
+]

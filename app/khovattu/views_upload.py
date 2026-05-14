@@ -37,7 +37,25 @@ class UploadMaterialImageView(APIView):
             image_file = request.FILES['image']
             mo_ta = request.data.get('mo_ta', '')  # Mô tả hình ảnh (tùy chọn)
 
-            # Validate file type
+            # Validate file type using magic bytes
+            image_file.seek(0)
+            header = image_file.read(8)
+            image_file.seek(0)
+
+            is_valid_image = False
+            if header.startswith(b'\xff\xd8\xff'):
+                is_valid_image = True  # JPEG
+            elif header.startswith(b'\x89PNG\r\n\x1a\n'):
+                is_valid_image = True  # PNG
+            elif header.startswith(b'GIF87a') or header.startswith(b'GIF89a'):
+                is_valid_image = True  # GIF
+
+            if not is_valid_image:
+                return Response({
+                    "ok": False,
+                    "error": "File không hợp lệ hoặc bị giả mạo đuôi. Chỉ chấp nhận JPG, PNG, GIF thực sự"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
             if image_file.content_type not in allowed_types:
                 return Response({

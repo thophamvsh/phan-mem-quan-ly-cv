@@ -20,6 +20,7 @@ from .views import (
     VinhSonRealtimeSnapshotViewSet,
 )
 from .sync_views import PreviewGoogleSheetAPIView, SaveGoogleSheetDataAPIView, PreviewGioPhatAPIView, SaveGioPhatAPIView
+from .vrain_views import SyncVrainRainfallAPIView, VrainRealtimeAPIView
 
 app_name = "thongsothuyvan"
 
@@ -48,4 +49,6 @@ urlpatterns = [
     path("manual-entry/", ManualHydrologyDataAPIView.as_view(), name="manual-entry"),
     path("sync-giophat/preview/", PreviewGioPhatAPIView.as_view(), name="sync-giophat-preview"),
     path("sync-giophat/save/", SaveGioPhatAPIView.as_view(), name="sync-giophat-save"),
+    path("sync-vrain/", SyncVrainRainfallAPIView.as_view(), name="sync-vrain"),
+    path("vrain-realtime/", VrainRealtimeAPIView.as_view(), name="vrain-realtime"),
 ]

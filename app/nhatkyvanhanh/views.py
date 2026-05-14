@@ -26,6 +26,7 @@ from .models import (
     SuKien,
     SogiaonhancaHC,
     SogiaonhancaVH,
+    SoAnToanDauGio
 )
 from .serializers import (
     ChiTietSoGiaoNhanCaHCSerializer,
@@ -40,6 +41,7 @@ from .serializers import (
     SogiaonhancaHCSerializer,
     SogiaonhancaVHSerializer,
     user_can_edit_chi_dao,
+    SoAnToanSerializer
 )
 from thongsothuyvan.models import MucnuocQuytrinh, ThongsoSanxuat
 from .permissions import (
@@ -236,7 +238,18 @@ def _is_creator_of_shift_log(user, so):
     return bool(
         user
         and user.is_authenticated
-        and (so.nguoi_tao_id == user.id or (not so.nguoi_tao_id and so.user_giao_ca_id == user.id))
+        and (so.nguoi_tao_id == user.id or so.user_giao_ca_id == user.id)
+    )
+
+
+def _can_create_shift_detail(user, so):
+    return bool(user and user.is_authenticated and so.user_giao_ca_id == user.id)
+
+
+def _can_update_shift_detail(user, so, chi_tiet):
+    return bool(
+        _can_create_shift_detail(user, so)
+        and chi_tiet.nguoi_tao_id == user.id
     )
 
 
@@ -1199,9 +1212,9 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
                 {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc them noi dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if not _is_creator_of_shift_log(request.user, so):
+        if not _can_create_shift_detail(request.user, so):
             return Response(
-                {"detail": "Chi user tao so moi duoc them noi dung chi tiet."},
+                {"detail": "Chi user giao ca moi duoc them noi dung chi tiet."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -1226,18 +1239,17 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
                 {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc cap nhat noi dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if not _is_creator_of_shift_log(request.user, so):
-            return Response(
-                {"detail": "Chi user tao so moi duoc cap nhat noi dung chi tiet."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
             chi_tiet = so.noi_dung_chi_tiets.get(pk=chi_tiet_id)
         except ChiTietSoGiaoNhanCaVH.DoesNotExist:
             return Response(
                 {"detail": "Khong tim thay noi dung chi tiet."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not _can_update_shift_detail(request.user, so, chi_tiet):
+            return Response(
+                {"detail": "Chi user giao ca tao noi dung moi duoc cap nhat noi dung chi tiet."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         if request.method == "DELETE":
@@ -1357,10 +1369,7 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         if _shift_log_locked(serializer.instance):
             raise PermissionDenied("So giao nhan ca da co du 2 chu ky, khong duoc chinh sua.")
-        if not (
-            has_profile_permission(self.request.user, "can_edit_admin_shift_handover_logs")
-            or _is_creator_of_shift_log(self.request.user, serializer.instance)
-        ):
+        if not _is_creator_of_shift_log(self.request.user, serializer.instance):
             raise PermissionDenied("User khong co quyen cap nhat so giao nhan ca hanh chinh.")
         so = serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
@@ -1371,10 +1380,7 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         if _shift_log_locked(instance):
             raise PermissionDenied("So giao nhan ca da co du 2 chu ky, khong duoc xoa.")
-        if not (
-            has_profile_permission(self.request.user, "can_delete_admin_shift_handover_logs")
-            or _is_creator_of_shift_log(self.request.user, instance)
-        ):
+        if not _is_creator_of_shift_log(self.request.user, instance):
             raise PermissionDenied("User khong co quyen xoa so giao nhan ca hanh chinh.")
         return super().perform_destroy(instance)
 
@@ -1406,9 +1412,9 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
                 {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc them noi dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if not _is_creator_of_shift_log(request.user, so):
+        if not _can_create_shift_detail(request.user, so):
             return Response(
-                {"detail": "Chi user tao so moi duoc them noi dung chi tiet."},
+                {"detail": "Chi user giao ca moi duoc them noi dung chi tiet."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -1433,18 +1439,17 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
                 {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc cap nhat noi dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if not _is_creator_of_shift_log(request.user, so):
-            return Response(
-                {"detail": "Chi user tao so moi duoc cap nhat noi dung chi tiet."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
             chi_tiet = so.noi_dung_chi_tiets.get(pk=chi_tiet_id)
         except ChiTietSoGiaoNhanCaHC.DoesNotExist:
             return Response(
                 {"detail": "Khong tim thay noi dung chi tiet."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not _can_update_shift_detail(request.user, so, chi_tiet):
+            return Response(
+                {"detail": "Chi user giao ca tao noi dung moi duoc cap nhat noi dung chi tiet."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         if request.method == "DELETE":
@@ -1549,3 +1554,70 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
             so.save()
         serializer = self.get_serializer(so)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SoAntoanFilterSet(django_filters.FilterSet):
+    ngay_dong_bo_tu = django_filters.DateFilter(field_name="ngay_dong_bo", lookup_expr="gte")
+    ngay_dong_bo_den = django_filters.DateFilter(field_name="ngay_dong_bo", lookup_expr="lte")
+
+    class Meta:
+        model = SoAnToanDauGio
+        fields = ["nha_may", "ngay_dong_bo", "ngay_dong_bo_tu", "ngay_dong_bo_den", "nguoi_dong_bo"]
+
+
+class SoAnToanViewSet(viewsets.ModelViewSet):
+    serializer_class = SoAnToanSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = SoAntoanFilterSet
+    search_fields = [
+        "tinh_trang_an_toan",
+        "nguoi_dong_bo__email",
+        "nguoi_dong_bo__username",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    ]
+    ordering_fields = ["ngay_dong_bo", "created_at", "updated_at"]
+    ordering = ["-ngay_dong_bo", "-created_at"]
+
+    def get_permissions(self):
+        from .permissions import CanCreateOperationLogbooks, CanViewSoAnToanDauGio
+
+        permission_classes = [CanViewSoAnToanDauGio]
+        if self.action == "create":
+            permission_classes = [CanViewSoAnToanDauGio, CanCreateOperationLogbooks]
+
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = SoAnToanDauGio.objects.select_related(
+            "nha_may",
+            "nguoi_dong_bo",
+        ).all()
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def perform_create(self, serializer):
+        item = serializer.save(
+            nguoi_dong_bo=self.request.user,
+            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        )
+        item.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        if not (
+            has_profile_permission(user, "can_edit_so_an_toan_dau_gio")
+            or instance.nguoi_dong_bo_id == user.id
+        ):
+            raise PermissionDenied("Ban khong co quyen chinh sua so an toan dau gio nay.")
+        item = serializer.save()
+        item.save()
+
+    def perform_destroy(self, instance):
+        if not (
+            has_profile_permission(self.request.user, "can_delete_so_an_toan_dau_gio")
+            or instance.nguoi_dong_bo_id == self.request.user.id
+        ):
+            raise PermissionDenied("Ban khong co quyen xoa so an toan dau gio nay.")
+        return super().perform_destroy(instance)

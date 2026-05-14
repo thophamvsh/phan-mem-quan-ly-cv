@@ -258,6 +258,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_view_diesel_operation_logbooks', 'can_create_diesel_operation_logbooks',
                  'can_edit_diesel_operation_logbooks', 'can_delete_diesel_operation_logbooks',
                  'can_view_bchc_song_hinh', 'can_create_bchc_song_hinh', 'can_edit_bchc_song_hinh',
+                 'can_view_so_an_toan_dau_gio', 'can_edit_so_an_toan_dau_gio',
+                 'can_delete_so_an_toan_dau_gio',
                  'can_view_equipment', 'can_create_equipment', 'can_edit_equipment', 'can_delete_equipment',
                  'can_view_operation_parameters', 'can_create_operation_parameters',
                  'can_edit_operation_parameters', 'can_delete_operation_parameters',
@@ -312,11 +314,3 @@ class UserProfileSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """Serializer cho thông tin user cơ bản"""
-    class Meta:
-        model = User
-        fields = ('id', 'email', 'username', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser', 'last_login')
-        read_only_fields = ('id', 'email', 'is_active', 'is_staff', 'is_superuser', 'last_login')

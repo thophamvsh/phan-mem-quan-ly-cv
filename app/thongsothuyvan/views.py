@@ -686,7 +686,9 @@ class RealtimeManualSaveAPIView(APIView):
                 {"error": "Ban khong co quyen cap nhat realtime."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        state, results = save_all_realtime_snapshots(is_manual=True)
+        plant = normalize_plant_code(request.data.get("plant") or "")
+        plants = [plant] if plant else None
+        state, results = save_all_realtime_snapshots(is_manual=True, plants=plants)
         return Response(
             {
                 "state": serialize_realtime_state(state),

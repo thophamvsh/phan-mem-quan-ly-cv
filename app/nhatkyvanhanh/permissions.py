@@ -100,3 +100,7 @@ class CanCreateBCHCSongHinh(UserProfilePermission):
 
 class CanEditBCHCSongHinh(UserProfilePermission):
     permission_name = "can_edit_bchc_song_hinh"
+
+
+class CanViewSoAnToanDauGio(UserProfilePermission):
+    permission_name = "can_view_so_an_toan_dau_gio"

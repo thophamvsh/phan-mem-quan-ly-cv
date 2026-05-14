@@ -111,6 +111,14 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, tạo/đồng bộ và sửa Sổ BCHC Sông Hinh.'
         }),
+        ('Quyền Sổ An Toàn Đầu Giờ', {
+            'fields': (
+                'can_view_so_an_toan_dau_gio',
+                'can_edit_so_an_toan_dau_gio',
+                'can_delete_so_an_toan_dau_gio',
+            ),
+            'description': 'Quyền xem, sửa và xóa Sổ An Toàn Đầu Giờ.'
+        }),
         ('Quyền quản lý thiết bị vận hành', {
             'fields': (
                 'can_view_equipment',
@@ -289,6 +297,14 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_bchc_song_hinh',
             ),
             'description': 'Quyền xem, tạo/đồng bộ và sửa Sổ BCHC Sông Hinh.'
+        }),
+        ('Quyền Sổ An Toàn Đầu Giờ', {
+            'fields': (
+                'can_view_so_an_toan_dau_gio',
+                'can_edit_so_an_toan_dau_gio',
+                'can_delete_so_an_toan_dau_gio',
+            ),
+            'description': 'Quyền xem, sửa và xóa Sổ An Toàn Đầu Giờ.'
         }),
         ('Quyền quản lý thiết bị vận hành', {
             'fields': (
