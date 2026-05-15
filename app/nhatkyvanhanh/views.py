@@ -394,6 +394,20 @@ def _can_delete_weekly_equipment_switch_log(user, item):
     )
 
 
+def _can_edit_weekly_equipment_switch_entry(user, lan):
+    return (
+        has_profile_permission(user, "can_edit_weekly_equipment_switch_logs")
+        or bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+    )
+
+
+def _can_delete_weekly_equipment_switch_entry(user, lan):
+    return (
+        has_profile_permission(user, "can_delete_weekly_equipment_switch_logs")
+        or bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+    )
+
+
 def _get_or_create_latest_khac_phuc(su_kien, nguoi_tao=None):
     latest = su_kien.latest_khac_phuc
     if latest:
@@ -1902,11 +1916,6 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
     )
     def cap_nhat_lan_chuyen_doi(self, request, pk=None, lan_id=None):
         so = self.get_object()
-        if not _can_edit_weekly_equipment_switch_log(request.user, so):
-            return Response(
-                {"detail": "Ban khong co quyen cap nhat lan chuyen doi thiet bi."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         try:
             lan = so.lan_chuyen_dois.get(pk=lan_id)
         except LanChuyenDoiThietBi.DoesNotExist:
@@ -1916,9 +1925,20 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
             )
 
         if request.method == "DELETE":
+            if not _can_delete_weekly_equipment_switch_entry(request.user, lan):
+                return Response(
+                    {"detail": "Ban khong co quyen xoa lan chuyen doi thiet bi nay."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             lan.delete()
             response_serializer = self.get_serializer(so)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+        if not _can_edit_weekly_equipment_switch_entry(request.user, lan):
+            return Response(
+                {"detail": "Ban khong co quyen cap nhat lan chuyen doi thiet bi nay."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         lan_serializer = LanChuyenDoiThietBiSerializer(
             lan,
