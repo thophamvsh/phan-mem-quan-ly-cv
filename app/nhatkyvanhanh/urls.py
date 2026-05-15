@@ -3,7 +3,9 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     NhatKySuKienViewSet,
+    MauChuyenDoiThietBiViewSet,
     SoBCHCSongHinhViewSet,
+    SoChuyenDoiThietBiTuanViewSet,
     SonhatkyvanhanhDieselViewSet,
     SonhatkyvanhanhViewSet,
     SogiaonhancaHCViewSet,
@@ -21,6 +23,8 @@ router.register(r"so-bchc-song-hinh", SoBCHCSongHinhViewSet, basename="sobchcson
 router.register(r"so-giao-nhan-ca-vh", SogiaonhancaVHViewSet, basename="sogiaonhancavh")
 router.register(r"so-giao-nhan-ca-hc", SogiaonhancaHCViewSet, basename="sogiaonhancahc")
 router.register(r"so-an-toan-dau-gio", SoAnToanViewSet, basename="soantoadaugio")
+router.register(r"mau-chuyen-doi-thiet-bi", MauChuyenDoiThietBiViewSet, basename="mauchuyendoithietbi")
+router.register(r"so-chuyen-doi-thiet-bi-tuan", SoChuyenDoiThietBiTuanViewSet, basename="sochuyendoithietbituan")
 
 urlpatterns = [
     path("", include(router.urls)),

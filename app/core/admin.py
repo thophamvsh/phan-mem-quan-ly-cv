@@ -94,6 +94,15 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
+        ('Quyen so chuyen doi thiet bi tuan', {
+            'fields': (
+                'can_view_weekly_equipment_switch_logs',
+                'can_create_weekly_equipment_switch_logs',
+                'can_edit_weekly_equipment_switch_logs',
+                'can_delete_weekly_equipment_switch_logs',
+            ),
+            'description': 'Quyen xem, tao, sua va xoa So chuyen doi thiet bi tuan.'
+        }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
                 'can_view_diesel_operation_logbooks',
@@ -280,6 +289,15 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_delete_operation_logbooks',
             ),
             'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
+        }),
+        ('Quyen so chuyen doi thiet bi tuan', {
+            'fields': (
+                'can_view_weekly_equipment_switch_logs',
+                'can_create_weekly_equipment_switch_logs',
+                'can_edit_weekly_equipment_switch_logs',
+                'can_delete_weekly_equipment_switch_logs',
+            ),
+            'description': 'Quyen xem, tao, sua va xoa So chuyen doi thiet bi tuan.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (

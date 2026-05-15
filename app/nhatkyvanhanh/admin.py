@@ -3,10 +3,14 @@ from django.contrib import admin
 from .models import (
     ChiTietSoGiaoNhanCaHC,
     ChiTietSoGiaoNhanCaVH,
+    ChiTietChuyenDoiThietBi,
     DienBienSuKien,
     KhacPhucSuKien,
+    LanChuyenDoiThietBi,
+    MauChuyenDoiThietBi,
     NguoiTrucSoGiaoNhanCaHC,
     SoBCHCSongHinh,
+    SoChuyenDoiThietBiTuan,
     Sonhatkyvanhanh,
     SonhatkyvanhanhDiesel,
     SuKien,
@@ -43,6 +47,19 @@ class ChiTietSoGiaoNhanCaHCInline(admin.TabularInline):
 class NguoiTrucSoGiaoNhanCaHCInline(admin.TabularInline):
     model = NguoiTrucSoGiaoNhanCaHC
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+    extra = 0
+
+
+class ChiTietChuyenDoiThietBiInline(admin.TabularInline):
+    model = ChiTietChuyenDoiThietBi
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("thiet_bi",)
+    extra = 0
+
+
+class LanChuyenDoiThietBiInline(admin.TabularInline):
+    model = LanChuyenDoiThietBi
+    readonly_fields = ("nguoi_thuc_hien", "created_at", "updated_at")
     extra = 0
 
 
@@ -332,3 +349,53 @@ class SoAnToanDauGioAdmin(admin.ModelAdmin):
 
     co_chu_ky.boolean = True
     co_chu_ky.short_description = "Co chu ky"
+
+
+@admin.register(MauChuyenDoiThietBi)
+class MauChuyenDoiThietBiAdmin(admin.ModelAdmin):
+    list_display = (
+        "nha_may",
+        "to_may",
+        "nhom_thiet_bi",
+        "thiet_bi",
+        "thu_tu",
+        "dang_su_dung",
+    )
+    list_filter = ("nha_may", "to_may", "dang_su_dung")
+    search_fields = (
+        "nhom_thiet_bi",
+        "thiet_bi__ten",
+        "thiet_bi__ma_day_du",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    )
+    autocomplete_fields = ("thiet_bi",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(LanChuyenDoiThietBi)
+class LanChuyenDoiThietBiAdmin(admin.ModelAdmin):
+    list_display = ("so", "thoi_gian", "nguoi_thuc_hien", "created_at")
+    list_filter = ("thoi_gian", "created_at", "so__nha_may")
+    search_fields = (
+        "ghi_chu_chung",
+        "nguoi_thuc_hien__email",
+        "nguoi_thuc_hien__username",
+    )
+    readonly_fields = ("nguoi_thuc_hien", "created_at", "updated_at")
+    inlines = [ChiTietChuyenDoiThietBiInline]
+
+
+@admin.register(SoChuyenDoiThietBiTuan)
+class SoChuyenDoiThietBiTuanAdmin(admin.ModelAdmin):
+    list_display = ("nam", "tuan", "ca_truc", "tuan_bat_dau", "tuan_ket_thuc", "nha_may", "nguoi_tao", "created_at")
+    list_filter = ("nam", "tuan", "ca_truc", "nha_may", "created_at")
+    search_fields = (
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+        "ca_truc",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    )
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+    inlines = [LanChuyenDoiThietBiInline]
