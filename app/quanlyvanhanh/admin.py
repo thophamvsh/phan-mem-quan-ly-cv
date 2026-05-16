@@ -8,7 +8,7 @@ from import_export import resources, fields, widgets
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget, DateWidget, IntegerWidget, DecimalWidget
 from import_export.formats import base_formats
-from datetime import datetime
+from datetime import date, datetime, timedelta
 import tablib
 import io
 import zipfile
@@ -31,10 +31,29 @@ class FlexibleDateWidget(widgets.Widget):
         if not value or value == '' or str(value).strip() == '':
             return None
 
+        if isinstance(value, datetime):
+            return value.date()
+
+        if isinstance(value, date):
+            return value
+
+        try:
+            normalized_number = str(value).strip().replace(".", "", 1)
+            if isinstance(value, (int, float)) or normalized_number.isdigit():
+                serial = float(value)
+                if serial > 0:
+                    return (datetime(1899, 12, 30) + timedelta(days=serial)).date()
+        except (TypeError, ValueError, OverflowError):
+            pass
+
         # Danh sách các format có thể
         date_formats = [
             '%Y-%m-%d',      # 2023-12-25
+            '%Y-%m-%d %H:%M:%S',  # 2023-12-25 00:00:00
+            '%Y-%m-%d %H:%M',     # 2023-12-25 00:00
             '%d/%m/%Y',      # 25/12/2023
+            '%d/%m/%Y %H:%M:%S',  # 25/12/2023 00:00:00
+            '%d/%m/%Y %H:%M',     # 25/12/2023 00:00
             '%d-%m-%Y',      # 25-12-2023
             '%m/%d/%Y',      # 12/25/2023
             '%d.%m.%Y',      # 25.12.2023
@@ -177,6 +196,39 @@ class SafeExportChangeListMixin:
             list_editable,
             self,                    # model_admin
             sortable_by=sortable_by, # kwarg tuỳ chọn, OK ở 3.2
+        )
+        return cl.get_queryset(request)
+
+    search_help_text = ""
+
+    def get_export_queryset(self, request):
+        from django.contrib.admin.views.main import ChangeList
+
+        list_display = self.get_list_display(request)
+        list_display_links = self.get_list_display_links(request, list_display)
+        list_filter = self.get_list_filter(request)
+        search_fields = self.get_search_fields(request)
+        list_select_related = self.get_list_select_related(request)
+        list_editable = getattr(self, "list_editable", ())
+        list_per_page = getattr(self, "list_per_page", 100)
+        list_max_show_all = getattr(self, "list_max_show_all", 200)
+        sortable_by = getattr(self, "sortable_by", None)
+        date_hierarchy = getattr(self, "date_hierarchy", None)
+
+        cl = ChangeList(
+            request,
+            self.model,
+            list_display,
+            list_display_links,
+            list_filter,
+            date_hierarchy,
+            search_fields,
+            list_select_related,
+            list_per_page,
+            list_max_show_all,
+            list_editable,
+            self,
+            sortable_by,
         )
         return cl.get_queryset(request)
 
@@ -569,10 +621,10 @@ def format_datetime_24h(dt_field_name, description=None):
 # ===================== ADMINS =====================
 
 @admin.register(ThietBi)
-class ThietBiAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
+class ThietBiAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = ThietBiResource
-    list_display = ['hinh_anh_thumbnail', 'ma_day_du', 'ten', 'loai', 'trang_thai', 'nha_che_tao', 'ngay_lap_dat_24h', 'ngay_dua_vao_van_hanh_24h', 'cap', 'thu_tu', 'do_uu_tien']
-    # list_filter = ['loai', 'trang_thai', 'nha_che_tao', 'nha_cung_cap', 'cap', 'ngay_lap_dat', 'ngay_dua_vao_van_hanh']
+    list_display = ['hinh_anh_thumbnail', 'ma_day_du', 'ten', 'nha_may', 'loai', 'trang_thai', 'nha_che_tao', 'ngay_lap_dat_24h', 'ngay_dua_vao_van_hanh_24h', 'cap', 'thu_tu', 'do_uu_tien']
+    list_filter = ['nha_may']
     search_fields = ['ten', 'ma', 'ma_day_du', 'so_serial', 'ma_van_hanh', 'bo_phan_quan_ly', 'bang_ve']
     list_editable = ['thu_tu', 'do_uu_tien']
     ordering = ['cha__id', 'thu_tu', 'ten']
