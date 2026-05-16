@@ -495,6 +495,7 @@ class NhatKySuKienFilterSet(django_filters.FilterSet):
         model = SuKien
         fields = [
             "nha_may",
+            "thiet_bi",
             "id",
             "loai",
             "trang_thai",
@@ -513,6 +514,8 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
     filterset_class = NhatKySuKienFilterSet
     search_fields = [
         "ten_he_thong_thiet_bi",
+        "thiet_bi__ten",
+        "thiet_bi__ma_day_du",
         "hien_tuong_dien_bien",
         "phan_tich_nguyen_nhan",
         "bao_cho",
@@ -551,6 +554,7 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         queryset = (
             SuKien.objects.select_related(
                 "nha_may",
+                "thiet_bi",
                 "nguoi_tao",
                 "nguoi_chi_dao",
                 "ben_ghi_nhan_su_kien",

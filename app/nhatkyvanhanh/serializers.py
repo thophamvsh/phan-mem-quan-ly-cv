@@ -3,6 +3,8 @@ import unicodedata
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
+from core.factory_scope import filter_queryset_by_factory
+from quanlyvanhanh.models import ThietBi
 from .models import (
     ChiTietSoGiaoNhanCaHC,
     ChiTietSoGiaoNhanCaVH,
@@ -167,6 +169,14 @@ class KhacPhucSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
 
 class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    ten_he_thong_thiet_bi = serializers.CharField(required=False, allow_blank=True)
+    thiet_bi = serializers.PrimaryKeyRelatedField(
+        required=False,
+        allow_null=True,
+        queryset=ThietBi.objects.all(),
+    )
+    thiet_bi_ten = serializers.CharField(source="thiet_bi.ten", read_only=True)
+    thiet_bi_ma_day_du = serializers.CharField(source="thiet_bi.ma_day_du", read_only=True)
     qua_trinh_xu_ly = serializers.CharField(required=False, allow_blank=True)
     thoi_gian_xu_ly = serializers.DateTimeField(required=False, allow_null=True)
     ket_qua_kiem_tra_nguyen_nhan = serializers.CharField(required=False, allow_blank=True)
@@ -211,6 +221,9 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may_code",
             "nha_may_name",
             "thoi_gian_xay_ra",
+            "thiet_bi",
+            "thiet_bi_ten",
+            "thiet_bi_ma_day_du",
             "ten_he_thong_thiet_bi",
             "loai",
             "hien_tuong_dien_bien",
@@ -256,6 +269,8 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
         read_only_fields = [
             "nha_may_code",
             "nha_may_name",
+            "thiet_bi_ten",
+            "thiet_bi_ma_day_du",
             "can_edit_chi_dao",
             "nguoi_tao",
             "nguoi_tao_display",
@@ -285,6 +300,33 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
     def validate(self, attrs):
         instance = getattr(self, "instance", None)
+        request = self.context.get("request")
+        current_user = getattr(request, "user", None)
+        thiet_bi = attrs.get("thiet_bi", getattr(instance, "thiet_bi", None))
+        ten_he_thong_thiet_bi = attrs.get(
+            "ten_he_thong_thiet_bi",
+            getattr(instance, "ten_he_thong_thiet_bi", ""),
+        )
+
+        if thiet_bi and current_user:
+            allowed = filter_queryset_by_factory(
+                ThietBi.objects.filter(pk=thiet_bi.pk),
+                current_user,
+                "nha_may",
+                "string",
+            ).exists()
+            if not allowed:
+                raise serializers.ValidationError(
+                    {"thiet_bi": "Ban khong co quyen chon thiet bi cua nha may nay."}
+                )
+
+        if thiet_bi:
+            attrs["ten_he_thong_thiet_bi"] = self._get_thiet_bi_snapshot(thiet_bi)
+        elif not str(ten_he_thong_thiet_bi or "").strip():
+            raise serializers.ValidationError(
+                {"ten_he_thong_thiet_bi": "Can chon thiet bi hoac nhap ten he thong thiet bi."}
+            )
+
         trang_thai = attrs.get("trang_thai", getattr(instance, "trang_thai", None))
         ben_ghi_nhan_su_kien = attrs.get(
             "ben_ghi_nhan_su_kien",
@@ -318,6 +360,9 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
                     {"chi_dao": "Chi lanh dao moi duoc cap nhat noi dung chi dao."}
                 )
         return attrs
+
+    def _get_thiet_bi_snapshot(self, thiet_bi):
+        return f"{thiet_bi.ma_day_du} - {thiet_bi.ten}".strip()
 
     def create(self, validated_data):
         self._apply_chi_dao_signature(validated_data)

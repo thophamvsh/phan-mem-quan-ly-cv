@@ -47,6 +47,14 @@ class SuKien(TimestampedUUIDModel):
         blank=True,
         verbose_name="Nha may",
     )
+    thiet_bi = models.ForeignKey(
+        "quanlyvanhanh.ThietBi",
+        on_delete=models.PROTECT,
+        related_name="su_kiens",
+        null=True,
+        blank=True,
+        verbose_name="Thiet bi lien quan",
+    )
     ten_he_thong_thiet_bi = models.CharField(max_length=255)
     loai = models.CharField(
         max_length=32,

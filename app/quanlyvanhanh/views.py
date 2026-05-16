@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from  rest_framework import viewsets, filters, status
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count
 from django.http import HttpResponse
@@ -23,6 +24,12 @@ from .serializers import (
     ThongSoVanHanhCreateSerializer, AnToanThietBiSerializer, DinhKemSerializer,
     ThongSoToMaySerializer, ThongSoToMayCreateSerializer
 )
+
+
+class ThietBiPageNumberPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'limit'
+    max_page_size = 200
 
 
 def _ensure_thiet_bi_access(user, thiet_bi):
@@ -53,9 +60,10 @@ class ThietBiViewSet(viewsets.ModelViewSet):
     """ViewSet cho quản lý thiết bị"""
     queryset = ThietBi.objects.all()
     serializer_class = ThietBiSerializer
+    pagination_class = ThietBiPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['loai', 'trang_thai', 'nha_che_tao', 'nha_cung_cap', 'cap', 'cha']
-    search_fields = ['ten', 'ma', 'ma_day_du', 'so_serial', 'mo_ta_ky_thuat']
+    search_fields = ['ten', 'ma', 'ma_day_du', 'ma_van_hanh', 'so_serial', 'mo_ta_ky_thuat']
     ordering_fields = ['ten', 'ma_day_du', 'thu_tu', 'do_uu_tien', 'cap']
     ordering = ['cha__id', 'thu_tu', 'ten']
 
@@ -104,6 +112,39 @@ class ThietBiViewSet(viewsets.ModelViewSet):
 
         # Lấy search parameter từ query params
         search_param = self.request.query_params.get('q', None)
+        if search_param:
+            search_param = str(search_param).strip()
+
+        if search_param:
+            tokens = [token for token in search_param.replace('.', ' ').split() if token]
+            search_query = (
+                Q(ten__icontains=search_param)
+                | Q(ma__icontains=search_param)
+                | Q(ma_day_du__icontains=search_param)
+                | Q(ma_day_du__istartswith=search_param)
+                | Q(ma_van_hanh__icontains=search_param)
+                | Q(so_serial__icontains=search_param)
+                | Q(mo_ta_ky_thuat__icontains=search_param)
+                | Q(nha_che_tao__icontains=search_param)
+                | Q(nha_cung_cap__icontains=search_param)
+                | Q(nha_may__icontains=search_param)
+                | Q(nuoc_san_xuat__icontains=search_param)
+            )
+
+            if not tokens:
+                queryset = queryset.filter(search_query).distinct()
+
+            for token in tokens:
+                token_query = (
+                    Q(ten__icontains=token)
+                    | Q(ma__icontains=token)
+                    | Q(ma_day_du__icontains=token)
+                    | Q(ma_van_hanh__icontains=token)
+                    | Q(so_serial__icontains=token)
+                )
+                queryset = queryset.filter(token_query)
+
+            return queryset
 
         if search_param:
             # Kiểm tra xem có phải là filter cascade không (có dấu chấm và >= 3 parts)
@@ -116,7 +157,7 @@ class ThietBiViewSet(viewsets.ModelViewSet):
                 # Filter cascade: tìm thiết bị có ma_day_du bắt đầu với search_param
                 # hoặc chính xác bằng search_param
                 queryset = queryset.filter(
-                    Q(ma_day_du__startswith=search_param) | Q(ma_day_du=search_param)
+                    Q(ma_day_du__istartswith=search_param) | Q(ma_day_du__iexact=search_param)
                 )
             else:
                 # Search keyword: tìm kiếm linh hoạt trong nhiều trường
