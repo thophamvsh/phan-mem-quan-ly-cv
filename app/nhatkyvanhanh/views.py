@@ -312,8 +312,62 @@ def _dong_bo_chu_ky_so_giao_nhan(so, current_user=None):
     so.dong_bo_chu_ky_tu_user()
 
 
+def _get_user_display_name(user):
+    if not user:
+        return ""
+    full_name = f"{user.first_name} {user.last_name}".strip()
+    return full_name or user.username or user.email or ""
+
+
+def _append_unique_name(names, value):
+    value = str(value or "").strip()
+    if value and value not in names:
+        names.append(value)
+
+
+def _build_admin_shift_duty_display(so_hc):
+    names = []
+    _append_unique_name(names, _get_user_display_name(so_hc.user_giao_ca))
+    for person in so_hc.nguoi_truc_chi_tiets.all():
+        _append_unique_name(names, person.ten_nguoi_truc)
+    for value in (so_hc.nguoi_truc, so_hc.nguoi_truc_2, so_hc.nguoi_truc_3):
+        _append_unique_name(names, value)
+    return ", ".join(names)
+
+
+def _find_overlapping_admin_shift_log(so_vh):
+    if not so_vh.thoi_gian_bat_dau_ca or not so_vh.thoi_gian_giao_ca:
+        return None
+
+    queryset = (
+        SogiaonhancaHC.objects.select_related("user_giao_ca")
+        .prefetch_related("nguoi_truc_chi_tiets")
+        .filter(
+            thoi_gian_bat_dau_ca__isnull=False,
+            thoi_gian_bat_dau_ca__lte=so_vh.thoi_gian_giao_ca,
+            thoi_gian_giao_ca__gte=so_vh.thoi_gian_bat_dau_ca,
+        )
+    )
+    if so_vh.nha_may_id:
+        queryset = queryset.filter(nha_may_id=so_vh.nha_may_id)
+    return queryset.order_by("-ngay_truc", "-thoi_gian_bat_dau_ca", "-created_at").first()
+
+
+def _sync_truc_ktvh_from_admin_shift_log(so_vh):
+    so_hc = _find_overlapping_admin_shift_log(so_vh)
+    if not so_hc:
+        return so_vh
+
+    so_vh.truc_ktvh = _build_admin_shift_duty_display(so_hc)
+    return so_vh
+
+
 def _shift_log_locked(so):
     return bool(so.giao_ca_ky_at and so.nhan_ca_ky_at)
+
+
+def _shift_log_received(so):
+    return bool(so.nhan_ca_ky_at)
 
 
 def _is_creator_of_shift_log(user, so):
@@ -1273,6 +1327,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
             nguoi_tao=self.request.user,
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
         )
+        _sync_truc_ktvh_from_admin_shift_log(so)
         _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
         so.save()
 
@@ -1284,6 +1339,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         so = serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
         )
+        _sync_truc_ktvh_from_admin_shift_log(so)
         _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
         so.save()
 
@@ -1477,8 +1533,8 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
         so.save()
 
     def perform_update(self, serializer):
-        if _shift_log_locked(serializer.instance):
-            raise PermissionDenied("So giao nhan ca da co du 2 chu ky, khong duoc chinh sua.")
+        if _shift_log_received(serializer.instance):
+            raise PermissionDenied("So giao nhan ca da duoc ky nhan, khong duoc chinh sua.")
         if not _is_creator_of_shift_log(self.request.user, serializer.instance):
             raise PermissionDenied("User khong co quyen cap nhat so giao nhan ca hanh chinh.")
         so = serializer.save(
@@ -1488,8 +1544,8 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
         so.save()
 
     def perform_destroy(self, instance):
-        if _shift_log_locked(instance):
-            raise PermissionDenied("So giao nhan ca da co du 2 chu ky, khong duoc xoa.")
+        if _shift_log_received(instance):
+            raise PermissionDenied("So giao nhan ca da duoc ky nhan, khong duoc xoa.")
         if not _is_creator_of_shift_log(self.request.user, instance):
             raise PermissionDenied("User khong co quyen xoa so giao nhan ca hanh chinh.")
         return super().perform_destroy(instance)
@@ -1517,9 +1573,9 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="noi-dung-chi-tiet")
     def tao_noi_dung_chi_tiet(self, request, pk=None):
         so = self.get_object()
-        if _shift_log_locked(so):
+        if _shift_log_received(so):
             return Response(
-                {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc them noi dung."},
+                {"detail": "So giao nhan ca da duoc ky nhan, khong duoc them noi dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not _can_create_shift_detail(request.user, so):
@@ -1544,9 +1600,9 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     )
     def cap_nhat_noi_dung_chi_tiet(self, request, pk=None, chi_tiet_id=None):
         so = self.get_object()
-        if _shift_log_locked(so):
+        if _shift_log_received(so):
             return Response(
-                {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc cap nhat noi dung."},
+                {"detail": "So giao nhan ca da duoc ky nhan, khong duoc cap nhat noi dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
@@ -1581,9 +1637,9 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="nguoi-truc-chi-tiet")
     def tao_nguoi_truc_chi_tiet(self, request, pk=None):
         so = self.get_object()
-        if _shift_log_locked(so):
+        if _shift_log_received(so):
             return Response(
-                {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc them nguoi truc."},
+                {"detail": "So giao nhan ca da duoc ky nhan, khong duoc them nguoi truc."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not _is_creator_of_shift_log(request.user, so):
@@ -1608,9 +1664,9 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
     )
     def cap_nhat_nguoi_truc_chi_tiet(self, request, pk=None, nguoi_truc_id=None):
         so = self.get_object()
-        if _shift_log_locked(so):
+        if _shift_log_received(so):
             return Response(
-                {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc cap nhat nguoi truc."},
+                {"detail": "So giao nhan ca da duoc ky nhan, khong duoc cap nhat nguoi truc."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not _is_creator_of_shift_log(request.user, so):
