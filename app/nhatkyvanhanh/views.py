@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Count, OuterRef, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 import django_filters
 import unicodedata
@@ -13,7 +13,12 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
+from core.factory_scope import (
+    apply_request_factory_to_serializer,
+    filter_queryset_by_factory,
+    get_user_factory,
+    has_all_factory_access,
+)
 from khovattu.models import Bang_nha_may
 from quanlyvanhanh.models import ThietBi
 from .models import (
@@ -107,7 +112,75 @@ def _factory_from_dashboard_param(value):
 
     normalized = _normalize_factory_query_value(value)
     factory_code = HYDROLOGY_FACTORY_CODES.get(normalized, str(value).strip())
-    return Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
+    factory = Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
+    if factory:
+        return factory
+
+    for item in Bang_nha_may.objects.all():
+        item_code = _normalize_factory_query_value(item.ma_nha_may)
+        item_name = _normalize_factory_query_value(item.ten_nha_may)
+        if normalized in {item_code, item_name} or normalized in item_name:
+            return item
+
+    return None
+
+
+def _factory_ids_from_dashboard_param(value):
+    if not value:
+        return []
+
+    normalized = _normalize_factory_query_value(value)
+    factory_code = HYDROLOGY_FACTORY_CODES.get(normalized, str(value).strip())
+    matched_ids = set(
+        Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).values_list(
+            "id",
+            flat=True,
+        )
+    )
+
+    for item in Bang_nha_may.objects.all():
+        item_code = _normalize_factory_query_value(item.ma_nha_may)
+        item_name = _normalize_factory_query_value(item.ten_nha_may)
+        if normalized in {item_code, item_name} or normalized in item_name:
+            matched_ids.add(item.id)
+        if normalized == "songhinh" and (item_code == "sh" or "songhinh" in item_name):
+            matched_ids.add(item.id)
+
+    return list(matched_ids)
+
+
+def _is_song_hinh_factory(factory):
+    if not factory:
+        return False
+
+    code = _normalize_factory_query_value(factory.ma_nha_may)
+    name = _normalize_factory_query_value(factory.ten_nha_may)
+    return code == "sh" or "songhinh" in name
+
+
+def _is_song_hinh_dashboard_param(value):
+    normalized = _normalize_factory_query_value(value)
+    return normalized in {"songhinh", "sh"}
+
+
+def _normalize_event_status(value):
+    normalized = _normalize_factory_query_value(value)
+    if normalized in {"dangxuly", "dangxulyxong"}:
+        return SuKien.TrangThaiXuLy.DANG_XU_LY
+    if normalized in {"xulyxong", "daxuly", "hoanthanh"}:
+        return SuKien.TrangThaiXuLy.XU_LY_XONG
+    if normalized in {"chuaxuly", "chuaxulyxong", "choxuly", "chua"}:
+        return SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG
+    return value
+
+
+def _normalize_event_type(value):
+    normalized = _normalize_factory_query_value(value)
+    if normalized in {"suco", "sukien"}:
+        return SuKien.LoaiSuKien.SU_CO
+    if normalized in {"khiemkhuyet", "khuyetdiem", "khiemkhuyetthietbi"}:
+        return SuKien.LoaiSuKien.KHIEM_KHUYET
+    return value
 
 
 def _get_song_hinh_factory():
@@ -547,11 +620,15 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
+        queryset = self._build_event_queryset()
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def _build_event_queryset(self):
         latest_khac_phuc = KhacPhucSuKien.objects.filter(
             su_kien_id=OuterRef("pk")
         ).order_by("-thoi_gian_xu_ly", "-created_at")
 
-        queryset = (
+        return (
             SuKien.objects.select_related(
                 "nha_may",
                 "thiet_bi",
@@ -572,7 +649,6 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
             )
             .distinct()
         )
-        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
 
     def perform_create(self, serializer):
         serializer.save(
@@ -620,18 +696,41 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
             )
 
         year = int(request.query_params.get("year") or target_date.year)
-        factory = _factory_from_dashboard_param(request.query_params.get("nhamay"))
+        nhamay_param = request.query_params.get("nhamay")
+        factory = _factory_from_dashboard_param(nhamay_param)
+        factory_ids = _factory_ids_from_dashboard_param(nhamay_param)
         loai = request.query_params.get("loai")
+        scope = request.query_params.get("scope") or "ytd"
 
-        events_qs = self.filter_queryset(self.get_queryset()).filter(
-            thoi_gian_xay_ra__year=year,
-        )
+        events_qs = self._build_event_queryset()
+        if scope != "all":
+            events_qs = events_qs.filter(
+                thoi_gian_xay_ra__date__gte=datetime(year, 1, 1).date(),
+            )
+            if scope != "year":
+                events_qs = events_qs.filter(thoi_gian_xay_ra__date__lte=target_date)
         logbooks_qs = Sonhatkyvanhanh.objects.all()
 
-        if factory:
-            events_qs = events_qs.filter(nha_may=factory)
-            logbooks_qs = logbooks_qs.filter(nha_may=factory)
+        if factory_ids:
+            factory_query = Q(nha_may_id__in=factory_ids)
+            if _is_song_hinh_factory(factory) or _is_song_hinh_dashboard_param(nhamay_param):
+                factory_query |= Q(nha_may__isnull=True)
+            if not has_all_factory_access(request.user):
+                user_factory = get_user_factory(request.user)
+                if not user_factory or user_factory.id not in factory_ids:
+                    events_qs = events_qs.none()
+                else:
+                    events_qs = events_qs.filter(factory_query)
+            else:
+                events_qs = events_qs.filter(factory_query)
+            logbooks_qs = logbooks_qs.filter(nha_may_id__in=factory_ids)
         else:
+            events_qs = filter_queryset_by_factory(
+                events_qs,
+                request.user,
+                "nha_may",
+                "fk",
+            )
             logbooks_qs = filter_queryset_by_factory(
                 logbooks_qs,
                 request.user,
@@ -639,19 +738,46 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
                 "fk",
             )
 
-        if loai in dict(SuKien.LoaiSuKien.choices):
-            events_qs = events_qs.filter(loai=loai)
-
-        status_counts = {
+        base_status_counts = {
             SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG: 0,
             SuKien.TrangThaiXuLy.DANG_XU_LY: 0,
             SuKien.TrangThaiXuLy.XU_LY_XONG: 0,
         }
+        base_type_counts = {
+            SuKien.LoaiSuKien.SU_CO: 0,
+            SuKien.LoaiSuKien.KHIEM_KHUYET: 0,
+        }
+        status_by_type = {
+            event_type: dict(base_status_counts)
+            for event_type in base_type_counts.keys()
+        }
+
         for item in events_qs.values("trang_thai").annotate(total=Count("id")):
-            status_counts[item["trang_thai"]] = item["total"]
+            status = _normalize_event_status(item["trang_thai"])
+            if status in base_status_counts:
+                base_status_counts[status] += item["total"]
+
+        for item in events_qs.values("loai").annotate(total=Count("id")):
+            event_type = _normalize_event_type(item["loai"])
+            if event_type in base_type_counts:
+                base_type_counts[event_type] += item["total"]
+
+        for item in events_qs.values("loai", "trang_thai").annotate(total=Count("id")):
+            event_type = _normalize_event_type(item["loai"])
+            status = _normalize_event_status(item["trang_thai"])
+            if event_type in status_by_type and status in status_by_type[event_type]:
+                status_by_type[event_type][status] += item["total"]
+
+        filtered_events_qs = events_qs
+        if loai in dict(SuKien.LoaiSuKien.choices):
+            filtered_events_qs = events_qs.filter(loai=loai)
+
+        selected_status_counts = dict(base_status_counts)
+        if loai in status_by_type:
+            selected_status_counts = dict(status_by_type[loai])
 
         open_events = (
-            events_qs.filter(
+            filtered_events_qs.filter(
                 trang_thai__in=[
                     SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
                     SuKien.TrangThaiXuLy.DANG_XU_LY,
@@ -670,9 +796,25 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
                 "operation_log_count": operation_log_count,
                 "has_operation_log": operation_log_count > 0,
                 "status_counts": {
-                    "chua_xu_ly_xong": status_counts[SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG],
-                    "dang_xu_ly": status_counts[SuKien.TrangThaiXuLy.DANG_XU_LY],
-                    "xu_ly_xong": status_counts[SuKien.TrangThaiXuLy.XU_LY_XONG],
+                    "chua_xu_ly_xong": selected_status_counts[SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG],
+                    "dang_xu_ly": selected_status_counts[SuKien.TrangThaiXuLy.DANG_XU_LY],
+                    "xu_ly_xong": selected_status_counts[SuKien.TrangThaiXuLy.XU_LY_XONG],
+                },
+                "type_counts": {
+                    "su_co": base_type_counts[SuKien.LoaiSuKien.SU_CO],
+                    "khiem_khuyet": base_type_counts[SuKien.LoaiSuKien.KHIEM_KHUYET],
+                },
+                "status_by_type": {
+                    "su_co": {
+                        "chua_xu_ly_xong": status_by_type[SuKien.LoaiSuKien.SU_CO][SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG],
+                        "dang_xu_ly": status_by_type[SuKien.LoaiSuKien.SU_CO][SuKien.TrangThaiXuLy.DANG_XU_LY],
+                        "xu_ly_xong": status_by_type[SuKien.LoaiSuKien.SU_CO][SuKien.TrangThaiXuLy.XU_LY_XONG],
+                    },
+                    "khiem_khuyet": {
+                        "chua_xu_ly_xong": status_by_type[SuKien.LoaiSuKien.KHIEM_KHUYET][SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG],
+                        "dang_xu_ly": status_by_type[SuKien.LoaiSuKien.KHIEM_KHUYET][SuKien.TrangThaiXuLy.DANG_XU_LY],
+                        "xu_ly_xong": status_by_type[SuKien.LoaiSuKien.KHIEM_KHUYET][SuKien.TrangThaiXuLy.XU_LY_XONG],
+                    },
                 },
                 "open_events": serializer.data,
             }

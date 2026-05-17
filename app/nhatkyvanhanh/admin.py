@@ -67,6 +67,7 @@ class LanChuyenDoiThietBiInline(admin.TabularInline):
 class SuKienAdmin(admin.ModelAdmin):
     list_display = (
         "ten_he_thong_thiet_bi",
+        "nha_may",
         "thoi_gian_xay_ra",
         "loai",
         "trang_thai",
@@ -74,13 +75,15 @@ class SuKienAdmin(admin.ModelAdmin):
         "nguoi_tao",
         "created_at",
     )
-    list_filter = ("loai", "trang_thai", "thoi_gian_xay_ra", "created_at")
+    list_filter = ("nha_may", "loai", "trang_thai", "thoi_gian_xay_ra", "created_at")
     search_fields = (
         "ten_he_thong_thiet_bi",
         "hien_tuong_dien_bien",
         "chi_dao",
         "nguoi_chi_dao__email",
         "bao_cho",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
         "ben_ghi_nhan_su_kien__email",
         "nguoi_tao__email",
     )

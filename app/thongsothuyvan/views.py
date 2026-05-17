@@ -2,7 +2,7 @@ import base64
 import io
 import json
 import os
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -334,6 +334,140 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
         if not user_can_modify_hydrology_object(self.request.user, instance):
             raise PermissionDenied("Ban chi duoc xoa du lieu do chinh ban cap nhat.")
         instance.delete()
+
+
+def get_year_offset_date(value, offset):
+    if not value:
+        return None
+
+    try:
+        return value.replace(year=value.year - offset)
+    except ValueError:
+        return value.replace(year=value.year - offset, day=28)
+
+
+def get_quarter_bounds(value):
+    if not value:
+        return None, None
+
+    start_month = ((value.month - 1) // 3) * 3 + 1
+    return date(value.year, start_month, 1), value
+
+
+def add_record(record_map, record):
+    if record:
+        record_map[record.id] = record
+
+
+def add_queryset_records(record_map, queryset):
+    for record in queryset:
+        add_record(record_map, record)
+
+
+def get_latest_record_before(plant, target_date=None):
+    queryset = ThongsoSanxuat.objects.filter(nha_may=plant)
+    if target_date:
+        queryset = queryset.filter(thoi_gian__date__lte=target_date)
+    return queryset.order_by("-thoi_gian").first()
+
+
+def get_latest_record_in_month(plant, target_date):
+    if not target_date:
+        return None
+
+    return (
+        ThongsoSanxuat.objects.filter(
+            nha_may=plant,
+            thoi_gian__date__year=target_date.year,
+            thoi_gian__date__month=target_date.month,
+            thoi_gian__date__lte=target_date,
+        )
+        .order_by("-thoi_gian")
+        .first()
+    )
+
+
+def get_latest_record_in_year(plant, target_date):
+    if not target_date:
+        return None
+
+    return (
+        ThongsoSanxuat.objects.filter(
+            nha_may=plant,
+            thoi_gian__date__year=target_date.year,
+            thoi_gian__date__lte=target_date,
+        )
+        .order_by("-thoi_gian")
+        .first()
+    )
+
+
+def build_dashboard_records_for_plant(plant, target_date=None):
+    record_map = {}
+    latest_record = get_latest_record_before(plant, target_date)
+    latest_date = latest_record.thoi_gian.date() if latest_record else None
+    report_date = target_date or latest_date
+
+    add_record(record_map, latest_record)
+
+    comparison_dates = [
+        report_date,
+        get_year_offset_date(report_date, 1),
+        get_year_offset_date(report_date, 2),
+    ]
+
+    for comparison_date in comparison_dates:
+        if not comparison_date:
+            continue
+
+        add_record(
+            record_map,
+            ThongsoSanxuat.objects.filter(
+                nha_may=plant,
+                thoi_gian__date=comparison_date,
+            )
+            .order_by("-thoi_gian")
+            .first(),
+        )
+        add_record(record_map, get_latest_record_in_month(plant, comparison_date))
+        add_record(record_map, get_latest_record_in_year(plant, comparison_date))
+
+        quarter_start, quarter_end = get_quarter_bounds(comparison_date)
+        if quarter_start and quarter_end:
+            add_queryset_records(
+                record_map,
+                ThongsoSanxuat.objects.filter(
+                    nha_may=plant,
+                    thoi_gian__date__gte=quarter_start,
+                    thoi_gian__date__lte=quarter_end,
+                ).order_by("-thoi_gian"),
+            )
+
+    return sorted(record_map.values(), key=lambda record: record.thoi_gian, reverse=True)
+
+
+class DashboardSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        date_str = request.query_params.get("date")
+        target_date = None
+
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        data_by_plant = {}
+        for plant in ("songhinh", "vinhson", "thuongkontum"):
+            records = build_dashboard_records_for_plant(plant, target_date)
+            data_by_plant[plant] = ThongsoSanxuatSerializer(records, many=True).data
+
+        return Response({"data_by_plant": data_by_plant})
 
 
 class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):

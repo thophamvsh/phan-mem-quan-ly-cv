@@ -10,6 +10,7 @@ from .views import (
     ThongsoSanxuatViewSet,
     ThongsoGioPhatViewSet,
     DeletePlantDataByDateAPIView,
+    DashboardSummaryAPIView,
     HydrologyPlantsAPIView,
     ManualHydrologyDataAPIView,
     RealtimeManualSaveAPIView,
@@ -38,6 +39,7 @@ router.register(r"realtime-vinhson-snapshots", VinhSonRealtimeSnapshotViewSet, b
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("dashboard-summary/", DashboardSummaryAPIView.as_view(), name="dashboard-summary"),
     path("plants/", HydrologyPlantsAPIView.as_view(), name="plants"),
     path("realtime/songhinh/", SongHinhRealtimeAPIView.as_view(), name="realtime-songhinh"),
     path("realtime/vinhson/", VinhSonRealtimeAPIView.as_view(), name="realtime-vinhson"),
