@@ -6,10 +6,40 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, timedelta
 from .models import ThongsoSanxuat, ThongsoGioPhat
 from .serializers import ThongsoSanxuatSerializer
 from .plants import normalize_plant_code
+
+
+SAN_LUONG_SYNC_FIELDS = (
+    'cot_c',
+    'cot_d',
+    'cot_f',
+    'cot_g',
+    'cot_h',
+    'cot_i',
+    'cot_j',
+    'cot_k',
+    'cot_l',
+    'cot_m',
+    'cot_n',
+    'cot_o',
+    'cot_p',
+    'cot_q',
+    'cot_r',
+    'cot_s',
+    'cot_t',
+    'cot_u',
+    'cot_v',
+    'cot_w',
+    'cot_x',
+)
+MIN_SAN_LUONG_FILLED_FIELDS = 8
+INSUFFICIENT_SAN_LUONG_MESSAGE = (
+    'Dữ liệu không đủ để đồng bộ. Vui lòng kiểm tra Google Sheet.'
+)
+INVALID_SYNC_DATE_MESSAGE = 'Không được đồng bộ dữ liệu vượt quá ngày D-1.'
 
 
 def user_can_modify_hydrology_object(user, obj):
@@ -113,6 +143,37 @@ def parse_filter_date(date_str):
     except ValueError:
         return None
 
+def get_allowed_sync_date():
+    return timezone.localdate() - timedelta(days=1)
+
+def get_sync_date_error(filter_date_str, filter_date):
+    allowed_date = get_allowed_sync_date()
+    if not filter_date_str:
+        return None
+    if filter_date > allowed_date:
+        return {
+            'error': INVALID_SYNC_DATE_MESSAGE,
+            'max_allowed_date': str(allowed_date),
+        }
+    return None
+
+def parse_item_date(value):
+    if not value:
+        return None
+    if hasattr(value, 'date'):
+        return value.date()
+
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace('Z', '+00:00')).date()
+    except ValueError:
+        parsed_datetime = parse_date(text)
+        return parsed_datetime.date() if parsed_datetime else None
+
+def is_date_after_allowed(value, allowed_date):
+    parsed_date = parse_item_date(value)
+    return parsed_date is not None and parsed_date > allowed_date
+
 def safe_float(val):
     try:
         if isinstance(val, str):
@@ -159,6 +220,19 @@ def parse_cot_c(val, nhamay):
     val = str(val).strip()
     return val or None
 
+def has_value(value):
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+def count_san_luong_filled_fields(item):
+    return sum(1 for field in SAN_LUONG_SYNC_FIELDS if has_value(item.get(field)))
+
+def is_san_luong_row_complete_enough(item):
+    return count_san_luong_filled_fields(item) >= MIN_SAN_LUONG_FILLED_FIELDS
+
 def get_spreadsheet_id(nhamay):
     nhamay = normalize_plant_code(nhamay)
     if nhamay == 'songhinh':
@@ -178,6 +252,10 @@ class PreviewGoogleSheetAPIView(APIView):
 
             if filter_date_str and not filter_date:
                 return Response({'error': 'Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD'}, status=400)
+
+            sync_date_error = get_sync_date_error(filter_date_str, filter_date)
+            if sync_date_error:
+                return Response(sync_date_error, status=status.HTTP_400_BAD_REQUEST)
             
             sheet_id = get_spreadsheet_id(nhamay)
                 
@@ -208,7 +286,7 @@ class PreviewGoogleSheetAPIView(APIView):
                     continue # Bỏ qua dòng có thời gian không hợp lệ
                     
                 # Chỉ lấy dữ liệu từ 01/01/2023 đến ngày hiện tại
-                if thoi_gian.year < 2023 or thoi_gian.date() > timezone.localdate():
+                if thoi_gian.year < 2023 or thoi_gian.date() > get_allowed_sync_date():
                     continue
 
                 if filter_date and thoi_gian.date() != filter_date:
@@ -267,7 +345,40 @@ class SaveGoogleSheetDataAPIView(APIView):
         
         if not data_list:
             return Response({'error': 'Không có dữ liệu để lưu'}, status=400)
+
+        allowed_sync_date = get_allowed_sync_date()
+        invalid_date_rows = [
+            item for item in data_list
+            if item.get('thoi_gian') and is_date_after_allowed(item.get('thoi_gian'), allowed_sync_date)
+        ]
+        if invalid_date_rows:
+            return Response(
+                {
+                    'success': False,
+                    'error': INVALID_SYNC_DATE_MESSAGE,
+                    'max_allowed_date': str(allowed_sync_date),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
             
+        insufficient_rows = [
+            item for item in data_list
+            if item.get('thoi_gian') and not is_san_luong_row_complete_enough(item)
+        ]
+        if insufficient_rows:
+            return Response(
+                {
+                    'success': False,
+                    'error': INSUFFICIENT_SAN_LUONG_MESSAGE,
+                    'detail': (
+                        f'Co {len(insufficient_rows)} dong chi co vai cot co du lieu, '
+                        'nen he thong khong cap nhat de tranh ghi de du lieu cu.'
+                    ),
+                    'min_filled_fields': MIN_SAN_LUONG_FILLED_FIELDS,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         saved_count = 0
         updated_count = 0
         
@@ -291,27 +402,7 @@ class SaveGoogleSheetDataAPIView(APIView):
                 thoi_gian=thoi_gian,
                 nha_may=nhamay,
                 defaults={
-                    'cot_c': item.get('cot_c'),
-                    'cot_d': item.get('cot_d'),
-                    'cot_f': item.get('cot_f'),
-                    'cot_g': item.get('cot_g'),
-                    'cot_h': item.get('cot_h'),
-                    'cot_i': item.get('cot_i'),
-                    'cot_j': item.get('cot_j'),
-                    'cot_k': item.get('cot_k'),
-                    'cot_l': item.get('cot_l'),
-                    'cot_m': item.get('cot_m'),
-                    'cot_n': item.get('cot_n'),
-                    'cot_o': item.get('cot_o'),
-                    'cot_p': item.get('cot_p'),
-                    'cot_q': item.get('cot_q'),
-                    'cot_r': item.get('cot_r'),
-                    'cot_s': item.get('cot_s'),
-                    'cot_t': item.get('cot_t'),
-                    'cot_u': item.get('cot_u'),
-                    'cot_v': item.get('cot_v'),
-                    'cot_w': item.get('cot_w'),
-                    'cot_x': item.get('cot_x'),
+                    **{field: item.get(field) for field in SAN_LUONG_SYNC_FIELDS},
                     'updated_by': request.user,
                     **(
                         {}
@@ -342,6 +433,10 @@ class PreviewGioPhatAPIView(APIView):
 
             if filter_date_str and not filter_date:
                 return Response({'error': 'Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD'}, status=400)
+
+            sync_date_error = get_sync_date_error(filter_date_str, filter_date)
+            if sync_date_error:
+                return Response(sync_date_error, status=status.HTTP_400_BAD_REQUEST)
             
             sheet_id = get_spreadsheet_id(nhamay)
                 
@@ -374,7 +469,7 @@ class PreviewGioPhatAPIView(APIView):
                 except ValueError:
                     continue # Bỏ qua header
 
-                if ngay.year < 2023 or ngay > timezone.localdate():
+                if ngay.year < 2023 or ngay > get_allowed_sync_date():
                     continue
 
                 if filter_date and ngay != filter_date:
@@ -420,6 +515,21 @@ class SaveGioPhatAPIView(APIView):
         
         if not data_list:
             return Response({'error': 'Không có dữ liệu để lưu'}, status=400)
+
+        allowed_sync_date = get_allowed_sync_date()
+        invalid_date_rows = [
+            item for item in data_list
+            if item.get('ngay') and is_date_after_allowed(item.get('ngay'), allowed_sync_date)
+        ]
+        if invalid_date_rows:
+            return Response(
+                {
+                    'success': False,
+                    'error': INVALID_SYNC_DATE_MESSAGE,
+                    'max_allowed_date': str(allowed_sync_date),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
             
         saved_count = 0
         updated_count = 0

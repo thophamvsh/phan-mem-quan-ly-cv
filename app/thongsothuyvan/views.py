@@ -73,6 +73,16 @@ def get_env_value(name):
     return None
 
 
+def parse_filter_date(date_str):
+    if not date_str:
+        return None
+
+    try:
+        return datetime.strptime(str(date_str).strip(), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
 def get_capacity_by_level(model_class, mucnuoc):
     try:
         level = Decimal(str(mucnuoc))
@@ -316,7 +326,22 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         nhamay = normalize_plant_code(self.request.query_params.get('nhamay', 'songhinh'))
-        return ThongsoSanxuat.objects.filter(nha_may=nhamay).order_by('-thoi_gian')
+        queryset = ThongsoSanxuat.objects.filter(nha_may=nhamay)
+
+        date_from = parse_filter_date(self.request.query_params.get("date_from"))
+        date_to = parse_filter_date(self.request.query_params.get("date_to"))
+        if date_from:
+            queryset = queryset.filter(thoi_gian__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(thoi_gian__date__lte=date_to)
+
+        queryset = queryset.order_by('-thoi_gian')
+        try:
+            limit = int(self.request.query_params.get("limit") or 0)
+        except (TypeError, ValueError):
+            limit = 0
+
+        return queryset[:limit] if limit > 0 else queryset
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
@@ -634,7 +659,22 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         nhamay = normalize_plant_code(self.request.query_params.get('nhamay', 'songhinh'))
-        return ThongsoGioPhat.objects.filter(nha_may=nhamay).order_by('-ngay', 'to_may')
+        queryset = ThongsoGioPhat.objects.filter(nha_may=nhamay)
+
+        date_from = parse_filter_date(self.request.query_params.get("date_from"))
+        date_to = parse_filter_date(self.request.query_params.get("date_to"))
+        if date_from:
+            queryset = queryset.filter(ngay__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(ngay__lte=date_to)
+
+        queryset = queryset.order_by('-ngay', 'to_may')
+        try:
+            limit = int(self.request.query_params.get("limit") or 0)
+        except (TypeError, ValueError):
+            limit = 0
+
+        return queryset[:limit] if limit > 0 else queryset
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
