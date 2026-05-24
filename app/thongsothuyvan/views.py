@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from django.conf import settings
+from django.db.models import Count, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -493,6 +494,117 @@ class DashboardSummaryAPIView(APIView):
             data_by_plant[plant] = ThongsoSanxuatSerializer(records, many=True).data
 
         return Response({"data_by_plant": data_by_plant})
+
+
+class GioPhatSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        nhamay = normalize_plant_code(request.query_params.get("nhamay", "songhinh"))
+        date_str = request.query_params.get("date")
+
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            target_date = timezone.localdate()
+
+        year_start = date(target_date.year, 1, 1)
+        machines = {}
+
+        day_rows = (
+            ThongsoGioPhat.objects.filter(nha_may=nhamay, ngay=target_date)
+            .values("to_may")
+            .annotate(total=Sum("gio_phat_dien"))
+        )
+        year_rows = (
+            ThongsoGioPhat.objects.filter(
+                nha_may=nhamay,
+                ngay__gte=year_start,
+                ngay__lte=target_date,
+            )
+            .values("to_may")
+            .annotate(total=Sum("gio_phat_dien"))
+        )
+
+        for row in day_rows:
+            machine = str(row["to_may"])
+            machines.setdefault(machine, {"day": 0, "year": 0})
+            machines[machine]["day"] = row["total"] or 0
+
+        for row in year_rows:
+            machine = str(row["to_may"])
+            machines.setdefault(machine, {"day": 0, "year": 0})
+            machines[machine]["year"] = row["total"] or 0
+
+        return Response(
+            {
+                "nha_may": nhamay,
+                "date": target_date.isoformat(),
+                "year": target_date.year,
+                "machines": machines,
+            }
+        )
+
+
+class GioPhatYearSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        nhamay = normalize_plant_code(request.query_params.get("nhamay", "songhinh"))
+        date_str = request.query_params.get("date")
+
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            target_date = timezone.localdate()
+
+        year_start = date(target_date.year, 1, 1)
+        queryset = ThongsoGioPhat.objects.filter(
+            nha_may=nhamay,
+            ngay__gte=year_start,
+            ngay__lte=target_date,
+        )
+
+        rows = (
+            queryset.values("to_may")
+            .annotate(
+                year=Sum("gio_phat_dien"),
+                row_count=Count("id"),
+            )
+            .order_by("to_may")
+        )
+
+        machines = {
+            str(row["to_may"]): {
+                "year": row["year"] or 0,
+                "row_count": row["row_count"],
+            }
+            for row in rows
+        }
+
+        return Response(
+            {
+                "nha_may": nhamay,
+                "date": target_date.isoformat(),
+                "date_from": year_start.isoformat(),
+                "date_to": target_date.isoformat(),
+                "year": target_date.year,
+                "row_count": queryset.count(),
+                "machines": machines,
+            }
+        )
 
 
 class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
