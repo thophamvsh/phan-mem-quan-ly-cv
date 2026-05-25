@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from datetime import datetime
+from datetime import datetime, timedelta
 from bisect import bisect_left
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
@@ -13,6 +13,7 @@ from .models import (
     Vinhson_Hoc,
     MucnuocQuytrinh,
     ThongsoGioPhat,
+    ThongSoThuyVanCaiDat,
     ThongsoSanxuat,
 )
 
@@ -191,6 +192,42 @@ def get_operating_capacity_range_for_reservoir(reservoir_key):
     return {"min": 0, "max": round(max(max_capacity - min_capacity, 0), 3)}
 
 
+def get_settings_week_number(target_date):
+    current = target_date.replace(month=1, day=1)
+    end_of_year = target_date.replace(month=12, day=31)
+    week_number = 1
+
+    while current <= end_of_year:
+        if week_number == 1:
+            week_start = current
+        else:
+            week_start = current + timedelta(days=(7 - current.weekday()) % 7)
+        if week_start > end_of_year:
+            break
+        week_end = min(week_start + timedelta(days=6), end_of_year)
+        if week_start <= target_date <= week_end:
+            return week_number
+        current = week_end + timedelta(days=1)
+        week_number += 1
+
+    return 0
+
+
+def get_setting_value(nha_may, target_date, loai, field, thang=0, tuan=0):
+    record = (
+        ThongSoThuyVanCaiDat.objects.filter(
+            nha_may=nha_may,
+            nam=target_date.year,
+            loai=loai,
+            thang=thang,
+            tuan=tuan,
+        )
+        .only(field)
+        .first()
+    )
+    return getattr(record, field, None) if record else None
+
+
 class SonghinhMnhSerializer(serializers.ModelSerializer):
     class Meta:
         model = SonghinhMnh
@@ -234,6 +271,61 @@ class ThongsoSanxuatSerializer(serializers.ModelSerializer):
     class Meta:
         model = ThongsoSanxuat
         fields = "__all__"
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        target_date = instance.thoi_gian.date() if instance.thoi_gian else None
+        if not target_date:
+            return data
+
+        annual_value = get_setting_value(
+            instance.nha_may,
+            target_date,
+            ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
+            "sanluong_kehoach_nam",
+        )
+        month_value = get_setting_value(
+            instance.nha_may,
+            target_date,
+            ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            "sanluong_kehoach_thang",
+            thang=target_date.month,
+        )
+        week_number = get_settings_week_number(target_date)
+        weekly_value = get_setting_value(
+            instance.nha_may,
+            target_date,
+            ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            "mucnuoc_gioihan_tuan",
+            tuan=week_number,
+        )
+        weekly_ho_a_value = get_setting_value(
+            instance.nha_may,
+            target_date,
+            ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            "mucnuoc_gioihan_tuan_ho_a",
+            tuan=week_number,
+        )
+        weekly_ho_b_value = get_setting_value(
+            instance.nha_may,
+            target_date,
+            ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            "mucnuoc_gioihan_tuan_ho_b",
+            tuan=week_number,
+        )
+
+        fallback_values = {
+            "cot_w": annual_value,
+            "sanluong_kh_thang": month_value,
+            "mucnuoc_gioihan_tuan": weekly_value,
+            "mucnuoc_gioihan_tuan_ho_a": weekly_ho_a_value,
+            "mucnuoc_gioihan_tuan_ho_b": weekly_ho_b_value,
+        }
+        for field, value in fallback_values.items():
+            if data.get(field) is None and value is not None:
+                data[field] = value
+
+        return data
 
     def get_dung_tich_ho_noi_suy(self, obj):
         model_class = CAPACITY_MODEL_BY_PLANT.get(obj.nha_may)

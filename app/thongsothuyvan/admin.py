@@ -18,6 +18,7 @@ from .models import (
     VinhSonRealtimeSnapshot,
     Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
     MucnuocQuytrinh,
+    ThongSoThuyVanCaiDat,
     ThongsoSanxuat, ThongsoGioPhat,
     TramDoMuaVrain
 )
@@ -473,6 +474,26 @@ class ThongsoSanxuatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     date_hierarchy = "thoi_gian"
 
 
+@admin.register(ThongSoThuyVanCaiDat)
+class ThongSoThuyVanCaiDatAdmin(admin.ModelAdmin):
+    list_display = (
+        "nha_may",
+        "nam",
+        "loai",
+        "thang",
+        "tuan",
+        "sanluong_kehoach_nam",
+        "sanluong_kehoach_thang",
+        "mucnuoc_gioihan_tuan",
+        "mucnuoc_gioihan_tuan_ho_a",
+        "mucnuoc_gioihan_tuan_ho_b",
+        "updated_by",
+        "updated_at",
+    )
+    list_filter = ("nha_may", "nam", "loai", "thang", "tuan")
+    search_fields = ("nha_may",)
+
+
 @admin.register(MucnuocQuytrinh)
 class MucnuocQuytrinhAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = MucnuocQuytrinhResource
@@ -588,6 +609,5 @@ class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
         "Ho_C_TD_Vinh_Son",
     )
     date_hierarchy = "Thoi_gian"
-
 
 

@@ -222,6 +222,9 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
     hinh_anh_url = serializers.SerializerMethodField()
     ma_qr = serializers.SerializerMethodField()
     qr_url = serializers.SerializerMethodField()
+    so_lan_lam_viec_thang = serializers.SerializerMethodField()
+    so_lan_lam_viec_thang_label = serializers.SerializerMethodField()
+    so_lan_lam_viec_theo_thang = serializers.SerializerMethodField()
 
     class Meta:
         model = ThietBi
@@ -232,7 +235,9 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
             'ma_van_hanh', 'bo_phan_quan_ly', 'bang_ve',
             'mo_ta_ky_thuat', 'cap', 'thu_tu', 'slug',
             'ngay_lap_dat', 'ngay_dua_vao_van_hanh', 'hinh_anh', 'hinh_anh_url',
-            'ma_qr', 'qr_url', 'con', 'vat_tu', 'thong_so', 'an_toan', 'dinh_kem'
+            'ma_qr', 'qr_url', 'so_lan_lam_viec_thang',
+            'so_lan_lam_viec_thang_label', 'so_lan_lam_viec_theo_thang',
+            'con', 'vat_tu', 'thong_so', 'an_toan', 'dinh_kem'
         ]
         read_only_fields = ['ma_day_du', 'cap', 'slug']
 
@@ -249,6 +254,86 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
 
     def get_qr_url(self, obj):
         return get_thiet_bi_qr_url(obj, self.context.get('request'))
+
+    def _get_monthly_switch_detail_queryset(self, obj):
+        try:
+            from django.db.models import Q
+            from nhatkyvanhanh.models import ChiTietChuyenDoiTBThang
+        except Exception:
+            return None
+
+        device_query = Q(thiet_bi=obj)
+        if obj.ma_day_du:
+            device_query |= Q(thiet_bi__ma_day_du__startswith=f"{obj.ma_day_du}.")
+
+        return ChiTietChuyenDoiTBThang.objects.select_related("so").filter(device_query)
+
+    def _get_latest_monthly_switch_detail(self, obj):
+        cached = getattr(obj, '_latest_monthly_switch_detail_cache', None)
+        if cached is not None:
+            return None if cached is False else cached
+
+        queryset = self._get_monthly_switch_detail_queryset(obj)
+        if queryset is None:
+            obj._latest_monthly_switch_detail_cache = False
+            return None
+
+        detail = (
+            queryset
+            .order_by('-so__nam', '-so__thang', '-so__created_at', '-created_at')
+            .first()
+        )
+        obj._latest_monthly_switch_detail_cache = detail or False
+        return detail
+
+    def get_so_lan_lam_viec_thang(self, obj):
+        detail = self._get_latest_monthly_switch_detail(obj)
+        return None if not detail else detail.thuc_hien
+
+    def get_so_lan_lam_viec_thang_label(self, obj):
+        detail = self._get_latest_monthly_switch_detail(obj)
+        if not detail or not detail.so_id:
+            return None
+        return f"Tháng {detail.so.thang}/{detail.so.nam}"
+
+    def get_so_lan_lam_viec_theo_thang(self, obj):
+        try:
+            from django.db.models import Sum
+            from django.utils import timezone
+        except Exception:
+            return []
+
+        queryset = self._get_monthly_switch_detail_queryset(obj)
+        if queryset is None:
+            return []
+
+        latest_year = (
+            queryset
+            .exclude(so__nam__isnull=True)
+            .order_by('-so__nam')
+            .values_list('so__nam', flat=True)
+            .first()
+        )
+        year = latest_year or timezone.localdate().year
+        rows = (
+            queryset
+            .filter(so__nam=year)
+            .values('so__thang')
+            .annotate(so_lan=Sum('thuc_hien'))
+            .order_by('so__thang')
+        )
+        values_by_month = {
+            row['so__thang']: row['so_lan'] or 0
+            for row in rows
+        }
+        return [
+            {
+                'nam': year,
+                'thang': month,
+                'so_lan': values_by_month.get(month),
+            }
+            for month in range(1, 13)
+        ]
 
 
 # -------------------------

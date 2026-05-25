@@ -168,6 +168,60 @@ class ThongsoSanxuat(models.Model):
         verbose_name_plural = "Thông số sản xuất"
 
 
+class ThongSoThuyVanCaiDat(models.Model):
+    LOAI_KE_HOACH_NAM = "annual"
+    LOAI_KE_HOACH_THANG = "monthly"
+    LOAI_MNGH_TUAN = "weekly"
+    LOAI_CHOICES = (
+        (LOAI_KE_HOACH_NAM, "Ke hoach nam"),
+        (LOAI_KE_HOACH_THANG, "Ke hoach thang"),
+        (LOAI_MNGH_TUAN, "MNGH tuan"),
+    )
+
+    nha_may = models.CharField(max_length=50, default="songhinh")
+    nam = models.PositiveIntegerField()
+    loai = models.CharField(max_length=20, choices=LOAI_CHOICES)
+    thang = models.PositiveSmallIntegerField(default=0)
+    tuan = models.PositiveSmallIntegerField(default=0)
+    tuan_bat_dau = models.DateField(null=True, blank=True)
+    tuan_ket_thuc = models.DateField(null=True, blank=True)
+    sanluong_kehoach_nam = models.FloatField(null=True, blank=True)
+    sanluong_kehoach_thang = models.FloatField(null=True, blank=True)
+    mucnuoc_gioihan_tuan = models.FloatField(null=True, blank=True)
+    mucnuoc_gioihan_tuan_ho_a = models.FloatField(null=True, blank=True)
+    mucnuoc_gioihan_tuan_ho_b = models.FloatField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsothuyvancaidat_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsothuyvancaidat_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nha_may", "nam", "loai", "thang", "tuan"]
+        unique_together = ("nha_may", "nam", "loai", "thang", "tuan")
+        verbose_name = "Thong so thuy van cai dat"
+        verbose_name_plural = "Thong so thuy van cai dat"
+
+    def __str__(self):
+        scope = self.loai
+        if self.thang:
+            scope = f"{scope} thang {self.thang}"
+        if self.tuan:
+            scope = f"{scope} tuan {self.tuan}"
+        return f"{self.nha_may} {self.nam} {scope}"
+
+
 class MucnuocQuytrinh(models.Model):
     nha_may = models.CharField(max_length=50, default="songhinh")
     ngay_bat_dau = models.CharField(
