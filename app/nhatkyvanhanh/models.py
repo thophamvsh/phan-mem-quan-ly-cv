@@ -1,4 +1,5 @@
 import uuid
+from calendar import monthrange
 from datetime import date
 
 from django.conf import settings
@@ -30,13 +31,13 @@ def _current_year():
 
 class SuKien(TimestampedUUIDModel):
     class LoaiSuKien(models.TextChoices):
-        KHIEM_KHUYET = "khiem_khuyet", "Khiem khuyet"
-        SU_CO = "su_co", "Su co"
+        KHIEM_KHUYET = "khiem_khuyet", "Khiếm khuyết"
+        SU_CO = "su_co", "Sự cố"
 
     class TrangThaiXuLy(models.TextChoices):
-        CHUA_XU_LY_XONG = "chua_xu_ly_xong", "Chua xu ly xong"
-        DANG_XU_LY = "dang_xu_ly", "Dang xu ly"
-        XU_LY_XONG = "xu_ly_xong", "Xu ly xong"
+        CHUA_XU_LY_XONG = "chua_xu_ly_xong", "Chưa xử lý xong"
+        DANG_XU_LY = "dang_xu_ly", "Đang xử lý"
+        XU_LY_XONG = "xu_ly_xong", "Xử lý xong"
 
     thoi_gian_xay_ra = models.DateTimeField()
     nha_may = models.ForeignKey(
@@ -45,7 +46,7 @@ class SuKien(TimestampedUUIDModel):
         related_name="su_kiens",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     thiet_bi = models.ForeignKey(
         "quanlyvanhanh.ThietBi",
@@ -53,7 +54,7 @@ class SuKien(TimestampedUUIDModel):
         related_name="su_kiens",
         null=True,
         blank=True,
-        verbose_name="Thiet bi lien quan",
+        verbose_name="Thiết bị liên quan",
     )
     ten_he_thong_thiet_bi = models.CharField(max_length=255)
     loai = models.CharField(
@@ -112,8 +113,8 @@ class SuKien(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-thoi_gian_xay_ra", "-created_at"]
-        verbose_name = "Su kien"
-        verbose_name_plural = "Su kien"
+        verbose_name = "Sự kiện"
+        verbose_name_plural = "Sự kiện"
 
     def __str__(self):
         return f"{self.ten_he_thong_thiet_bi} - {self.thoi_gian_xay_ra}"
@@ -222,11 +223,11 @@ class DienBienSuKien(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["thoi_gian_dien_bien", "created_at"]
-        verbose_name = "Dien bien su kien"
-        verbose_name_plural = "Dien bien su kien"
+        verbose_name = "Diễn biến sự kiện"
+        verbose_name_plural = "Diễn biến sự kiện"
 
     def __str__(self):
-        return f"Dien bien {self.su_kien_id} - {self.thoi_gian_dien_bien}"
+        return f"Diễn biến {self.su_kien_id} - {self.thoi_gian_dien_bien}"
 
 
 class KhacPhucSuKien(TimestampedUUIDModel):
@@ -280,11 +281,11 @@ class KhacPhucSuKien(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-thoi_gian_xu_ly", "-created_at"]
-        verbose_name = "Khac phuc su kien"
-        verbose_name_plural = "Khac phuc su kien"
+        verbose_name = "Khắc phục sự kiện"
+        verbose_name_plural = "Khắc phục sự kiện"
 
     def __str__(self):
-        return f"Khac phuc {self.su_kien_id}"
+        return f"Khắc phục {self.su_kien_id}"
 
     def save(self, *args, **kwargs):
         if (
@@ -312,8 +313,8 @@ class SogiaonhancaVH(TimestampedUUIDModel):
         E = "E", "Ca E"
 
     class TrangThai(models.TextChoices):
-        CHO_XAC_NHAN = "cho_xac_nhan", "Cho xac nhan"
-        HOAN_THANH = "hoan_thanh", "Hoan thanh"
+        CHO_XAC_NHAN = "cho_xac_nhan", "Chờ xác nhận"
+        HOAN_THANH = "hoan_thanh", "Hoàn thành"
 
     ngay_truc = models.DateField()
     nha_may = models.ForeignKey(
@@ -322,7 +323,7 @@ class SogiaonhancaVH(TimestampedUUIDModel):
         related_name="so_giao_nhan_ca_vh",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     ca_truc = models.CharField(max_length=1, choices=CaTruc.choices)
     dia_diem = models.CharField(max_length=255, blank=True)
@@ -446,8 +447,8 @@ class ChiTietSoGiaoNhanCaVH(TimestampedUUIDModel):
 
 class SogiaonhancaHC(TimestampedUUIDModel):
     class TrangThai(models.TextChoices):
-        CHO_XAC_NHAN = "cho_xac_nhan", "Cho xac nhan"
-        HOAN_THANH = "hoan_thanh", "Hoan thanh"
+        CHO_XAC_NHAN = "cho_xac_nhan", "Chờ xác nhận"
+        HOAN_THANH = "hoan_thanh", "Hoàn thành"
 
     ngay_truc = models.DateField()
     nha_may = models.ForeignKey(
@@ -456,7 +457,7 @@ class SogiaonhancaHC(TimestampedUUIDModel):
         related_name="so_giao_nhan_ca_hc",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     dia_diem = models.CharField(max_length=255, blank=True)
     nguoi_truc = models.CharField(max_length=255, blank=True)
@@ -504,8 +505,8 @@ class SogiaonhancaHC(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-ngay_truc", "-thoi_gian_bat_dau_ca", "-thoi_gian_giao_ca", "-created_at"]
-        verbose_name = "So giao nhan ca hanh chinh"
-        verbose_name_plural = "So giao nhan ca hanh chinh"
+        verbose_name = "Sổ giao nhận ca hành chính"
+        verbose_name_plural = "Sổ giao nhận ca hành chính"
 
     @property
     def da_hoan_thanh(self):
@@ -561,8 +562,8 @@ class NguoiTrucSoGiaoNhanCaHC(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["thu_tu", "thoi_gian", "created_at"]
-        verbose_name = "Nguoi truc so giao nhan ca hanh chinh"
-        verbose_name_plural = "Nguoi truc so giao nhan ca hanh chinh"
+        verbose_name = "Người trực sổ giao nhận ca hành chính"
+        verbose_name_plural = "Người trực sổ giao nhận ca hành chính"
 
     def __str__(self):
         return self.ten_nguoi_truc
@@ -588,8 +589,8 @@ class ChiTietSoGiaoNhanCaHC(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["thu_tu", "thoi_gian", "created_at"]
-        verbose_name = "Noi dung chi tiet so giao nhan ca hanh chinh"
-        verbose_name_plural = "Noi dung chi tiet so giao nhan ca hanh chinh"
+        verbose_name = "Nội dung chi tiết sổ giao nhận ca hành chính"
+        verbose_name_plural = "Nội dung chi tiết sổ giao nhận ca hành chính"
 
     def __str__(self):
         return self.tieu_de or f"Noi dung chi tiet HC {self.thu_tu}"
@@ -597,8 +598,8 @@ class ChiTietSoGiaoNhanCaHC(TimestampedUUIDModel):
 
 class Sonhatkyvanhanh(TimestampedUUIDModel):
     class TrangThai(models.TextChoices):
-        CHO_XAC_NHAN = "cho_xac_nhan", "Cho xac nhan"
-        HOAN_THANH = "hoan_thanh", "Hoan thanh"
+        CHO_XAC_NHAN = "cho_xac_nhan", "Chờ xác nhận"
+        HOAN_THANH = "hoan_thanh", "Hoàn thành"
 
     thoi_gian_tao = models.DateTimeField(default=timezone.now)
     nha_may = models.ForeignKey(
@@ -607,7 +608,7 @@ class Sonhatkyvanhanh(TimestampedUUIDModel):
         related_name="so_nhat_ky_van_hanh",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     noi_dung_tao = models.TextField()
     nguoi_tao = models.ForeignKey(
@@ -643,8 +644,8 @@ class Sonhatkyvanhanh(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-thoi_gian_tao", "-created_at"]
-        verbose_name = "So nhat ky van hanh"
-        verbose_name_plural = "So nhat ky van hanh"
+        verbose_name = "Sổ nhật ký vận hành"
+        verbose_name_plural = "Sổ nhật ký vận hành"
 
     @property
     def da_hoan_thanh(self):
@@ -674,7 +675,7 @@ class Sonhatkyvanhanh(TimestampedUUIDModel):
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"So nhat ky van hanh - {self.thoi_gian_tao}"
+        return f"Sổ nhật ký vận hành - {self.thoi_gian_tao}"
 
 
 class SonhatkyvanhanhDiesel(TimestampedUUIDModel):
@@ -685,19 +686,19 @@ class SonhatkyvanhanhDiesel(TimestampedUUIDModel):
         related_name="so_nhat_ky_van_hanh_diesel",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     noi_dung = models.TextField(blank=True)
     i = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="I (A)")
     u = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="U (V)")
     f = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="F (Hz)")
-    i_sac = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="I sac (A)")
-    u_sac = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="U sac (V)")
+    i_sac = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="I sạc (A)")
+    u_sac = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="U sạc (V)")
     p = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="P (KW)")
     q = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Q (KVAr)")
     chi_so_gio_vh = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    t_may = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="T may (C)")
-    muc_dau = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Muc dau (lit)")
+    t_may = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="T máy (C)")
+    muc_dau = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Mức dầu (lit)")
     ap_luc_dau = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     ca_truc = models.CharField(max_length=50, blank=True)
     nguoi_tao = models.ForeignKey(
@@ -715,8 +716,8 @@ class SonhatkyvanhanhDiesel(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-thoi_gian", "-created_at"]
-        verbose_name = "So nhat ky van hanh Diesel"
-        verbose_name_plural = "So nhat ky van hanh Diesel"
+        verbose_name = "Sổ nhật ký vận hành Diesel"
+        verbose_name_plural = "Sổ nhật ký vận hành Diesel"
 
     def dong_bo_chu_ky_tu_user(self):
         if self.nguoi_tao_id and not self.chu_ky_nguoi_tao:
@@ -739,7 +740,7 @@ class SoBCHCSongHinh(TimestampedUUIDModel):
         related_name="so_bchc_song_hinh",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     muc_nuoc_quy_trinh = models.CharField(max_length=50, blank=True)
     muc_nuoc_quy_trinh_tu = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -765,8 +766,8 @@ class SoBCHCSongHinh(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-ngay_dong_bo", "-created_at"]
-        verbose_name = "So BCHC Song Hinh"
-        verbose_name_plural = "So BCHC Song Hinh"
+        verbose_name = "Sổ BCHC Sông Hinh"
+        verbose_name_plural = "Sổ BCHC Sông Hinh"
 
     def dong_bo_chu_ky_tu_user(self):
         if self.nguoi_dong_bo_id and not self.chu_ky_nguoi_dong_bo:
@@ -797,7 +798,7 @@ class SoAnToanDauGio(TimestampedUUIDModel):
         related_name="so_an_toan_dau_gio",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     tinh_trang_an_toan = models.CharField(max_length=255, blank=True)
     nguoi_dong_bo = models.ForeignKey(
@@ -816,8 +817,8 @@ class SoAnToanDauGio(TimestampedUUIDModel):
     class Meta:
         ordering = ["-ngay_dong_bo", "-ca_truc", "-created_at"]
         unique_together = ["ngay_dong_bo", "ca_truc"]
-        verbose_name = "So An Toan Dau Gio"
-        verbose_name_plural = "So An Toan Dau Gio"
+        verbose_name = "Sổ an toàn đầu giờ"
+        verbose_name_plural = "Sổ an toàn đầu giờ"
 
     def dong_bo_chu_ky_tu_user(self):
         if self.nguoi_dong_bo_id and not self.chu_ky_nguoi_dong_bo:
@@ -834,9 +835,9 @@ class SoAnToanDauGio(TimestampedUUIDModel):
 
 class MauChuyenDoiThietBi(TimestampedUUIDModel):
     class ToMay(models.TextChoices):
-        H1 = "H1", "To may H1"
-        H2 = "H2", "To may H2"
-        TU_DUNG = "tu_dung", "Tu dung"
+        H1 = "H1", "Tổ máy H1"
+        H2 = "H2", "Tổ máy H2"
+        TU_DUNG = "tu_dung", "Tự dùng"
 
     nha_may = models.ForeignKey(
         "khovattu.Bang_nha_may",
@@ -844,7 +845,7 @@ class MauChuyenDoiThietBi(TimestampedUUIDModel):
         related_name="mau_chuyen_doi_thiet_bi",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     to_may = models.CharField(max_length=20, choices=ToMay.choices)
     nhom_thiet_bi = models.CharField(max_length=255, blank=True)
@@ -864,8 +865,8 @@ class MauChuyenDoiThietBi(TimestampedUUIDModel):
                 name="uq_mau_chuyen_doi_thiet_bi_nha_may_thiet_bi",
             )
         ]
-        verbose_name = "Mau chuyen doi thiet bi"
-        verbose_name_plural = "Mau chuyen doi thiet bi"
+        verbose_name = "Mẫu chuyển đổi thiết bị"
+        verbose_name_plural = "Mẫu chuyển đổi thiết bị"
 
     def __str__(self):
         return f"{self.get_to_may_display()} - {self.thiet_bi}"
@@ -889,7 +890,7 @@ class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
         related_name="so_chuyen_doi_thiet_bi_tuan",
         null=True,
         blank=True,
-        verbose_name="Nha may",
+        verbose_name="Nhà máy",
     )
     nguoi_tao = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -907,8 +908,8 @@ class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
                 name="uq_so_chuyen_doi_thiet_bi_tuan_nha_may_nam_tuan_ca",
             )
         ]
-        verbose_name = "So chuyen doi thiet bi tuan"
-        verbose_name_plural = "So chuyen doi thiet bi tuan"
+        verbose_name = "Sổ chuyển đổi thiết bị tuần"
+        verbose_name_plural = "Sổ chuyển đổi thiết bị tuần"
 
     def _cap_nhat_khoang_thoi_gian_tuan(self):
         if self.nam < 2000 or self.nam > 2100:
@@ -933,7 +934,7 @@ class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"So chuyen doi thiet bi tuan {self.tuan}/{self.nam} - Ca {self.ca_truc}"
+        return f"Sổ chuyển đổi thiết bị tuần {self.tuan}/{self.nam} - Ca {self.ca_truc}"
 
 
 class LanChuyenDoiThietBi(TimestampedUUIDModel):
@@ -954,8 +955,8 @@ class LanChuyenDoiThietBi(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["thoi_gian", "created_at"]
-        verbose_name = "Lan chuyen doi thiet bi"
-        verbose_name_plural = "Lan chuyen doi thiet bi"
+        verbose_name = "Lần chuyển đổi thiết bị"
+        verbose_name_plural = "Lần chuyển đổi thiết bị"
 
     def clean(self):
         if self.so_id and self.thoi_gian:
@@ -973,8 +974,8 @@ class LanChuyenDoiThietBi(TimestampedUUIDModel):
 
 class ChiTietChuyenDoiThietBi(TimestampedUUIDModel):
     class TrangThai(models.TextChoices):
-        LAM_VIEC = "lam_viec", "Lam viec"
-        DU_PHONG = "du_phong", "Du phong"
+        LAM_VIEC = "lam_viec", "Làm việc"
+        DU_PHONG = "du_phong", "Dự phòng"
 
     lan_chuyen_doi = models.ForeignKey(
         LanChuyenDoiThietBi,
@@ -1004,8 +1005,150 @@ class ChiTietChuyenDoiThietBi(TimestampedUUIDModel):
                 name="uq_chi_tiet_chuyen_doi_lan_thiet_bi",
             )
         ]
-        verbose_name = "Chi tiet chuyen doi thiet bi"
-        verbose_name_plural = "Chi tiet chuyen doi thiet bi"
+        verbose_name = "Chi tiết chuyển đổi thiết bị"
+        verbose_name_plural = "Chi tiết chuyển đổi thiết bị"
 
     def __str__(self):
         return f"{self.thiet_bi} - {self.get_trang_thai_display() or 'Chua chon'}"
+
+
+class MauChuyenDoiTBThang(TimestampedUUIDModel):
+    nha_may = models.ForeignKey(
+        "khovattu.Bang_nha_may",
+        on_delete=models.PROTECT,
+        related_name="mau_chuyen_doi_tb_thang",
+        null=True,
+        blank=True,
+        verbose_name="Nhà máy",
+    )
+    ma_nhom = models.CharField(max_length=20, blank=True)
+    ten_nhom = models.CharField(max_length=255)
+    don_vi_nhom = models.CharField(max_length=50, blank=True)
+    thiet_bi = models.ForeignKey(
+        "quanlyvanhanh.ThietBi",
+        on_delete=models.PROTECT,
+        related_name="mau_chuyen_doi_tb_thang",
+    )
+    don_vi = models.CharField(max_length=50, default="Lan")
+    thu_tu_nhom = models.PositiveIntegerField(default=1)
+    thu_tu = models.PositiveIntegerField(default=1)
+    dang_su_dung = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nha_may", "thu_tu_nhom", "thu_tu", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nha_may", "thiet_bi"],
+                name="uq_mau_chuyen_doi_tb_thang_nha_may_thiet_bi",
+            )
+        ]
+        verbose_name = "Mẫu chuyển đổi TB tháng"
+        verbose_name_plural = "Mẫu chuyển đổi TB tháng"
+
+    def __str__(self):
+        return f"{self.ten_nhom} - {self.thiet_bi}"
+
+
+class SoChuyenDoiTBThang(TimestampedUUIDModel):
+    class CaTruc(models.TextChoices):
+        A = "A", "Ca A"
+        B = "B", "Ca B"
+        C = "C", "Ca C"
+        D = "D", "Ca D"
+
+    nam = models.PositiveSmallIntegerField(default=_current_year)
+    thang = models.PositiveSmallIntegerField(default=1)
+    ca_truc = models.CharField(max_length=1, choices=CaTruc.choices, default=CaTruc.A)
+    thang_bat_dau = models.DateField()
+    thang_ket_thuc = models.DateField()
+    nha_may = models.ForeignKey(
+        "khovattu.Bang_nha_may",
+        on_delete=models.PROTECT,
+        related_name="so_chuyen_doi_tb_thang",
+        null=True,
+        blank=True,
+        verbose_name="Nhà máy",
+    )
+    nguoi_tao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="so_chuyen_doi_tb_thang_da_tao",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["-nam", "-thang", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nha_may", "nam", "thang", "ca_truc"],
+                name="uq_so_chuyen_doi_tb_thang_nha_may_nam_thang_ca",
+            )
+        ]
+        verbose_name = "Sổ chuyển đổi TB tháng"
+        verbose_name_plural = "Sổ chuyển đổi TB tháng"
+
+    def _cap_nhat_khoang_thoi_gian_thang(self):
+        if self.nam < 2000 or self.nam > 2100:
+            raise ValidationError({"nam": "Nam khong hop le."})
+        if self.thang < 1 or self.thang > 12:
+            raise ValidationError({"thang": "Thang phai nam trong khoang 1-12."})
+        self.thang_bat_dau = date(self.nam, self.thang, 1)
+        self.thang_ket_thuc = date(self.nam, self.thang, monthrange(self.nam, self.thang)[1])
+
+    def clean(self):
+        self._cap_nhat_khoang_thoi_gian_thang()
+        if self.thang_ket_thuc < self.thang_bat_dau:
+            raise ValidationError({"thang_ket_thuc": "Thang ket thuc phai lon hon hoac bang thang bat dau."})
+
+    def save(self, *args, **kwargs):
+        self._cap_nhat_khoang_thoi_gian_thang()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Sổ chuyển đổi TB tháng {self.thang}/{self.nam} - Ca {self.ca_truc}"
+
+
+class ChiTietChuyenDoiTBThang(TimestampedUUIDModel):
+    so = models.ForeignKey(
+        SoChuyenDoiTBThang,
+        on_delete=models.CASCADE,
+        related_name="chi_tiets",
+    )
+    thiet_bi = models.ForeignKey(
+        "quanlyvanhanh.ThietBi",
+        on_delete=models.PROTECT,
+        related_name="chi_tiet_chuyen_doi_tb_thang",
+    )
+    ma_nhom = models.CharField(max_length=20, blank=True)
+    ten_nhom = models.CharField(max_length=255)
+    don_vi_nhom = models.CharField(max_length=50, blank=True)
+    don_vi = models.CharField(max_length=50, default="Lan")
+    dau_thang = models.IntegerField(default=0)
+    cuoi_thang = models.IntegerField(default=0)
+    thuc_hien = models.IntegerField(default=0, editable=False)
+    ghi_chu = models.TextField(blank=True)
+    thu_tu_nhom = models.PositiveIntegerField(default=1)
+    thu_tu = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["thu_tu_nhom", "thu_tu", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["so", "thiet_bi"],
+                name="uq_chi_tiet_chuyen_doi_tb_thang_so_thiet_bi",
+            )
+        ]
+        verbose_name = "Chi tiết chuyển đổi TB tháng"
+        verbose_name_plural = "Chi tiết chuyển đổi TB tháng"
+
+    def clean(self):
+        self.thuc_hien = (self.cuoi_thang or 0) - (self.dau_thang or 0)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.thiet_bi} - {self.thuc_hien}"

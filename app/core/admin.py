@@ -103,6 +103,15 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyen xem, tao, sua va xoa So chuyen doi thiet bi tuan.'
         }),
+        ('Quyen so chuyen doi TB thang', {
+            'fields': (
+                'can_view_monthly_equipment_switch_logs',
+                'can_create_monthly_equipment_switch_logs',
+                'can_edit_monthly_equipment_switch_logs',
+                'can_delete_monthly_equipment_switch_logs',
+            ),
+            'description': 'Quyen xem, tao, sua va xoa So chuyen doi TB thang.'
+        }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
                 'can_view_diesel_operation_logbooks',
@@ -298,6 +307,15 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_delete_weekly_equipment_switch_logs',
             ),
             'description': 'Quyen xem, tao, sua va xoa So chuyen doi thiet bi tuan.'
+        }),
+        ('Quyen so chuyen doi TB thang', {
+            'fields': (
+                'can_view_monthly_equipment_switch_logs',
+                'can_create_monthly_equipment_switch_logs',
+                'can_edit_monthly_equipment_switch_logs',
+                'can_delete_monthly_equipment_switch_logs',
+            ),
+            'description': 'Quyen xem, tao, sua va xoa So chuyen doi TB thang.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (

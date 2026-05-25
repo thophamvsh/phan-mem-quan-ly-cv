@@ -386,6 +386,22 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so chuyen doi thiet bi tuan"
     )
+    can_view_monthly_equipment_switch_logs = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem so chuyen doi TB thang"
+    )
+    can_create_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao so chuyen doi TB thang"
+    )
+    can_edit_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so chuyen doi TB thang"
+    )
+    can_delete_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so chuyen doi TB thang"
+    )
     can_view_diesel_operation_logbooks = models.BooleanField(
         default=True,
         help_text="Co quyen xem so nhat ky van hanh Diesel"

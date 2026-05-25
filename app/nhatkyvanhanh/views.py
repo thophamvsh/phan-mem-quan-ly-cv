@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -25,12 +26,15 @@ from .models import (
     ChiTietSoGiaoNhanCaHC,
     ChiTietSoGiaoNhanCaVH,
     ChiTietChuyenDoiThietBi,
+    ChiTietChuyenDoiTBThang,
     DienBienSuKien,
     KhacPhucSuKien,
     LanChuyenDoiThietBi,
     MauChuyenDoiThietBi,
+    MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
     SoBCHCSongHinh,
+    SoChuyenDoiTBThang,
     SoChuyenDoiThietBiTuan,
     Sonhatkyvanhanh,
     SonhatkyvanhanhDiesel,
@@ -43,13 +47,16 @@ from .serializers import (
     ChiTietSoGiaoNhanCaHCSerializer,
     ChiTietSoGiaoNhanCaVHSerializer,
     ChiTietChuyenDoiThietBiSerializer,
+    ChiTietChuyenDoiTBThangSerializer,
     DienBienSuKienSerializer,
     KhacPhucSuKienSerializer,
     LanChuyenDoiThietBiSerializer,
     MauChuyenDoiThietBiSerializer,
+    MauChuyenDoiTBThangSerializer,
     NhatKySuKienSerializer,
     NguoiTrucSoGiaoNhanCaHCSerializer,
     SoBCHCSongHinhSerializer,
+    SoChuyenDoiTBThangSerializer,
     SoChuyenDoiThietBiTuanSerializer,
     SonhatkyvanhanhDieselSerializer,
     SonhatkyvanhanhSerializer,
@@ -66,6 +73,7 @@ from .permissions import (
     CanCreateAdminShiftHandoverLogs,
     CanCreateBCHCSongHinh,
     CanCreateDieselOperationLogbooks,
+    CanCreateMonthlyEquipmentSwitchLogs,
     CanCreateOperationLogbooks,
     CanCreateWeeklyEquipmentSwitchLogs,
     CanCreateShiftHandoverLogs,
@@ -76,6 +84,7 @@ from .permissions import (
     CanViewAdminShiftHandoverLogs,
     CanViewBCHCSongHinh,
     CanViewDieselOperationLogbooks,
+    CanViewMonthlyEquipmentSwitchLogs,
     CanViewOperationLogbooks,
     CanViewWeeklyEquipmentSwitchLogs,
     CanViewShiftHandoverLogs,
@@ -259,6 +268,111 @@ def _create_default_switch_templates(nha_may):
         )
         created += int(was_created)
     return created
+
+
+MONTHLY_SWITCH_TEMPLATE_ROWS = [
+    ("I", "So lan dong/Cat", "MC", "MC 171", "Lan", 1, 1),
+    ("I", "So lan dong/Cat", "MC", "MC 172", "Lan", 1, 2),
+    ("I", "So lan dong/Cat", "MC", "MC 173", "Lan", 1, 3),
+    ("I", "So lan dong/Cat", "MC", "MC 174", "Lan", 1, 4),
+    ("I", "So lan dong/Cat", "MC", "MC 412", "Lan", 1, 5),
+    ("I", "So lan dong/Cat", "MC", "MC 471", "Lan", 1, 6),
+    ("I", "So lan dong/Cat", "MC", "MC 472", "Lan", 1, 7),
+    ("I", "So lan dong/Cat", "MC", "MC 901", "Lan", 1, 8),
+    ("I", "So lan dong/Cat", "MC", "MC 902", "Lan", 1, 9),
+    ("I", "So lan dong/Cat", "MC", "MC 933", "Lan", 1, 10),
+    ("I", "So lan dong/Cat", "MC", "MC 934", "Lan", 1, 11),
+    ("I", "So lan dong/Cat", "MC", "MC 941", "Lan", 1, 12),
+    ("I", "So lan dong/Cat", "MC", "MC 942", "Lan", 1, 13),
+    ("II", "So lan lam viec", "CS", "CS 172", "Lan", 2, 1),
+    ("II", "So lan lam viec", "CS", "CS 174", "Lan", 2, 2),
+    ("II", "So lan lam viec", "CS", "CS 1T12", "Lan", 2, 3),
+    ("II", "So lan lam viec", "CS", "CS 1T22", "Lan", 2, 4),
+    ("II", "So lan lam viec", "CS", "CS 1T11", "Lan", 2, 5),
+    ("II", "So lan lam viec", "CS", "CS 1T21", "Lan", 2, 6),
+    ("II", "So lan lam viec", "CS", "CS 4T3", "Lan", 2, 7),
+    ("II", "So lan lam viec", "CS", "CS 4T4", "Lan", 2, 8),
+    ("III", "So lan chuyen NPA", "MBA", "MBA T1", "Lan", 3, 1),
+    ("III", "So lan chuyen NPA", "MBA", "MBA T2", "Lan", 3, 2),
+    ("III", "So lan chuyen NPA", "MBA", "MBA TD91", "Lan", 3, 3),
+    ("III", "So lan chuyen NPA", "MBA", "MBA TD94", "Lan", 3, 4),
+]
+
+
+def _find_monthly_switch_template_device(nha_may, device_name):
+    compact_name = device_name.replace(" ", "")
+    queryset = ThietBi.objects.all()
+    if nha_may and nha_may.ma_nha_may:
+        factory_code = nha_may.ma_nha_may.upper()
+        factory_filter = (
+            Q(ma_day_du__istartswith=f"{factory_code}.")
+            | Q(nha_may__iexact=factory_code)
+        )
+        if getattr(nha_may, "ten_nha_may", ""):
+            factory_filter |= Q(nha_may__icontains=nha_may.ten_nha_may)
+        queryset = queryset.filter(factory_filter)
+    return (
+        queryset.filter(
+            Q(ten__iexact=device_name)
+            | Q(ten__icontains=device_name)
+            | Q(ma__iexact=compact_name)
+            | Q(ma_day_du__icontains=compact_name)
+            | Q(ma_day_du__icontains=device_name)
+        )
+        .order_by("cap", "thu_tu", "ma_day_du")
+        .first()
+    )
+
+
+def _create_default_monthly_switch_templates(nha_may):
+    if not nha_may:
+        return 0
+
+    created = 0
+    for ma_nhom, ten_nhom, don_vi_nhom, device_name, don_vi, thu_tu_nhom, thu_tu in MONTHLY_SWITCH_TEMPLATE_ROWS:
+        device = _find_monthly_switch_template_device(nha_may, device_name)
+        if not device:
+            continue
+        _, was_created = MauChuyenDoiTBThang.objects.get_or_create(
+            nha_may=nha_may,
+            thiet_bi=device,
+            defaults={
+                "ma_nhom": ma_nhom,
+                "ten_nhom": ten_nhom,
+                "don_vi_nhom": don_vi_nhom,
+                "don_vi": don_vi,
+                "thu_tu_nhom": thu_tu_nhom,
+                "thu_tu": thu_tu,
+                "dang_su_dung": True,
+            },
+        )
+        created += int(was_created)
+    return created
+
+
+def _previous_month_values_by_device(so):
+    previous_year = so.nam
+    previous_month = so.thang - 1
+    if previous_month < 1:
+        previous_year -= 1
+        previous_month = 12
+
+    previous_so = (
+        SoChuyenDoiTBThang.objects.filter(
+            nha_may=so.nha_may,
+            nam=previous_year,
+            thang=previous_month,
+            ca_truc=so.ca_truc,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if not previous_so:
+        return {}
+    return {
+        item.thiet_bi_id: item.cuoi_thang
+        for item in previous_so.chi_tiets.only("thiet_bi_id", "cuoi_thang")
+    }
 
 
 def _month_day_key(date_value):
@@ -532,6 +646,20 @@ def _can_delete_weekly_equipment_switch_entry(user, lan):
     return (
         has_profile_permission(user, "can_delete_weekly_equipment_switch_logs")
         or bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+    )
+
+
+def _can_edit_monthly_equipment_switch_log(user, item):
+    return (
+        has_profile_permission(user, "can_edit_monthly_equipment_switch_logs")
+        or bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+    )
+
+
+def _can_delete_monthly_equipment_switch_log(user, item):
+    return (
+        has_profile_permission(user, "can_delete_monthly_equipment_switch_logs")
+        or bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
     )
 
 
@@ -2171,6 +2299,223 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                 chi_tiet.trang_thai = trang_thai_value or ""
                 chi_tiet.ghi_chu = payload.get("ghi_chu", chi_tiet.ghi_chu)
                 chi_tiet.save(update_fields=["trang_thai", "ghi_chu", "updated_at"])
+
+        response_serializer = self.get_serializer(self.get_object())
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+class MauChuyenDoiTBThangFilterSet(django_filters.FilterSet):
+    class Meta:
+        model = MauChuyenDoiTBThang
+        fields = ["nha_may", "ma_nhom", "dang_su_dung", "thiet_bi"]
+
+
+class MauChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
+    serializer_class = MauChuyenDoiTBThangSerializer
+    parser_classes = [JSONParser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = MauChuyenDoiTBThangFilterSet
+    search_fields = [
+        "ma_nhom",
+        "ten_nhom",
+        "thiet_bi__ten",
+        "thiet_bi__ma_day_du",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+    ]
+    ordering_fields = ["thu_tu_nhom", "thu_tu", "created_at", "updated_at"]
+    ordering = ["thu_tu_nhom", "thu_tu", "created_at"]
+
+    def get_permissions(self):
+        permission_classes = [CanViewMonthlyEquipmentSwitchLogs]
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            permission_classes = [CanCreateMonthlyEquipmentSwitchLogs]
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = MauChuyenDoiTBThang.objects.select_related(
+            "nha_may",
+            "thiet_bi",
+        ).all()
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def perform_create(self, serializer):
+        serializer.save(
+            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        )
+
+    def perform_update(self, serializer):
+        serializer.save(
+            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        )
+
+
+class SoChuyenDoiTBThangFilterSet(django_filters.FilterSet):
+    thang_tu = django_filters.NumberFilter(field_name="thang", lookup_expr="gte")
+    thang_den = django_filters.NumberFilter(field_name="thang", lookup_expr="lte")
+    ngay_tu = django_filters.DateFilter(field_name="thang_ket_thuc", lookup_expr="gte")
+    ngay_den = django_filters.DateFilter(field_name="thang_bat_dau", lookup_expr="lte")
+
+    class Meta:
+        model = SoChuyenDoiTBThang
+        fields = ["nha_may", "nam", "thang", "ca_truc", "thang_tu", "thang_den", "ngay_tu", "ngay_den", "nguoi_tao"]
+
+
+class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
+    serializer_class = SoChuyenDoiTBThangSerializer
+    parser_classes = [JSONParser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = SoChuyenDoiTBThangFilterSet
+    search_fields = [
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+        "ca_truc",
+        "chi_tiets__ghi_chu",
+        "chi_tiets__ten_nhom",
+        "chi_tiets__thiet_bi__ten",
+        "chi_tiets__thiet_bi__ma_day_du",
+    ]
+    ordering_fields = ["nam", "thang", "thang_bat_dau", "created_at", "updated_at"]
+    ordering = ["-nam", "-thang", "-created_at"]
+
+    def get_permissions(self):
+        permission_classes = [CanViewMonthlyEquipmentSwitchLogs]
+        if self.action == "create":
+            permission_classes = [CanCreateMonthlyEquipmentSwitchLogs]
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = (
+            SoChuyenDoiTBThang.objects.select_related(
+                "nha_may",
+                "nguoi_tao",
+            )
+            .prefetch_related(
+                "chi_tiets",
+                "chi_tiets__thiet_bi",
+            )
+            .all()
+            .distinct()
+        )
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def _create_details_from_templates(self, so):
+        target_nha_may = so.nha_may or _get_song_hinh_factory()
+        templates = list(
+            MauChuyenDoiTBThang.objects.select_related("thiet_bi")
+            .filter(dang_su_dung=True)
+            .filter(nha_may=target_nha_may)
+            .order_by("thu_tu_nhom", "thu_tu", "created_at")
+        )
+        if not templates:
+            _create_default_monthly_switch_templates(target_nha_may)
+            templates = list(
+                MauChuyenDoiTBThang.objects.select_related("thiet_bi")
+                .filter(dang_su_dung=True)
+                .filter(nha_may=target_nha_may)
+                .order_by("thu_tu_nhom", "thu_tu", "created_at")
+            )
+        if not templates:
+            return False
+
+        previous_values = _previous_month_values_by_device(so)
+        existing_ids = set(so.chi_tiets.values_list("thiet_bi_id", flat=True))
+        ChiTietChuyenDoiTBThang.objects.bulk_create(
+            [
+                ChiTietChuyenDoiTBThang(
+                    so=so,
+                    thiet_bi=template.thiet_bi,
+                    ma_nhom=template.ma_nhom,
+                    ten_nhom=template.ten_nhom,
+                    don_vi_nhom=template.don_vi_nhom,
+                    don_vi=template.don_vi,
+                    dau_thang=previous_values.get(template.thiet_bi_id, 0),
+                    cuoi_thang=previous_values.get(template.thiet_bi_id, 0),
+                    thu_tu_nhom=template.thu_tu_nhom,
+                    thu_tu=template.thu_tu,
+                )
+                for template in templates
+                if template.thiet_bi_id not in existing_ids
+            ]
+        )
+        return True
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        factory_data = apply_request_factory_to_serializer(request.user, serializer, "nha_may", "fk")
+        if not factory_data.get("nha_may") and not serializer.validated_data.get("nha_may"):
+            factory_data["nha_may"] = _get_song_hinh_factory()
+
+        with transaction.atomic():
+            so = serializer.save(nguoi_tao=request.user, **factory_data)
+            details_created = self._create_details_from_templates(so)
+            if not details_created:
+                raise DRFValidationError(
+                    {"detail": "Chua co mau chuyen doi TB thang cho nha may nay va khong tim thay thiet bi phu hop de tao mau mac dinh."}
+                )
+
+        response_serializer = self.get_serializer(self.get_queryset().get(pk=so.pk))
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def perform_update(self, serializer):
+        if not _can_edit_monthly_equipment_switch_log(self.request.user, serializer.instance):
+            raise PermissionDenied("Ban khong co quyen cap nhat so chuyen doi TB thang nay.")
+        serializer.save(
+            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        )
+
+    def perform_destroy(self, instance):
+        if not _can_delete_monthly_equipment_switch_log(self.request.user, instance):
+            raise PermissionDenied("Ban khong co quyen xoa so chuyen doi TB thang nay.")
+        return super().perform_destroy(instance)
+
+    @action(detail=True, methods=["post"], url_path="tao-chi-tiet")
+    def tao_chi_tiet(self, request, pk=None):
+        so = self.get_object()
+        if not _can_edit_monthly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Ban khong co quyen them chi tiet chuyen doi TB thang."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        with transaction.atomic():
+            details_created = self._create_details_from_templates(so)
+            if not details_created:
+                return Response(
+                    {"detail": "Chua co mau chuyen doi TB thang cho nha may nay va khong tim thay thiet bi phu hop de tao mau mac dinh."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        response_serializer = self.get_serializer(self.get_object())
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        url_path=r"chi-tiet/(?P<chi_tiet_id>[^/.]+)",
+    )
+    def cap_nhat_chi_tiet(self, request, pk=None, chi_tiet_id=None):
+        so = self.get_object()
+        if not _can_edit_monthly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Ban khong co quyen cap nhat chi tiet chuyen doi TB thang nay."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            chi_tiet = so.chi_tiets.get(pk=chi_tiet_id)
+        except ChiTietChuyenDoiTBThang.DoesNotExist:
+            return Response(
+                {"detail": "Khong tim thay chi tiet chuyen doi TB thang."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ChiTietChuyenDoiTBThangSerializer(
+            chi_tiet,
+            data=request.data,
+            partial=True,
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
 
         response_serializer = self.get_serializer(self.get_object())
         return Response(response_serializer.data, status=status.HTTP_200_OK)

@@ -90,6 +90,14 @@ class CanCreateWeeklyEquipmentSwitchLogs(UserProfilePermission):
     permission_name = "can_create_weekly_equipment_switch_logs"
 
 
+class CanViewMonthlyEquipmentSwitchLogs(UserProfilePermission):
+    permission_name = "can_view_monthly_equipment_switch_logs"
+
+
+class CanCreateMonthlyEquipmentSwitchLogs(UserProfilePermission):
+    permission_name = "can_create_monthly_equipment_switch_logs"
+
+
 class CanViewDieselOperationLogbooks(UserProfilePermission):
     permission_name = "can_view_diesel_operation_logbooks"
 
