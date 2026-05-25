@@ -101,16 +101,16 @@ class UserProfileInline(admin.StackedInline):
                 'can_edit_weekly_equipment_switch_logs',
                 'can_delete_weekly_equipment_switch_logs',
             ),
-            'description': 'Quyen xem, tao, sua va xoa So chuyen doi thiet bi tuan.'
+            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tuần.'
         }),
-        ('Quyen so chuyen doi TB thang', {
+        ('Quyền sổ chuyển đổi thiết bị tháng', {
             'fields': (
                 'can_view_monthly_equipment_switch_logs',
                 'can_create_monthly_equipment_switch_logs',
                 'can_edit_monthly_equipment_switch_logs',
                 'can_delete_monthly_equipment_switch_logs',
             ),
-            'description': 'Quyen xem, tao, sua va xoa So chuyen doi TB thang.'
+            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
@@ -171,6 +171,13 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem trang realtime và bật/tắt/cập nhật tay dữ liệu realtime.'
         }),
+        ('Quyen cai dat thong so ke hoach', {
+            'fields': (
+                'can_view_hydrology_settings',
+                'can_edit_hydrology_settings',
+            ),
+            'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
+        }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
@@ -213,8 +220,8 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin configuration for UserProfile model"""
-    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'created_at')
-    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'nha_may', 'created_at', 'updated_at')
+    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'created_at')
+    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'nha_may', 'created_at', 'updated_at')
     search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 'phone', 'chuc_danh', 'nha_may__ma_nha_may', 'nha_may__ten_nha_may')
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
@@ -299,23 +306,23 @@ class UserProfileAdmin(admin.ModelAdmin):
             ),
             'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
-        ('Quyen so chuyen doi thiet bi tuan', {
+        ('Quyền sổ chuyển đổi thiết bị tuần', {
             'fields': (
                 'can_view_weekly_equipment_switch_logs',
                 'can_create_weekly_equipment_switch_logs',
                 'can_edit_weekly_equipment_switch_logs',
                 'can_delete_weekly_equipment_switch_logs',
             ),
-            'description': 'Quyen xem, tao, sua va xoa So chuyen doi thiet bi tuan.'
+            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tuần.'
         }),
-        ('Quyen so chuyen doi TB thang', {
+        ('Quyền sổ chuyển đổi thiết bị tháng', {
             'fields': (
                 'can_view_monthly_equipment_switch_logs',
                 'can_create_monthly_equipment_switch_logs',
                 'can_edit_monthly_equipment_switch_logs',
                 'can_delete_monthly_equipment_switch_logs',
             ),
-            'description': 'Quyen xem, tao, sua va xoa So chuyen doi TB thang.'
+            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
@@ -375,6 +382,13 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_update_realtime_hydrology',
             ),
             'description': 'Quyền xem trang realtime và bật/tắt/cập nhật tay dữ liệu realtime.'
+        }),
+        ('Quyền cài đặt thông số kế hoạch', {
+            'fields': (
+                'can_view_hydrology_settings',
+                'can_edit_hydrology_settings',
+            ),
+            'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

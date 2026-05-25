@@ -182,10 +182,22 @@ def user_can_view_hydrology(user):
         and (
             profile.can_view_hydrology_data
             or profile.can_view_realtime_hydrology
+            or profile.can_view_hydrology_settings
+            or profile.can_edit_hydrology_settings
             or profile.can_create_hydrology_data
             or profile.can_edit_hydrology_data
         )
     )
+
+
+def user_can_edit_hydrology_settings(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(profile and profile.can_edit_hydrology_settings)
 
 
 def user_can_delete_hydrology(user):
@@ -1087,7 +1099,7 @@ class HydrologySettingsAPIView(APIView):
         )
 
     def post(self, request):
-        if not user_can_write_hydrology(request.user):
+        if not user_can_edit_hydrology_settings(request.user):
             return Response(
                 {"error": "Ban khong co quyen cai dat thong so thuy van."},
                 status=status.HTTP_403_FORBIDDEN,

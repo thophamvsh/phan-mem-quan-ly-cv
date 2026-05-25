@@ -273,7 +273,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_edit_operation_parameters', 'can_delete_operation_parameters',
                  'can_view_hydrology_data', 'can_create_hydrology_data',
                  'can_edit_hydrology_data', 'can_delete_hydrology_data',
-                 'can_view_realtime_hydrology', 'can_update_realtime_hydrology')
+                 'can_view_realtime_hydrology', 'can_update_realtime_hydrology',
+                 'can_view_hydrology_settings', 'can_edit_hydrology_settings')
         read_only_fields = ('id', 'user_id', 'username', 'email', 'is_staff', 'is_superuser', 'full_name', 'avatar_url', 'chu_ky_url', 'nha_may_code',
                            'created_at', 'updated_at')
 

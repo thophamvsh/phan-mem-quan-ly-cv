@@ -504,6 +504,14 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen bat/tat va cap nhat tay du lieu realtime"
     )
+    can_view_hydrology_settings = models.BooleanField(
+        default=False,
+        help_text="Co quyen xem thong so thuy van cai dat"
+    )
+    can_edit_hydrology_settings = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua thong so thuy van cai dat"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
