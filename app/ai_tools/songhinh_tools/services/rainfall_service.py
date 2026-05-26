@@ -1,0 +1,576 @@
+"""
+Rainfall service - Get rainfall statistics for Sông Hinh
+"""
+
+import calendar
+from datetime import datetime
+from typing import Optional, List, Dict, Tuple
+
+from ..utils.numbers import parse_float_loose
+from ..utils.dates import parse_date
+
+
+# Station column mapping
+STATION_COLUMN_MAP = {
+    "UBND_xa_Song_Hinh": "UBND xã Sông Hinh",
+    "Xa_Ea_M_doan": "Xã Ea M'doan",
+    "Thon_10_Xa_Ea_M_Doal": "Thôn 10 Xã Ea M'Đoal",
+    "Cu_Kroa": "Cư Króa",
+    "Dap_Tran": "Đập Tràn",
+    "Xa_Ea_Trang": "Xã Ea Trang",
+}
+
+
+def _resolve_station_columns(stations: Optional[List[str]]) -> List[str]:
+    if not stations:
+        return list(STATION_COLUMN_MAP.keys())
+    reverse_map = {v: k for k, v in STATION_COLUMN_MAP.items()}
+    return [reverse_map.get(s, s) for s in stations]
+
+
+class RainfallService:
+    """Service for rainfall statistics"""
+
+    def __init__(self):
+        pass
+
+    def get_rainfall_statistics(
+        self,
+        period_type: str,
+        period_value: str,
+        stations: Optional[List[str]] = None,
+        compare_years: int = 1
+    ) -> str:
+        """
+        Thống kê lượng mưa theo cấu trúc thời gian (năm/tháng/tuần) cho Sông Hinh.
+        - Khi period_type='year' và compare_years=1: chỉ hiển thị Bảng 1 (chi tiết tháng trong năm)
+        - Khi period_type='year' và compare_years>1: hiển thị Bảng 1 + Bảng 2 (so sánh với N năm)
+        """
+        from thuyvan_data_client import query_rainfall_data
+
+        print(f"[INFO] SONG HINH RAINFALL: {period_type} {period_value}, stations={stations}", flush=True)
+
+        station_columns = _resolve_station_columns(stations)
+
+        try:
+            if period_type == "year":
+                year = int(period_value)
+                # Khi compare_years=1: chỉ lấy dữ liệu năm được hỏi
+                # Khi compare_years>1: lấy dữ liệu năm được hỏi + N năm cùng kỳ
+                if compare_years > 1:
+                    n_years = min(max(compare_years, 1), 5) + 1
+                    years = [year - i for i in range(n_years)]
+                    oldest_year = min(years)
+                    # Query từ năm oldest đến năm hiện tại để lấy dữ liệu so sánh
+                    start_date = f"{oldest_year}-01-01"
+                    end_date = f"{year}-12-31"
+                else:
+                    n_years = 1
+                    years = [year]
+                    start_date = f"{year}-01-01"
+                    end_date = f"{year}-12-31"
+
+                all_records = query_rainfall_data(start_date=start_date, end_date=end_date, limit=10000)
+
+                if not all_records:
+                    return "Không có dữ liệu đo mưa"
+
+                # Monthly totals (current year) + per-station totals
+                monthly_totals: Dict[int, Optional[float]] = {}
+                monthly_station: Dict[int, Dict[str, float]] = {}
+
+                for m in range(1, 13):
+                    total = 0.0
+                    has_data = False
+                    station_totals: Dict[str, float] = {}
+
+                    for rec in all_records:
+                        ds = rec.get("Thoi_gian", "")
+                        if not ds:
+                            continue
+                        try:
+                            dt = datetime.strptime(ds, "%Y-%m-%d")
+                        except Exception:
+                            continue
+                        if dt.year != year or dt.month != m:
+                            continue
+
+                        for col in station_columns:
+                            v = parse_float_loose(rec.get(col))
+                            if v is None:
+                                continue
+                            total += v
+                            has_data = True
+                            station_totals[col] = station_totals.get(col, 0.0) + v
+
+                    monthly_totals[m] = total if has_data else None
+                    monthly_station[m] = station_totals if has_data else {}
+
+                # Bảng 2: Tổng lượng mưa các trạm hằng tháng của năm hỏi và 2 năm liền kề (cùng 1 bảng)
+                monthly_total_by_year: Dict[Tuple[int, int], float] = {}
+                for m in range(1, 13):
+                    for yr in years:
+                        total = 0.0
+                        for rec in all_records:
+                            ds = rec.get("Thoi_gian", "")
+                            if not ds:
+                                continue
+                            try:
+                                dt = datetime.strptime(ds, "%Y-%m-%d")
+                            except Exception:
+                                continue
+                            if dt.year != yr or dt.month != m:
+                                continue
+                            for c in station_columns:
+                                v = parse_float_loose(rec.get(c))
+                                if v is None:
+                                    continue
+                                total += v
+                        monthly_total_by_year[(m, yr)] = total
+
+                # Chỉ hiển thị chi tiết theo tháng cho năm được hỏi (không có tháng năm khác)
+                station_headers = [STATION_COLUMN_MAP[c] for c in station_columns]
+                header_row = "| Tháng | " + " | ".join(station_headers) + " |"
+                sep_row = "|-------|" + " | ".join(["---"] * len(station_columns)) + " |"
+                # Build result
+                result = f"""
+# 🌧️ Thống kê Lượng Mưa - Sông Hinh
+
+*Năm được hỏi:* {year}
+*Số trạm:* {len(station_columns)} trạm
+
+---
+
+## Bảng 1 - Chi tiết các tháng năm {year} của các trạm Sông Hinh
+{header_row}
+{sep_row}
+"""
+                for m in range(1, 13):
+                    row = [f"**Tháng {m}**"]
+                    per = monthly_station.get(m, {})
+                    for c in station_columns:
+                        row.append(f"{per.get(c, 0.0):.1f}" if m in monthly_station and per else "-")
+                    result += f"| {' | '.join(row)} |\n"
+
+                # Bảng 2 - Tổng lượng mưa các trạm hằng tháng (năm được hỏi và N năm cùng kỳ)
+                year_cols = " | ".join([f"{y} (mm)" for y in years])
+                result += f"""
+---
+
+## Bảng 2 - So sánh Tổng lượng mưa các trạm hằng tháng (năm được hỏi và {n_years - 1} năm cùng kỳ)
+| Tháng | {year_cols} |
+|-------|{"|".join(["-------------"] * n_years)}|
+"""
+                for m in range(1, 13):
+                    row_vals = [monthly_total_by_year.get((m, y), 0.0) for y in years]
+                    result += f"| **Tháng {m}** | {' | '.join(f'{v:.1f}' for v in row_vals)} |\n"
+
+                result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
+                return result.strip()
+
+            elif period_type == "month":
+                parts = period_value.strip().split("/")
+                if len(parts) != 2:
+                    return f"Lỗi: Khi period_type='month', period_value phải có dạng 'tháng/năm' (vd: '1/2026'). Nhận được: '{period_value}'."
+                month_s, year_s = parts[0].strip(), parts[1].strip()
+                month = int(month_s)
+                year = int(year_s)
+                # Năm được hỏi + 3 năm liền kề = 4 cột
+                years = [year - i for i in range(4)]
+                oldest_year = min(years)
+                last_day = calendar.monthrange(year, month)[1]
+                start_date = f"{oldest_year}-{month:02d}-01"
+                end_date = f"{year}-{month:02d}-{last_day:02d}"
+                all_records = query_rainfall_data(start_date=start_date, end_date=end_date, limit=10000)
+                if not all_records:
+                    return "Không có dữ liệu đo mưa"
+
+                # Bảng 1: Thống kê các trạm từ ngày 1 đến last_day (tháng/năm được hỏi)
+                daily_data_by_station: Dict[str, List[float]] = {col: [0.0] * 31 for col in station_columns}
+                for rec in all_records:
+                    ds = rec.get("Thoi_gian", "")
+                    if not ds:
+                        continue
+                    try:
+                        dt = datetime.strptime(ds, "%Y-%m-%d")
+                    except Exception:
+                        continue
+                    if dt.year != year or dt.month != month:
+                        continue
+                    day_idx = dt.day - 1
+                    if day_idx < 0 or day_idx > 30:
+                        continue
+                    for col in station_columns:
+                        v = parse_float_loose(rec.get(col))
+                        if v is not None:
+                            daily_data_by_station[col][day_idx] += v
+
+                station_headers = [STATION_COLUMN_MAP[c] for c in station_columns]
+                header_row = "| Ngày | " + " | ".join(station_headers) + " | Tổng (mm) |"
+                sep_row = "|------|" + " | ".join(["---"] * len(station_columns)) + "|-----------|"
+                result = f"""
+## Thống kê Lượng Mưa - Sông Hinh
+
+**Tháng {month}/{year} – Các trạm từ ngày 1 đến 31**
+**Số trạm:** {len(station_columns)} trạm
+
+---
+### Bảng 1 – Thống kê các trạm từ ngày 1 đến 31/{month}/{year}
+{header_row}
+{sep_row}
+"""
+                for day in range(1, 32):
+                    row = [f"**{day}**"]
+                    day_total = 0.0
+                    for col in station_columns:
+                        v = daily_data_by_station[col][day - 1]
+                        row.append(f"{v:.1f}")
+                        day_total += v
+                    row.append(f"{day_total:.1f}")
+                    result += f"| {' | '.join(row)} |\n"
+
+                # Bảng 2: Tổng lượng mưa năm được hỏi và 3 năm liền kề (theo tháng đó)
+                monthly_total_by_year: Dict[Tuple[int, int], float] = {}
+                for y in years:
+                    total = 0.0
+                    for rec in all_records:
+                        ds = rec.get("Thoi_gian", "")
+                        if not ds:
+                            continue
+                        try:
+                            dt = datetime.strptime(ds, "%Y-%m-%d")
+                        except Exception:
+                            continue
+                        if dt.year != y or dt.month != month:
+                            continue
+                        for c in station_columns:
+                            v = parse_float_loose(rec.get(c))
+                            if v is not None:
+                                total += v
+                    monthly_total_by_year[(month, y)] = total
+
+                year_cols = " | ".join([f"{y} (mm)" for y in years])
+                result += f"""
+---
+### Bảng 2 – Tổng lượng mưa năm {year} và 3 năm liền kề
+| Tháng | {year_cols} |
+|-------|{"|".join(["-------------"] * 4)}|
+"""
+                result += f"| **Tháng {month}** | {' | '.join(f'{monthly_total_by_year.get((month, y), 0.0):.1f}' for y in years)} |\n"
+                result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
+                return result.strip()
+
+            elif period_type == "week":
+                parts = period_value.strip().split("/")
+                if len(parts) != 3:
+                    return f"Lỗi: Khi period_type='week', period_value phải có dạng 'tuần/tháng/năm' (vd: '3/1/2026'). Nhận được: '{period_value}'."
+                week_s, month_s, year_s = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                week_num = int(week_s)
+                month = int(month_s)
+                year = int(year_s)
+
+                week_ranges = {1: (1, 7), 2: (8, 14), 3: (15, 21), 4: (22, 28), 5: (29, 31)}
+                sd, ed = week_ranges.get(week_num, (1, 7))
+
+                last_day = calendar.monthrange(year, month)[1]
+                start_date = f"{year-2}-{month:02d}-01"
+                end_date = f"{year}-{month:02d}-{min(ed, last_day):02d}"
+                all_records = query_rainfall_data(start_date=start_date, end_date=end_date, limit=10000)
+                if not all_records:
+                    return "Không có dữ liệu đo mưa"
+
+                periods = [(year, ), (year - 1, ), (year - 2, )]
+
+                result = f"""
+# 🌧️ Thống kê Lượng Mưa theo Ngày - Sông Hinh
+
+*So sánh tuần {week_num} tháng {month} qua 3 năm:* {year}, {year-1}, {year-2}
+*Số trạm:** {len(station_columns)} trạm
+
+---
+
+| Ngày | {year} (mm) | {year-1} (mm) | {year-2} (mm) |
+|------|-------------|---------------|---------------|
+"""
+                for d in range(sd, min(ed + 1, 32)):
+                    row = [f"**{d}/{month}**"]
+                    for y in [year, year - 1, year - 2]:
+                        total = 0.0
+                        has = False
+                        for rec in all_records:
+                            ds = rec.get("Thoi_gian", "")
+                            if not ds:
+                                continue
+                            try:
+                                dt = datetime.strptime(ds, "%Y-%m-%d")
+                            except Exception:
+                                continue
+                            if dt.year == y and dt.month == month and dt.day == d:
+                                for c in station_columns:
+                                    v = parse_float_loose(rec.get(c))
+                                    if v is None:
+                                        continue
+                                    total += v
+                                    has = True
+                                break
+                        row.append(f"{total:.1f}" if has else "-")
+                    result += f"| {' | '.join(row)} |\n"
+
+                result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
+                return result.strip()
+
+            else:
+                return f"Lỗi: Loại khoảng thời gian không hợp lệ: {period_type}"
+
+        except Exception as e:
+            error_msg = f"Lỗi khi thống kê lượng mưa: {str(e)}"
+            print(f"[ERROR] {error_msg}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return error_msg
+
+    def get_rainfall_range_statistics(
+        self,
+        start_month: int,
+        start_year: int,
+        end_month: int,
+        end_year: int,
+        stations: Optional[List[str]] = None
+    ) -> str:
+        """
+        Thống kê lượng mưa trong khoảng thời gian (từ tháng này đến tháng khác) cho Sông Hinh
+        """
+        from thuyvan_data_client import query_rainfall_data
+
+        print(f"[INFO] SONG HINH RAINFALL RANGE: {start_month}/{start_year} to {end_month}/{end_year}, stations={stations}", flush=True)
+
+        station_columns = _resolve_station_columns(stations)
+
+        def last_day_of_month(y: int, m: int) -> int:
+            if m == 12:
+                return 31
+            if m in (4, 6, 9, 11):
+                return 30
+            if m == 2:
+                leap = (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0))
+                return 29 if leap else 28
+            return 31
+
+        try:
+            start_date = f"{int(start_year)}-{int(start_month):02d}-01"
+            end_date = f"{int(end_year)}-{int(end_month):02d}-{last_day_of_month(int(end_year), int(end_month)):02d}"
+
+            all_records = query_rainfall_data(start_date=start_date, end_date=end_date, limit=10000)
+            if not all_records:
+                return f"Không có dữ liệu đo mưa từ {start_month}/{start_year} đến {end_month}/{end_year}"
+
+            # list months in range
+            months: List[Tuple[int, int]] = []
+            y, m = int(start_year), int(start_month)
+            ey, em = int(end_year), int(end_month)
+            while (y < ey) or (y == ey and m <= em):
+                months.append((m, y))
+                m += 1
+                if m > 12:
+                    m = 1
+                    y += 1
+
+            monthly_totals: Dict[Tuple[int, int], Optional[float]] = {}
+            monthly_station: Dict[Tuple[int, int], Dict[str, float]] = {}
+
+            for (m, y) in months:
+                total = 0.0
+                has = False
+                per_station: Dict[str, float] = {}
+
+                for rec in all_records:
+                    ds = rec.get("Thoi_gian", "")
+                    if not ds:
+                        continue
+                    try:
+                        dt = datetime.strptime(ds, "%Y-%m-%d")
+                    except Exception:
+                        continue
+                    if dt.year != y or dt.month != m:
+                        continue
+
+                    for c in station_columns:
+                        v = parse_float_loose(rec.get(c))
+                        if v is None:
+                            continue
+                        total += v
+                        has = True
+                        per_station[c] = per_station.get(c, 0.0) + v
+
+                monthly_totals[(m, y)] = total if has else None
+                monthly_station[(m, y)] = per_station if has else {}
+
+            result = f"""
+### 🌧️ Thống kê Lượng Mưa theo Tháng - Sông Hinh
+
+**Khoảng thời gian:** Từ tháng {start_month}/{start_year} đến tháng {end_month}/{end_year}
+**Số trạm:** {len(station_columns)} trạm
+
+---
+
+#### 📊 Tổng Lượng Mưa theo Tháng
+
+| Tháng/Năm | Tổng Lượng Mưa (mm) |
+|-----------|---------------------|
+"""
+            for (m, y) in months:
+                val = monthly_totals[(m, y)]
+                result += f"| **{m}/{y}** | {val:.1f} |\n" if val is not None else f"| **{m}/{y}** | - |\n"
+
+            station_headers = [STATION_COLUMN_MAP[c] for c in station_columns]
+            header_row = "| Tháng/Năm | " + " | ".join(station_headers) + " |"
+            sep_row = "|-----------|" + " | ".join(["---"] * len(station_columns)) + " |"
+
+            result += f"""
+
+---
+
+#### 📋 Chi tiết Lượng Mưa theo Từng Trạm
+
+{header_row}
+{sep_row}
+"""
+            for (m, y) in months:
+                per = monthly_station.get((m, y), {})
+                row = [f"**{m}/{y}**"]
+                for c in station_columns:
+                    row.append(f"{per.get(c, 0.0):.1f}" if per else "-")
+                result += f"| {' | '.join(row)} |\n"
+
+            range_total = sum(v for v in monthly_totals.values() if v is not None)
+            result += f"""
+
+---
+
+**Tổng lượng mưa trong khoảng thời gian:** {range_total:.1f} mm
+**Nguồn:** Supabase - Bảng Do_Mua_VSH
+"""
+            return result.strip()
+
+        except Exception as e:
+            error_msg = f"Lỗi khi thống kê lượng mưa: {str(e)}"
+            print(f"[ERROR] {error_msg}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return error_msg
+
+    def get_rainfall_daily_statistics(
+        self,
+        start_date: str,
+        end_date: str,
+        stations: Optional[List[str]] = None
+    ) -> str:
+        """
+        Thống kê lượng mưa chi tiết theo từng ngày trong khoảng thời gian cho Sông Hinh.
+        Args:
+            start_date: Ngày bắt đầu (format: "DD/MM/YYYY" hoặc "YYYY-MM-DD")
+            end_date: Ngày kết thúc (format: "DD/MM/YYYY" hoặc "YYYY-MM-DD")
+            stations: Danh sách trạm đo mưa (optional)
+        """
+        from thuyvan_data_client import query_rainfall_data
+
+        print(f"[INFO] SONG HINH RAINFALL DAILY: {start_date} to {end_date}, stations={stations}", flush=True)
+
+        station_columns = _resolve_station_columns(stations)
+
+        try:
+            start_dt = parse_date(start_date)
+            end_dt = parse_date(end_date)
+
+            if not start_dt or not end_dt:
+                return "Lỗi: Không thể parse ngày. Sử dụng format DD/MM/YYYY hoặc YYYY-MM-DD"
+
+            if start_dt > end_dt:
+                return "Lỗi: Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+            end_date_str = end_dt.strftime("%Y-%m-%d")
+
+            all_records = query_rainfall_data(start_date=start_date_str, end_date=end_date_str, limit=10000)
+
+            if not all_records:
+                return f"Không có dữ liệu đo mưa từ {start_date} đến {end_date}"
+
+            # Tổ chức dữ liệu theo ngày
+            daily_data: Dict[str, Dict[str, float]] = {}  # {date: {station: value}}
+
+            for rec in all_records:
+                date_str = rec.get("Thoi_gian", "")
+                if not date_str:
+                    continue
+                try:
+                    rec_date = datetime.strptime(date_str, "%Y-%m-%d")
+                    if start_dt <= rec_date <= end_dt:
+                        date_key = rec_date.strftime("%d/%m/%Y")
+                        if date_key not in daily_data:
+                            daily_data[date_key] = {}
+
+                        for col in station_columns:
+                            v = parse_float_loose(rec.get(col))
+                            if v is not None:
+                                daily_data[date_key][col] = daily_data[date_key].get(col, 0.0) + v
+                except (ValueError, TypeError):
+                    continue
+
+            if not daily_data:
+                return f"Không có dữ liệu đo mưa từ {start_date} đến {end_date}"
+
+            # Sắp xếp theo ngày
+            sorted_dates = sorted(daily_data.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
+
+            # Tạo bảng chi tiết
+            station_headers = [STATION_COLUMN_MAP[c] for c in station_columns]
+            header_row = "| Ngày | " + " | ".join(station_headers) + " | Tổng (mm) |"
+            sep_row = "|------|" + " | ".join(["---"] * len(station_columns)) + " |-----------|"
+
+            result = f"""## 🌧️ Thống kê Lượng Mưa Chi tiết theo Ngày - Sông Hinh
+
+**Khoảng thời gian:* Từ {start_date} đến {end_date}
+**Số trạm:** {len(station_columns)} trạm
+
+---
+
+#### 📋 Chi tiết Lượng Mưa theo Từng Ngày
+
+{header_row}
+{sep_row}
+"""
+
+            total_range = 0.0
+            for date_key in sorted_dates:
+                row_data = [f"**{date_key}**"]
+                day_total = 0.0
+
+                for col in station_columns:
+                    val = daily_data[date_key].get(col, 0.0)
+                    # Hiển thị giá trị ngay cả khi là 0, chỉ hiển thị "-" khi không có dữ liệu (None)
+                    if col in daily_data[date_key]:
+                        row_data.append(f"{val:.1f}")
+                    else:
+                        row_data.append("-")
+                    day_total += val
+
+                row_data.append(f"**{day_total:.1f}**")
+                total_range += day_total
+                result += f"| {' | '.join(row_data)} |\n"
+
+            result += f"""
+---
+
+**Tổng lượng mưa trong khoảng thời gian:** {total_range:.1f} mm
+**Số ngày có dữ liệu:** {len(sorted_dates)} ngày
+**Nguồn:** Supabase - Bảng Do_Mua_VSH
+"""
+            return result.strip()
+
+        except Exception as e:
+            error_msg = f"Lỗi khi thống kê lượng mưa chi tiết: {str(e)}"
+            print(f"[ERROR] {error_msg}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return error_msg

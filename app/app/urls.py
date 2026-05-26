@@ -34,12 +34,14 @@ urlpatterns = [
     path("api/khovattu/", include("khovattu.urls")),
     path("api/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
     path("api/quanlyvanhanh/", include("quanlyvanhanh.urls")),
+    path("api/ai/", include("ai_tools.urls")),
 
     # Versioned API routes (v1)
     path('api/v1/', include('core.urls')),
     path("api/v1/khovattu/", include("khovattu.urls")),
     path("api/v1/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
     path("api/v1/quanlyvanhanh/", include("quanlyvanhanh.urls")),
+    path("api/v1/ai/", include("ai_tools.urls")),
     path("api/thongsothuyvan/", include("thongsothuyvan.urls")),
     path("api/v1/thongsothuyvan/", include("thongsothuyvan.urls")),
 ]

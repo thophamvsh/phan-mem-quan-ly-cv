@@ -5,6 +5,23 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip().strip('"').strip("'")
+        if name and name not in os.environ:
+            os.environ[name] = value
+
+
+load_env_file(BASE_DIR.parent / ".env")
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -17,6 +34,11 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-dev-only-chang
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 KHO_BACKEND_BASE_URL = os.environ.get("KHO_BACKEND_BASE_URL", "http://localhost:8000")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+AI_TOOLS_PROVIDER = os.environ.get("AI_TOOLS_PROVIDER", "openai")
+AI_TOOLS_OPENAI_MODEL = os.environ.get("AI_TOOLS_OPENAI_MODEL", "gpt-4o-mini")
+AI_TOOLS_ANTHROPIC_MODEL = os.environ.get("AI_TOOLS_ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -35,6 +57,7 @@ INSTALLED_APPS = [
     'nhatkyvanhanh',
     'quanlyvanhanh',
     'thongsothuyvan.apps.ThongsothuyvanConfig',
+    'ai_tools.apps.AiToolsConfig',
     'drf_spectacular',
 ]
 

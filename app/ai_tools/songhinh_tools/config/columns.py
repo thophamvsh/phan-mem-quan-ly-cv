@@ -1,0 +1,67 @@
+"""
+Column indices (0-based) for Google Sheets - Sông Hinh
+"""
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class OperationalCols:
+    # Google Sheets - Sheet "Sản lượng" (0-based)
+    COL_DATE: int = 1  # B
+    COL_RESERVOIR: int = 2  # C
+    COL_WATER_LEVEL: int = 6  # G
+    COL_VOLUME: int = 7  # H
+    COL_INFLOW: int = 8  # I
+    COL_TURBINE: int = 9  # J
+    COL_SPILLWAY: int = 10  # K
+    COL_QC_DAY: int = 11  # L
+    COL_OUTPUT_DAY: int = 12  # M
+    COL_COMMERCIAL_DAY: int = 13  # N
+    COL_QC_MONTH_ACC: int = 15  # P
+    COL_OUTPUT_MONTH: int = 16  # Q
+    COL_COMMERCIAL_MONTH: int = 17  # R
+    COL_QC_YEAR_ACC: int = 19  # T
+    COL_OUTPUT_YEAR: int = 20  # U
+    COL_COMMERCIAL_YEAR: int = 21  # V
+    COL_PLAN_YEAR: int = 22  # W
+    COL_SELF_USE: int = 23  # X
+
+
+@dataclass(frozen=True)
+class HoursCols:
+    # Google Sheets - Sheet "Giờ phát" (0-based)
+    COL_HOURS_DATE: int = 1  # B
+    COL_HOURS_UNIT: int = 2  # C
+    COL_HOURS_OPERATING: int = 3  # D
+    COL_HOURS_STOPPED: int = 4  # E
+
+
+# Column instances
+OP_COLS = OperationalCols()
+H_COLS = HoursCols()
+
+# Export individual column constants for convenience
+COL_DATE = OP_COLS.COL_DATE
+COL_RESERVOIR = OP_COLS.COL_RESERVOIR
+COL_WATER_LEVEL = OP_COLS.COL_WATER_LEVEL
+COL_VOLUME = OP_COLS.COL_VOLUME
+COL_INFLOW = OP_COLS.COL_INFLOW
+COL_TURBINE = OP_COLS.COL_TURBINE
+COL_SPILLWAY = OP_COLS.COL_SPILLWAY
+COL_OUTPUT_DAY = OP_COLS.COL_OUTPUT_DAY
+COL_COMMERCIAL_DAY = OP_COLS.COL_COMMERCIAL_DAY
+COL_QC_DAY = OP_COLS.COL_QC_DAY
+COL_OUTPUT_MONTH = OP_COLS.COL_OUTPUT_MONTH
+COL_COMMERCIAL_MONTH = OP_COLS.COL_COMMERCIAL_MONTH
+COL_QC_MONTH_ACC = OP_COLS.COL_QC_MONTH_ACC
+COL_OUTPUT_YEAR = OP_COLS.COL_OUTPUT_YEAR
+COL_COMMERCIAL_YEAR = OP_COLS.COL_COMMERCIAL_YEAR
+COL_QC_YEAR_ACC = OP_COLS.COL_QC_YEAR_ACC
+COL_PLAN_YEAR = OP_COLS.COL_PLAN_YEAR
+COL_SELF_USE = OP_COLS.COL_SELF_USE
+
+COL_HOURS_DATE = H_COLS.COL_HOURS_DATE
+COL_HOURS_UNIT = H_COLS.COL_HOURS_UNIT
+COL_HOURS_OPERATING = H_COLS.COL_HOURS_OPERATING
+COL_HOURS_STOPPED = H_COLS.COL_HOURS_STOPPED
