@@ -61,6 +61,7 @@ class UserProfileInline(admin.StackedInline):
                 'can_edit_all_event_developments',
                 'can_edit_own_remediations',
                 'can_edit_all_remediations',
+                'can_edit_leadership_directives',
             ),
             'description': 'Quyền thao tác trên SựKiện, KhắcPhụcSựKiện và DiễnBiếnSựKiện.'
         }),
@@ -274,6 +275,7 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_edit_all_event_developments',
                 'can_edit_own_remediations',
                 'can_edit_all_remediations',
+                'can_edit_leadership_directives',
             ),
             'description': 'Quyền thao tác trên SựKiện, KhắcPhụcSựKiện và DiễnBiếnSựKiện.'
         }),

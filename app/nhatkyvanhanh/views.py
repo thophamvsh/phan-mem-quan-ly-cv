@@ -23,6 +23,7 @@ from core.factory_scope import (
 from khovattu.models import Bang_nha_may
 from quanlyvanhanh.models import ThietBi
 from .models import (
+    ChiDaoSuKien,
     ChiTietSoGiaoNhanCaHC,
     ChiTietSoGiaoNhanCaVH,
     ChiTietChuyenDoiThietBi,
@@ -44,6 +45,7 @@ from .models import (
     SoAnToanDauGio
 )
 from .serializers import (
+    ChiDaoSuKienSerializer,
     ChiTietSoGiaoNhanCaHCSerializer,
     ChiTietSoGiaoNhanCaVHSerializer,
     ChiTietChuyenDoiThietBiSerializer,
@@ -744,6 +746,8 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
             permission_classes = [CanViewOperationEvents]
         elif self.action == "cap_nhat_dien_bien":
             permission_classes = [CanViewOperationEvents]
+        elif self.action == "tao_chi_dao":
+            permission_classes = [CanViewOperationEvents]
 
         return [permission() for permission in permission_classes]
 
@@ -765,6 +769,8 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
                 "ben_ghi_nhan_su_kien",
             )
             .prefetch_related(
+                "chi_dao_su_kiens",
+                "chi_dao_su_kiens__nguoi_chi_dao",
                 "dien_bien_su_kiens",
                 "dien_bien_su_kiens__nguoi_tao",
                 "khac_phuc_su_kiens",
@@ -801,6 +807,33 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
             return
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk"),
+        )
+
+    @action(detail=True, methods=["post"], url_path="chi-dao")
+    def tao_chi_dao(self, request, pk=None):
+        su_kien = self.get_object()
+        if not user_can_edit_chi_dao(request.user):
+            raise PermissionDenied("Chi lanh dao moi duoc cap nhat noi dung chi dao.")
+
+        serializer = ChiDaoSuKienSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        chi_dao = serializer.save(
+            su_kien=su_kien,
+            nguoi_chi_dao=request.user,
+            chuc_danh_nguoi_chi_dao=_lay_chuc_danh_user(request.user),
+        )
+
+        # Keep legacy fields populated for screens/reports that still read SuKien.chi_dao.
+        su_kien.chi_dao = chi_dao.noi_dung
+        su_kien.nguoi_chi_dao = request.user
+        su_kien.chu_ky_nguoi_chi_dao = chi_dao.chu_ky_nguoi_chi_dao
+        su_kien.save(update_fields=["chi_dao", "nguoi_chi_dao", "chu_ky_nguoi_chi_dao", "updated_at"])
+        return Response(
+            ChiDaoSuKienSerializer(chi_dao, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
         )
 
     def perform_destroy(self, instance):

@@ -13,6 +13,7 @@ from .models import (
     ChiTietSoGiaoNhanCaVH,
     ChiTietChuyenDoiThietBi,
     ChiTietChuyenDoiTBThang,
+    ChiDaoSuKien,
     DienBienSuKien,
     KhacPhucSuKien,
     LanChuyenDoiThietBi,
@@ -251,6 +252,12 @@ class ChiTietChuyenDoiTBThangInline(admin.TabularInline):
     extra = 0
 
 
+class ChiDaoSuKienInline(admin.TabularInline):
+    model = ChiDaoSuKien
+    readonly_fields = ("nguoi_chi_dao", "chuc_danh_nguoi_chi_dao", "created_at", "updated_at")
+    extra = 0
+
+
 @admin.register(SuKien)
 class SuKienAdmin(admin.ModelAdmin):
     list_display = (
@@ -282,7 +289,26 @@ class SuKienAdmin(admin.ModelAdmin):
         "updated_at",
     )
     exclude = ("chu_ky_ben_ghi_nhan_su_kien", "chu_ky_nguoi_chi_dao")
-    inlines = [DienBienSuKienInline, KhacPhucSuKienInline]
+    inlines = [DienBienSuKienInline, KhacPhucSuKienInline, ChiDaoSuKienInline]
+
+
+@admin.register(ChiDaoSuKien)
+class ChiDaoSuKienAdmin(admin.ModelAdmin):
+    list_display = (
+        "su_kien",
+        "nguoi_chi_dao",
+        "chuc_danh_nguoi_chi_dao",
+        "created_at",
+    )
+    list_filter = ("created_at", "su_kien__nha_may")
+    search_fields = (
+        "su_kien__ten_he_thong_thiet_bi",
+        "noi_dung",
+        "nguoi_chi_dao__email",
+        "chuc_danh_nguoi_chi_dao",
+    )
+    readonly_fields = ("nguoi_chi_dao", "chu_ky_nguoi_chi_dao", "created_at", "updated_at")
+    exclude = ("chu_ky_nguoi_chi_dao",)
 
 
 @admin.register(DienBienSuKien)

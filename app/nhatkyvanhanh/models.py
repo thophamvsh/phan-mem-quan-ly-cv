@@ -204,6 +204,43 @@ class SuKien(TimestampedUUIDModel):
         return super().save(*args, **kwargs)
 
 
+class ChiDaoSuKien(TimestampedUUIDModel):
+    su_kien = models.ForeignKey(
+        SuKien,
+        on_delete=models.CASCADE,
+        related_name="chi_dao_su_kiens",
+    )
+    noi_dung = models.TextField()
+    nguoi_chi_dao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="chi_dao_su_kien_da_tao",
+        null=True,
+        blank=True,
+    )
+    chuc_danh_nguoi_chi_dao = models.CharField(max_length=100, blank=True)
+    chu_ky_nguoi_chi_dao = models.ImageField(
+        upload_to="operations/nhat_ky_su_kien/chu_ky/chi_dao/",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "Chỉ đạo sự kiện"
+        verbose_name_plural = "Chỉ đạo sự kiện"
+
+    def __str__(self):
+        return f"Chỉ đạo {self.su_kien_id} - {self.created_at}"
+
+    def save(self, *args, **kwargs):
+        if self.nguoi_chi_dao_id and not self.chu_ky_nguoi_chi_dao:
+            chu_ky = _lay_chu_ky_profile(self.nguoi_chi_dao)
+            if chu_ky:
+                self.chu_ky_nguoi_chi_dao = chu_ky.name
+        return super().save(*args, **kwargs)
+
+
 class DienBienSuKien(TimestampedUUIDModel):
     su_kien = models.ForeignKey(
         SuKien,

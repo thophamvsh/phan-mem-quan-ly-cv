@@ -308,6 +308,12 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen sua tat ca noi dung khac phuc khi chua xac nhan"
     )
+    can_edit_leadership_directives = models.BooleanField(
+        default=False,
+        help_text="Co quyen nhap chi dao su kien van hanh"
+    )
+
+
 
     # Phan quyen nhat ky van hanh - so giao nhan ca
     can_view_shift_handover_logs = models.BooleanField(

@@ -6,6 +6,7 @@ from rest_framework.exceptions import PermissionDenied
 from core.factory_scope import filter_queryset_by_factory
 from quanlyvanhanh.models import ThietBi
 from .models import (
+    ChiDaoSuKien,
     ChiTietSoGiaoNhanCaHC,
     ChiTietSoGiaoNhanCaVH,
     DienBienSuKien,
@@ -29,9 +30,20 @@ from .models import (
 
 LEADERSHIP_TITLES = {
     "giam doc",
+    "gd",
+    "pho giam doc",
+    "pho gd",
+    "pgd",
     "pho tong giam doc",
+    "pho tong gd",
+    "ptgd",
     "tong giam doc",
     "tgd",
+    "quan doc",
+    "qd",
+    "pho quan doc",
+    "pho qd",
+    "pqd",
 }
 
 
@@ -50,7 +62,7 @@ def user_can_edit_chi_dao(user):
         return True
 
     profile = getattr(user, "profile", None)
-    return _normalize_title(getattr(profile, "chuc_danh", "")) in LEADERSHIP_TITLES
+    return bool(profile and profile.can_edit_leadership_directives)
 
 
 class UserSummaryMixin:
@@ -171,6 +183,47 @@ class KhacPhucSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
         return self._build_file_url(obj.chu_ky_nguoi_xac_nhan_xu_ly)
 
 
+class ChiDaoSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    nguoi_chi_dao_display = serializers.SerializerMethodField()
+    chu_ky_nguoi_chi_dao_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChiDaoSuKien
+        fields = [
+            "id",
+            "su_kien",
+            "noi_dung",
+            "nguoi_chi_dao",
+            "nguoi_chi_dao_display",
+            "chuc_danh_nguoi_chi_dao",
+            "chu_ky_nguoi_chi_dao",
+            "chu_ky_nguoi_chi_dao_url",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "su_kien",
+            "nguoi_chi_dao",
+            "nguoi_chi_dao_display",
+            "chuc_danh_nguoi_chi_dao",
+            "chu_ky_nguoi_chi_dao",
+            "chu_ky_nguoi_chi_dao_url",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_noi_dung(self, value):
+        if not str(value or "").strip():
+            raise serializers.ValidationError("Can nhap noi dung chi dao.")
+        return value
+
+    def get_nguoi_chi_dao_display(self, obj):
+        return self._get_user_display(obj.nguoi_chi_dao)
+
+    def get_chu_ky_nguoi_chi_dao_url(self, obj):
+        return self._build_file_url(obj.chu_ky_nguoi_chi_dao)
+
+
 class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
     ten_he_thong_thiet_bi = serializers.CharField(required=False, allow_blank=True)
     thiet_bi = serializers.PrimaryKeyRelatedField(
@@ -212,6 +265,7 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
     chu_ky_nguoi_xac_nhan_xu_ly_url = serializers.SerializerMethodField()
     khac_phuc_su_kiens = KhacPhucSuKienSerializer(many=True, read_only=True)
     dien_bien_su_kiens = DienBienSuKienSerializer(many=True, read_only=True)
+    chi_dao_su_kiens = ChiDaoSuKienSerializer(many=True, read_only=True)
     nha_may_code = serializers.SerializerMethodField()
     nha_may_name = serializers.SerializerMethodField()
     can_edit_chi_dao = serializers.SerializerMethodField()
@@ -265,6 +319,7 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nguoi_xac_nhan_xu_ly_display",
             "dien_bien_su_kiens",
             "khac_phuc_su_kiens",
+            "chi_dao_su_kiens",
             "can_edit_chi_dao",
             "created_at",
             "updated_at",
