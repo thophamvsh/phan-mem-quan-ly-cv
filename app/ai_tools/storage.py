@@ -58,9 +58,20 @@ def get_sessions(user, limit=50):
         if session_id in seen:
             continue
         seen.add(session_id)
+        first_user_message = (
+            AiConversationMessage.objects.filter(
+                user=user,
+                session_id=session_id,
+                role=AiConversationMessage.ROLE_USER,
+            )
+            .order_by("created_at", "id")
+            .values_list("content", flat=True)
+            .first()
+        )
         sessions.append(
             {
                 "session_id": session_id,
+                "title": first_user_message or row["content"],
                 "last_message": row["content"],
                 "last_role": row["role"],
                 "updated_at": row["created_at"],

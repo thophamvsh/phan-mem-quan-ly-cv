@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import unicodedata
 import uuid
 from types import SimpleNamespace
 
@@ -34,6 +35,96 @@ Tra loi ngan gon, ro rang, chuyen nghiep bang tieng Viet."""
 
 class AiToolsError(Exception):
     pass
+
+
+def _normalize_text(value):
+    text = unicodedata.normalize("NFKD", value or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return text.lower()
+
+
+def _tool_name(tool_call):
+    return getattr(getattr(tool_call, "function", None), "name", "") or ""
+
+
+def _tool_arguments(tool_call):
+    raw = getattr(getattr(tool_call, "function", None), "arguments", "") or "{}"
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
+def _dedupe_tool_calls(tool_calls):
+    unique = []
+    seen = set()
+    for tool_call in tool_calls:
+        key = (_tool_name(tool_call), json.dumps(_tool_arguments(tool_call), sort_keys=True, ensure_ascii=False))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(tool_call)
+    return unique
+
+
+def _select_single_songhinh_rainfall_call(user_text, tool_calls):
+    normalized = _normalize_text(user_text)
+    if "song hinh" not in normalized and "songhinh" not in normalized and "sh" not in normalized:
+        return None
+    if "mua" not in normalized and "rain" not in normalized:
+        return None
+
+    rainfall_calls = [
+        tool_call
+        for tool_call in tool_calls
+        if _tool_name(tool_call).startswith("get_songhinh_rainfall_")
+    ]
+    if len(rainfall_calls) <= 1:
+        return None
+
+    def score(tool_call):
+        name = _tool_name(tool_call)
+        args = _tool_arguments(tool_call)
+        if name == "get_songhinh_rainfall_statistics":
+            period_type = args.get("period_type")
+            if period_type == "year" and ("nam" in normalized or "year" in normalized):
+                return 100
+            if period_type == "month" and "thang" in normalized:
+                return 95
+            if period_type == "week" and "tuan" in normalized:
+                return 90
+            return 80
+        if name == "get_songhinh_rainfall_daily_statistics":
+            if "tu ngay" in normalized or "den ngay" in normalized:
+                return 75
+            return 30
+        if name == "get_songhinh_rainfall_range_statistics":
+            if "tu thang" in normalized or "den thang" in normalized:
+                return 70
+            return 25
+        return 0
+
+    return max(rainfall_calls, key=score)
+
+
+def _filter_tool_calls(user_text, tool_calls):
+    calls = _dedupe_tool_calls(list(tool_calls or []))
+    selected_rainfall = _select_single_songhinh_rainfall_call(user_text, calls)
+    if selected_rainfall:
+        normalized = _normalize_text(user_text)
+        needs_non_rainfall_data = any(
+            keyword in normalized
+            for keyword in ("qve", "luu luong", "muc nuoc", "mnh", "san luong")
+        )
+        if needs_non_rainfall_data:
+            non_rainfall_calls = [
+                tool_call
+                for tool_call in calls
+                if not _tool_name(tool_call).startswith("get_songhinh_rainfall_")
+            ]
+            return [selected_rainfall] + non_rainfall_calls
+        return [selected_rainfall]
+    return calls
 
 
 def _lazy_import_tools():
@@ -149,6 +240,7 @@ def _run_openai_chat(*, content, session_id, model):
         messages=messages,
         tools=[{"type": "function", "function": tool["function"]} for tool in all_tools],
         tool_choice="auto",
+        parallel_tool_calls=False,
         temperature=0.4,
         max_tokens=2048,
     )
@@ -158,7 +250,7 @@ def _run_openai_chat(*, content, session_id, model):
 
     if response.choices[0].message.tool_calls:
         message = response.choices[0].message
-        tool_calls = list(message.tool_calls or [])
+        tool_calls = _filter_tool_calls(content["text"], message.tool_calls)
         tools_called = len(tool_calls)
         tool_results = []
 
@@ -241,14 +333,19 @@ def _run_anthropic_chat(*, content, session_id, model):
         for block in getattr(response, "content", []) or []
         if getattr(block, "type", "") == "tool_use"
     ]
-    tool_results = []
-
+    tool_calls = []
     for tool_use in tool_uses:
         arguments = json.dumps(getattr(tool_use, "input", {}) or {}, ensure_ascii=False)
-        tool_call = SimpleNamespace(
-            id=getattr(tool_use, "id", ""),
-            function=SimpleNamespace(name=getattr(tool_use, "name", ""), arguments=arguments),
+        tool_calls.append(
+            SimpleNamespace(
+                id=getattr(tool_use, "id", ""),
+                function=SimpleNamespace(name=getattr(tool_use, "name", ""), arguments=arguments),
+            )
         )
+
+    tool_calls = _filter_tool_calls(content["text"], tool_calls)
+    tool_results = []
+    for tool_call in tool_calls:
         try:
             tool_results.append(
                 _handle_single_tool_call(
@@ -267,7 +364,7 @@ def _run_anthropic_chat(*, content, session_id, model):
     prompt_tokens = getattr(usage, "input_tokens", 0) if usage else 0
     completion_tokens = getattr(usage, "output_tokens", 0) if usage else 0
     total_tokens = prompt_tokens + completion_tokens
-    return assistant_message, len(tool_uses), prompt_tokens, completion_tokens, total_tokens
+    return assistant_message, len(tool_calls), prompt_tokens, completion_tokens, total_tokens
 
 
 def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
