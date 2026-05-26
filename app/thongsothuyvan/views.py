@@ -615,40 +615,58 @@ def build_dashboard_records_for_plant(plant, target_date=None):
 
     add_record(record_map, latest_record)
 
-    comparison_dates = [
-        report_date,
-        get_year_offset_date(report_date, 1),
-        get_year_offset_date(report_date, 2),
-    ]
+    if not report_date:
+        return []
 
-    for comparison_date in comparison_dates:
-        if not comparison_date:
-            continue
-
+    previous_year_date = get_year_offset_date(report_date, 1)
+    if previous_year_date:
         add_record(
             record_map,
             ThongsoSanxuat.objects.filter(
                 nha_may=plant,
-                thoi_gian__date=comparison_date,
+                thoi_gian__date=previous_year_date,
             )
             .order_by("-thoi_gian")
             .first(),
         )
-        add_record(record_map, get_latest_record_in_month(plant, comparison_date))
-        add_record(record_map, get_latest_record_in_year(plant, comparison_date))
 
-        quarter_start, quarter_end = get_quarter_bounds(comparison_date)
-        if quarter_start and quarter_end:
-            add_queryset_records(
-                record_map,
-                ThongsoSanxuat.objects.filter(
-                    nha_may=plant,
-                    thoi_gian__date__gte=quarter_start,
-                    thoi_gian__date__lte=quarter_end,
-                ).order_by("-thoi_gian"),
-            )
+    quarter_start, quarter_end = get_quarter_bounds(report_date)
+    if quarter_start and quarter_end:
+        add_queryset_records(
+            record_map,
+            ThongsoSanxuat.objects.filter(
+                nha_may=plant,
+                thoi_gian__date__gte=quarter_start,
+                thoi_gian__date__lte=quarter_end,
+            ).order_by("-thoi_gian"),
+        )
 
     return sorted(record_map.values(), key=lambda record: record.thoi_gian, reverse=True)
+
+
+def build_operation_hours_for_records(plant, records):
+    latest_record = records[0] if records else None
+    if not latest_record or not latest_record.thoi_gian:
+        return {"h1Year": None, "h2Year": None}
+
+    report_date = latest_record.thoi_gian.date()
+    year_start = date(report_date.year, 1, 1)
+    rows = (
+        ThongsoGioPhat.objects.filter(
+            nha_may=plant,
+            ngay__gte=year_start,
+            ngay__lte=report_date,
+        )
+        .values("to_may")
+        .annotate(year=Sum("gio_phat_dien"))
+        .order_by()
+    )
+    totals = {str(row["to_may"]): row["year"] or 0 for row in rows}
+
+    return {
+        "h1Year": totals.get("1"),
+        "h2Year": totals.get("2"),
+    }
 
 
 class DashboardSummaryAPIView(APIView):
@@ -668,9 +686,14 @@ class DashboardSummaryAPIView(APIView):
                 )
 
         data_by_plant = {}
+        operation_hours_by_plant = {}
         for plant in ("songhinh", "vinhson", "thuongkontum"):
             records = build_dashboard_records_for_plant(plant, target_date)
             data_by_plant[plant] = ThongsoSanxuatSerializer(records, many=True).data
+            operation_hours_by_plant[plant] = build_operation_hours_for_records(
+                plant,
+                records,
+            )
 
         report_year = (
             target_date.year
@@ -685,6 +708,7 @@ class DashboardSummaryAPIView(APIView):
         return Response(
             {
                 "data_by_plant": data_by_plant,
+                "operation_hours_by_plant": operation_hours_by_plant,
                 "hydrology_settings": hydrology_settings,
             }
         )
@@ -695,8 +719,66 @@ class GioPhatSummaryAPIView(APIView):
 
     def get(self, request):
         nhamay = normalize_plant_code(request.query_params.get("nhamay", "songhinh"))
-        date_str = request.query_params.get("date")
+        dates_str = request.query_params.get("dates")
 
+        if dates_str:
+            dates_list = sorted({d.strip() for d in dates_str.split(",") if d.strip()})
+            parsed_dates = []
+            for d_str in dates_list:
+                try:
+                    parsed_dates.append(datetime.strptime(d_str, "%Y-%m-%d").date())
+                except ValueError:
+                    continue
+
+            if not parsed_dates:
+                return Response(
+                    {"error": "Khong tim thay ngay hop le trong danh sach dates"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            min_year = min(d.year for d in parsed_dates)
+            max_date = max(parsed_dates)
+
+            records = list(
+                ThongsoGioPhat.objects.filter(
+                    nha_may=nhamay,
+                    ngay__gte=date(min_year, 1, 1),
+                    ngay__lte=max_date,
+                ).order_by("ngay", "to_may")
+            )
+            machines_set = {str(record.to_may) for record in records}
+            running_sums = {}
+            results = {}
+            record_index = 0
+
+            for d in sorted(parsed_dates):
+                day_values = {}
+                while record_index < len(records) and records[record_index].ngay <= d:
+                    record = records[record_index]
+                    machine = str(record.to_may)
+                    value = record.gio_phat_dien or 0.0
+                    sum_key = (record.ngay.year, machine)
+                    running_sums[sum_key] = running_sums.get(sum_key, 0.0) + value
+                    if record.ngay == d:
+                        day_values[machine] = day_values.get(machine, 0.0) + value
+                    record_index += 1
+
+                d_str = d.isoformat()
+                results[d_str] = {
+                    "nha_may": nhamay,
+                    "date": d_str,
+                    "year": d.year,
+                    "machines": {}
+                }
+                for m in machines_set:
+                    results[d_str]["machines"][m] = {
+                        "day": day_values.get(m, 0.0),
+                        "year": running_sums.get((d.year, m), 0.0),
+                    }
+
+            return Response(results)
+
+        date_str = request.query_params.get("date")
         if date_str:
             try:
                 target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -715,6 +797,7 @@ class GioPhatSummaryAPIView(APIView):
             ThongsoGioPhat.objects.filter(nha_may=nhamay, ngay=target_date)
             .values("to_may")
             .annotate(total=Sum("gio_phat_dien"))
+            .order_by()
         )
         year_rows = (
             ThongsoGioPhat.objects.filter(
@@ -724,6 +807,7 @@ class GioPhatSummaryAPIView(APIView):
             )
             .values("to_may")
             .annotate(total=Sum("gio_phat_dien"))
+            .order_by()
         )
 
         for row in day_rows:

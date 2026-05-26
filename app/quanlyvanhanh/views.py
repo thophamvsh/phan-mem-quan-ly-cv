@@ -115,66 +115,34 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         if search_param:
             search_param = str(search_param).strip()
 
-        if search_param:
-            tokens = [token for token in search_param.replace('.', ' ').split() if token]
-            search_query = (
-                Q(ten__icontains=search_param)
-                | Q(ma__icontains=search_param)
-                | Q(ma_day_du__icontains=search_param)
-                | Q(ma_day_du__istartswith=search_param)
-                | Q(ma_van_hanh__icontains=search_param)
-                | Q(so_serial__icontains=search_param)
-                | Q(mo_ta_ky_thuat__icontains=search_param)
-                | Q(nha_che_tao__icontains=search_param)
-                | Q(nha_cung_cap__icontains=search_param)
-                | Q(nha_may__icontains=search_param)
-                | Q(nuoc_san_xuat__icontains=search_param)
-            )
-
-            if not tokens:
-                queryset = queryset.filter(search_query).distinct()
-
-            for token in tokens:
-                token_query = (
-                    Q(ten__icontains=token)
-                    | Q(ma__icontains=token)
-                    | Q(ma_day_du__icontains=token)
-                    | Q(ma_van_hanh__icontains=token)
-                    | Q(so_serial__icontains=token)
-                )
-                queryset = queryset.filter(token_query)
-
-            return queryset
-
-        if search_param:
-            # Kiểm tra xem có phải là filter cascade không (có dấu chấm và >= 3 parts)
-            # Ví dụ: "SH.TB.H1" là filter cascade
-            # Còn "0K36" hoặc "GOV" là search keyword
-            parts = search_param.split('.')
-            is_cascade_filter = len(parts) >= 3
-
-            if is_cascade_filter:
-                # Filter cascade: tìm thiết bị có ma_day_du bắt đầu với search_param
-                # hoặc chính xác bằng search_param
+            # Kiểm tra xem có phải là filter cascade không (chứa dấu chấm và có từ 3 phần trở lên)
+            # Ví dụ: "SH.TB.H1" hoặc "SH.TB.H1.GOV"
+            parts = [p for p in search_param.split('.') if p]
+            if len(parts) >= 3 and all(p.isalnum() for p in parts[:3]):
+                # Filter cascade: Tìm thiết bị bắt đầu bằng mã này hoặc chính xác bằng mã này
                 queryset = queryset.filter(
                     Q(ma_day_du__istartswith=search_param) | Q(ma_day_du__iexact=search_param)
                 )
             else:
-                # Search keyword: tìm kiếm linh hoạt trong nhiều trường
-                search_query = Q()
+                # Search keyword thông thường: Tìm kiếm theo từng token dùng unaccent để không phân biệt dấu
+                # và tìm kiếm cả trên tên các cấp cha (kế thừa phân cấp)
+                tokens = [t for t in search_param.replace('.', ' ').split() if t]
+                for token in tokens:
+                    token_query = (
+                        Q(ten__unaccent__icontains=token)
+                        | Q(cha__ten__unaccent__icontains=token)
+                        | Q(cha__cha__ten__unaccent__icontains=token)
+                        | Q(cha__cha__cha__ten__unaccent__icontains=token)
+                        | Q(cha__cha__cha__cha__ten__unaccent__icontains=token)
+                        | Q(ma__unaccent__icontains=token)
+                        | Q(ma_day_du__icontains=token)
+                        | Q(ma_van_hanh__unaccent__icontains=token)
+                        | Q(so_serial__unaccent__icontains=token)
+                        | Q(mo_ta_ky_thuat__unaccent__icontains=token)
+                    )
+                    queryset = queryset.filter(token_query)
 
-                # Tìm kiếm trong các trường cơ bản
-                search_query |= Q(ten__icontains=search_param)
-                search_query |= Q(ma__icontains=search_param)
-                search_query |= Q(ma_day_du__icontains=search_param)
-                search_query |= Q(so_serial__icontains=search_param)
-                search_query |= Q(mo_ta_ky_thuat__icontains=search_param)
-                search_query |= Q(nha_che_tao__icontains=search_param)
-                search_query |= Q(nha_cung_cap__icontains=search_param)
-                search_query |= Q(nha_may__icontains=search_param)
-                search_query |= Q(nuoc_san_xuat__icontains=search_param)
-
-                queryset = queryset.filter(search_query).distinct()
+            return queryset
 
         return queryset
 

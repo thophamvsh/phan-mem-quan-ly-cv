@@ -106,7 +106,6 @@ def notify_new_sukien(sender, instance, created, **kwargs):
             f"⚠️ <b>Loại sự kiện:</b> {escape_html(loai_str)}\n"
             f"⏰ <b>Thời gian xảy ra:</b> {escape_html(thoi_gian)}\n"
             f"👤 <b>Người báo cáo:</b> {escape_html(nguoi_tao_str)}\n\n"
-            f"📝 <b>Hiện tượng diễn biến:</b>\n<i>{escape_html(instance.hien_tuong_dien_bien)}</i>\n\n"
             f"🆔 <code>{instance.id}</code>"
         )
         send_telegram_notification(text)

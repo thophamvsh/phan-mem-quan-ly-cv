@@ -5,6 +5,28 @@ from django.utils.translation import gettext_lazy as _
 from .models import User, UserProfile
 
 
+OPEN_PROFILE_FIELDSETS = {
+    'ThÃ´ng tin há»“ sÆ¡',
+    'ThÃ´ng tin cÆ¡ báº£n',
+    'PhÃ¢n quyá»n nhÃ  mÃ¡y',
+    'HÃ¬nh áº£nh',
+}
+
+
+def make_profile_fieldsets_collapsible(fieldsets):
+    collapsible_fieldsets = []
+    for title, options in fieldsets:
+        if title in OPEN_PROFILE_FIELDSETS:
+            collapsible_fieldsets.append((title, options))
+            continue
+
+        classes = tuple(options.get('classes', ()))
+        if 'collapse' not in classes:
+            options = {**options, 'classes': (*classes, 'collapse')}
+        collapsible_fieldsets.append((title, options))
+    return tuple(collapsible_fieldsets)
+
+
 class CustomUserCreationForm(UserCreationForm):
     """Custom form for creating users"""
     class Meta:
@@ -188,6 +210,7 @@ class UserProfileInline(admin.StackedInline):
             'classes': ('collapse',)
         }),
     )
+    fieldsets = make_profile_fieldsets_collapsible(fieldsets)
 
 
 @admin.register(User)
@@ -402,6 +425,7 @@ class UserProfileAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+    fieldsets = make_profile_fieldsets_collapsible(fieldsets)
 
     def full_name(self, obj):
         return obj.full_name

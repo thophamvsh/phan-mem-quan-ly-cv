@@ -272,19 +272,36 @@ class ThongsoSanxuatSerializer(serializers.ModelSerializer):
         model = ThongsoSanxuat
         fields = "__all__"
 
+    def _get_setting_value(self, nha_may, target_date, loai, field, thang=0, tuan=0):
+        if not hasattr(self, "_setting_value_cache"):
+            self._setting_value_cache = {}
+
+        cache_key = (nha_may, target_date.year, loai, field, thang, tuan)
+        if cache_key not in self._setting_value_cache:
+            self._setting_value_cache[cache_key] = get_setting_value(
+                nha_may,
+                target_date,
+                loai,
+                field,
+                thang=thang,
+                tuan=tuan,
+            )
+
+        return self._setting_value_cache[cache_key]
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         target_date = instance.thoi_gian.date() if instance.thoi_gian else None
         if not target_date:
             return data
 
-        annual_value = get_setting_value(
+        annual_value = self._get_setting_value(
             instance.nha_may,
             target_date,
             ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
             "sanluong_kehoach_nam",
         )
-        month_value = get_setting_value(
+        month_value = self._get_setting_value(
             instance.nha_may,
             target_date,
             ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
@@ -292,21 +309,21 @@ class ThongsoSanxuatSerializer(serializers.ModelSerializer):
             thang=target_date.month,
         )
         week_number = get_settings_week_number(target_date)
-        weekly_value = get_setting_value(
+        weekly_value = self._get_setting_value(
             instance.nha_may,
             target_date,
             ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
             "mucnuoc_gioihan_tuan",
             tuan=week_number,
         )
-        weekly_ho_a_value = get_setting_value(
+        weekly_ho_a_value = self._get_setting_value(
             instance.nha_may,
             target_date,
             ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
             "mucnuoc_gioihan_tuan_ho_a",
             tuan=week_number,
         )
-        weekly_ho_b_value = get_setting_value(
+        weekly_ho_b_value = self._get_setting_value(
             instance.nha_may,
             target_date,
             ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
