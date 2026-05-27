@@ -4,13 +4,7 @@ Normalizers for Water Tools responses → unified schema: tool, title, summary, 
 
 from typing import Any, Dict
 
-import os
-import sys
-
-_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _root not in sys.path:
-    sys.path.insert(0, _root)
-from tool_format import parse_markdown_blocks
+from ai_tools.tool_format import parse_markdown_blocks
 
 
 # Tool names (must match tooldefs/schemas.py)

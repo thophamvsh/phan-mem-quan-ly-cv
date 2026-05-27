@@ -1,3 +1,5 @@
+from django.db.models import Max, OuterRef, Subquery
+
 from .models import AiConversationMessage
 
 
@@ -46,40 +48,44 @@ def save_exchange(
 
 
 def get_sessions(user, limit=50):
+    first_user_message = (
+        AiConversationMessage.objects.filter(
+            user=user,
+            session_id=OuterRef("session_id"),
+            role=AiConversationMessage.ROLE_USER,
+        )
+        .order_by("created_at", "id")
+        .values("content")[:1]
+    )
+    last_message = (
+        AiConversationMessage.objects.filter(
+            user=user,
+            session_id=OuterRef("session_id"),
+        )
+        .order_by("-created_at", "-id")
+    )
     rows = (
         AiConversationMessage.objects.filter(user=user)
-        .order_by("-created_at")
-        .values("session_id", "role", "content", "created_at")
+        .values("session_id")
+        .annotate(
+            updated_at=Max("created_at"),
+            title=Subquery(first_user_message),
+            last_message=Subquery(last_message.values("content")[:1]),
+            last_role=Subquery(last_message.values("role")[:1]),
+        )
+        .order_by("-updated_at")[:limit]
     )
-    sessions = []
-    seen = set()
-    for row in rows:
-        session_id = row["session_id"]
-        if session_id in seen:
-            continue
-        seen.add(session_id)
-        first_user_message = (
-            AiConversationMessage.objects.filter(
-                user=user,
-                session_id=session_id,
-                role=AiConversationMessage.ROLE_USER,
-            )
-            .order_by("created_at", "id")
-            .values_list("content", flat=True)
-            .first()
-        )
-        sessions.append(
-            {
-                "session_id": session_id,
-                "title": first_user_message or row["content"],
-                "last_message": row["content"],
-                "last_role": row["role"],
-                "updated_at": row["created_at"],
-            }
-        )
-        if len(sessions) >= limit:
-            break
-    return sessions
+    return [
+        {
+            "session_id": row["session_id"],
+            "title": row["title"] or row["last_message"],
+            "content": row["title"],
+            "last_message": row["last_message"],
+            "last_role": row["last_role"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
 
 
 def delete_session(user, session_id):

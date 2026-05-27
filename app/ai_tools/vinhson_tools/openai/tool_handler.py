@@ -6,13 +6,8 @@ Returns unified schema: {"role":"tool","content":render_markdown(resp),"meta":re
 """
 
 import json
-import os
-import sys
 
-_week2 = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _week2 not in sys.path:
-    sys.path.insert(0, _week2)
-from tool_format import make_tool_response, render_markdown
+from ai_tools.tool_format import make_tool_response, render_markdown
 
 from .normalizer import get_normalizer
 from ..services.operational_service import OperationalService

@@ -156,5 +156,65 @@ class ComparativeAnalysisService:
 """.strip())
 
         result += "\n\n---\n\n".join(sections)
+
+        # Tự động vẽ đồ thị so sánh cho các thông số
+        chart_sections = []
+        for param in parameters:
+            if param == "water_level":
+                col_idx = self.cols.COL_WATER_LEVEL
+                label = "Mực nước thượng lưu"
+                unit = " m"
+                chart_type = "line"
+            elif param == "inflow":
+                col_idx = self.cols.COL_INFLOW
+                label = "Lưu lượng về Qve"
+                unit = " m³/s"
+                chart_type = "line"
+            elif param == "turbine":
+                col_idx = self.cols.COL_TURBINE
+                label = "Lưu lượng chạy máy Qcm"
+                unit = " m³/s"
+                chart_type = "line"
+            elif param == "spillway":
+                col_idx = self.cols.COL_SPILLWAY
+                label = "Lưu lượng xả lũ Qxl"
+                unit = " m³/s"
+                chart_type = "line"
+            else:
+                continue
+
+            chart_data = []
+            max_len = max(len(cur_period), len(ly_period))
+            for idx in range(max_len):
+                item = {"Ngay": f"N{idx+1}"}
+                if idx < len(cur_period):
+                    val_cur = parse_float_loose(safe_cell(cur_period[idx], col_idx))
+                    if val_cur is not None:
+                        item["NamNay"] = round(val_cur, 2)
+                        d_str = safe_cell(cur_period[idx], self.cols.COL_DATE)
+                        if "/" in d_str:
+                            item["Ngay"] = "/".join(d_str.split("/")[:2])
+                if idx < len(ly_period):
+                    val_ly = parse_float_loose(safe_cell(ly_period[idx], col_idx))
+                    if val_ly is not None:
+                        item["NamNgoai"] = round(val_ly, 2)
+                chart_data.append(item)
+            
+            if chart_data:
+                chart_json = {
+                    "type": chart_type,
+                    "title": f"So sánh {label} (Năm nay vs Năm ngoái)",
+                    "data": chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["NamNay", "NamNgoai"],
+                    "colors": ["#3b82f6", "#10b981"],
+                    "unit": unit
+                }
+                import json
+                chart_sections.append(f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n")
+
+        if chart_sections:
+            result += "\n\n---\n\n" + "\n\n".join(chart_sections)
+
         result += "\n\n---\n\n**Nguồn:** Google Sheets - Thủy điện Sông Hinh"
         return result.strip()

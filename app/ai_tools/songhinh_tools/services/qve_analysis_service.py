@@ -681,4 +681,65 @@ class QveAnalysisService:
             else:
                 buf.append(f"**Kết luận MNH:** Mực nước hồ {cur_year} thấp hơn {ly_year}, cần theo dõi và điều tiết phù hợp.")
 
+        # Tự động vẽ đồ thị phân tích 4 năm
+        chart_sections = []
+        
+        # 1. Chart Qve & Lượng mưa
+        chart_data_qve = [
+            {"Nam": str(years_list[3]), "Qve_TB": round(qve_ly3.avg, 2), "LuongMua": round(rain_ly3, 1)},
+            {"Nam": str(years_list[2]), "Qve_TB": round(qve_ly2.avg, 2), "LuongMua": round(rain_ly2, 1)},
+            {"Nam": str(years_list[1]), "Qve_TB": round(qve_ly.avg, 2), "LuongMua": round(rain_ly, 1)},
+            {"Nam": str(years_list[0]), "Qve_TB": round(qve_cur.avg, 2), "LuongMua": round(rain_cur, 1)},
+        ]
+        chart_qve_json = {
+            "type": "bar",
+            "title": "So sánh Qve TB (m³/s) & Lượng mưa lưu vực (mm) qua 4 năm",
+            "data": chart_data_qve,
+            "xKey": "Nam",
+            "yKeys": ["Qve_TB", "LuongMua"],
+            "colors": ["#3b82f6", "#10b981"],
+            "unit": ""
+        }
+        import json
+        chart_sections.append(f"\n\n```chart\n{json.dumps(chart_qve_json, ensure_ascii=False, indent=2)}\n```\n")
+
+        # 2. Chart Mực nước hồ
+        chart_data_wl = [
+            {"Nam": str(years_list[3]), "MNH_TB": round(wl_ly3.avg, 2)},
+            {"Nam": str(years_list[2]), "MNH_TB": round(wl_ly2.avg, 2)},
+            {"Nam": str(years_list[1]), "MNH_TB": round(wl_ly.avg, 2)},
+            {"Nam": str(years_list[0]), "MNH_TB": round(wl_cur.avg, 2)},
+        ]
+        chart_wl_json = {
+            "type": "line",
+            "title": "So sánh Mực nước hồ TB (m) qua 4 năm",
+            "data": chart_data_wl,
+            "xKey": "Nam",
+            "yKeys": ["MNH_TB"],
+            "colors": ["#ef4444"],
+            "unit": " m"
+        }
+        chart_sections.append(f"\n\n```chart\n{json.dumps(chart_wl_json, ensure_ascii=False, indent=2)}\n```\n")
+
+        # 3. Chart Sản lượng nếu có
+        if has_any_output:
+            chart_data_out = [
+                {"Nam": str(years_list[3]), "SanLuong": round(out_ly3_sum / _TR, 2)},
+                {"Nam": str(years_list[2]), "SanLuong": round(out_ly2_sum / _TR, 2)},
+                {"Nam": str(years_list[1]), "SanLuong": round(out_ly_sum / _TR, 2)},
+                {"Nam": str(years_list[0]), "SanLuong": round(out_cur_sum / _TR, 2)},
+            ]
+            chart_out_json = {
+                "type": "bar",
+                "title": "So sánh Sản lượng thương phẩm (triệu kWh) qua 4 năm",
+                "data": chart_data_out,
+                "xKey": "Nam",
+                "yKeys": ["SanLuong"],
+                "colors": ["#f59e0b"],
+                "unit": " tr kWh"
+            }
+            chart_sections.append(f"\n\n```chart\n{json.dumps(chart_out_json, ensure_ascii=False, indent=2)}\n```\n")
+
+        buf.extend(chart_sections)
+
         return "\n".join(buf).strip()

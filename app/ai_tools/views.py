@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,6 +8,9 @@ from .permissions import CanUseAiTools
 from .serializers import AiChatRequestSerializer
 from .services import AiToolsError, run_ai_chat
 from .storage import delete_session, get_conversation, get_sessions
+
+
+logger = logging.getLogger(__name__)
 
 
 class AiChatAPIView(APIView):
@@ -25,7 +30,8 @@ class AiChatAPIView(APIView):
         except AiToolsError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except Exception as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception("AI chat request failed")
+            return Response({"detail": "Khong the xu ly yeu cau AI luc nay."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(data)
 
 

@@ -426,6 +426,41 @@ class ForecastServiceSH:
 **(Tổng sản lượng từ bảng chi tiết)**
 """
 
+            # Tự động vẽ đồ thị dự báo hàng ngày
+            forecast_chart_data = []
+            for day in range(1, last_day_forecast + 1):
+                qve_val = qve_dict.get(day)
+                commercial_val = commercial_dict.get(day)
+                if qve_val is not None or commercial_val is not None:
+                    forecast_chart_data.append({
+                        "Ngay": f"{day}/{target_month}",
+                        "Qve": round(qve_val, 2) if isinstance(qve_val, (int, float)) else 0.0,
+                        "SanLuong": round(commercial_val, 0) if isinstance(commercial_val, (int, float)) else 0.0
+                    })
+
+            if forecast_chart_data:
+                qve_chart_json = {
+                    "type": "line",
+                    "title": f"Biểu đồ dự báo Qve hàng ngày tháng {target_month}/{target_year}",
+                    "data": forecast_chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["Qve"],
+                    "colors": ["#10b981"],
+                    "unit": " m³/s"
+                }
+                output_chart_json = {
+                    "type": "bar",
+                    "title": f"Biểu đồ dự báo Sản lượng hàng ngày tháng {target_month}/{target_year}",
+                    "data": forecast_chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["SanLuong"],
+                    "colors": ["#3b82f6"],
+                    "unit": " kWh"
+                }
+                import json
+                result += f"\n\n```chart\n{json.dumps(qve_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                result += f"\n\n```chart\n{json.dumps(output_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
             result += """---
 
 **Lưu ý:**
@@ -521,6 +556,26 @@ Dựa trên phân tích các năm liền kề:
             for yr, qv in sorted(qve_data, key=lambda x: -x[0]):
                 marker = " ← Gần nhất với trung bình" if yr == closest_year else ""
                 result += f"| {yr} | {qv:.2f}{marker} |\n"
+
+            # Tự động vẽ đồ thị Qve trung bình các năm liền kề
+            year_chart_data = []
+            for yr, qv in sorted(qve_data, key=lambda x: x[0]):
+                year_chart_data.append({
+                    "Nam": str(yr),
+                    "Qve_TB": round(qv, 2)
+                })
+
+            year_chart_json = {
+                "type": "bar",
+                "title": "Biểu đồ so sánh Qve trung bình các năm liền kề",
+                "data": year_chart_data,
+                "xKey": "Nam",
+                "yKeys": ["Qve_TB"],
+                "colors": ["#3b82f6"],
+                "unit": " m³/s"
+            }
+            import json
+            result += f"\n\n```chart\n{json.dumps(year_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
             result += f"""
 **Trung bình Qve cả năm:** {avg_qve:.2f} m³/s

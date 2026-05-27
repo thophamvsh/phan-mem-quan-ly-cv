@@ -1,4 +1,6 @@
+import copy
 import json
+import logging
 import os
 import time
 import unicodedata
@@ -8,8 +10,10 @@ from types import SimpleNamespace
 from django.conf import settings
 
 from .storage import get_conversation, save_exchange
+from .tool_format import sanitize_tool_content
 
 
+logger = logging.getLogger(__name__)
 SONGHINH_KEYWORDS = ("song hinh", "songhinh", "sh", "thuong kon tum", "kontum")
 VINHSON_KEYWORDS = ("vinh son", "vinhson", "vs", "vsa", "vsb", "vsc")
 DEFAULT_PROVIDER = getattr(settings, "AI_TOOLS_PROVIDER", "openai")
@@ -30,7 +34,8 @@ ANTHROPIC_MODELS = tuple(
 
 SYSTEM_PROMPT = """Ban la Nami, tro ly AI cho Bang dieu khien van hanh thuy dien.
 Ban ho tro tra cuu muc nuoc, dung tich, luu luong, du lieu van hanh va phan tich.
-Tra loi ngan gon, ro rang, chuyen nghiep bang tieng Viet."""
+Tra loi ngan gon, ro rang, chuyen nghiep bang tieng Viet.
+Khong neu ten he thong luu tru hoac nguon ky thuat noi bo nhu Supabase, Google Sheets, spreadsheet, worksheet."""
 
 
 class AiToolsError(Exception):
@@ -165,7 +170,21 @@ def _format_tool_results(tool_results):
             formatted.append(result["content"])
         elif isinstance(result, str):
             formatted.append(result)
-    return "\n\n".join(item for item in formatted if item)
+    return sanitize_tool_content("\n\n".join(item for item in formatted if item))
+
+
+def _agent_tools(tools):
+    sanitized = []
+    for tool in tools:
+        item = copy.deepcopy(tool)
+        function = item.get("function", {})
+        for field in ("description",):
+            if field in function:
+                function[field] = sanitize_tool_content(function[field])
+        parameters = function.get("parameters") or {}
+        function["parameters"] = sanitize_tool_content(parameters)
+        sanitized.append(item)
+    return sanitized
 
 
 def _estimate_cost_usd(provider, model, prompt_tokens, completion_tokens):
@@ -224,7 +243,7 @@ def _run_openai_chat(*, content, session_id, model):
 
     (
         all_tools,
-        _handle_water_tool_call,
+        handle_water_tool_call,
         handle_water_tool_calls,
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
@@ -238,11 +257,11 @@ def _run_openai_chat(*, content, session_id, model):
     response = client.chat.completions.create(
         model=model,
         messages=messages,
-        tools=[{"type": "function", "function": tool["function"]} for tool in all_tools],
+        tools=[{"type": "function", "function": tool["function"]} for tool in _agent_tools(all_tools)],
         tool_choice="auto",
         parallel_tool_calls=False,
         temperature=0.4,
-        max_tokens=2048,
+        max_tokens=4096,
     )
 
     assistant_message = response.choices[0].message.content or ""
@@ -261,9 +280,9 @@ def _run_openai_chat(*, content, session_id, model):
                 elif "vinhson" in tool_call.function.name.lower():
                     tool_results.append(handle_vinhson_tool_calls(tool_call))
                 else:
-                    tool_results.extend(handle_water_tool_calls(message))
-                    break
+                    tool_results.append(handle_water_tool_call(tool_call))
             except Exception as exc:
+                logger.exception("AI tool execution failed: %s", tool_call.function.name)
                 tool_results.append(f"Loi khi chay tool {tool_call.function.name}: {exc}")
 
         assistant_message = _format_tool_results(tool_results) or assistant_message
@@ -277,7 +296,7 @@ def _run_openai_chat(*, content, session_id, model):
 
 def _anthropic_tools(openai_tools):
     tools = []
-    for tool in openai_tools:
+    for tool in _agent_tools(openai_tools):
         function = tool.get("function", {})
         tools.append(
             {
@@ -295,6 +314,24 @@ def _anthropic_text(message):
         if getattr(block, "type", "") == "text":
             parts.append(getattr(block, "text", ""))
     return "\n".join(part for part in parts if part)
+
+
+def _anthropic_content_blocks(message):
+    blocks = []
+    for block in getattr(message, "content", []) or []:
+        block_type = getattr(block, "type", "")
+        if block_type == "text":
+            blocks.append({"type": "text", "text": getattr(block, "text", "")})
+        elif block_type == "tool_use":
+            blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": getattr(block, "id", ""),
+                    "name": getattr(block, "name", ""),
+                    "input": getattr(block, "input", {}) or {},
+                }
+            )
+    return blocks
 
 
 def _run_anthropic_chat(*, content, session_id, model):
@@ -323,7 +360,7 @@ def _run_anthropic_chat(*, content, session_id, model):
         model=model,
         system=SYSTEM_PROMPT,
         messages=messages,
-        max_tokens=2048,
+        max_tokens=4096,
         temperature=0.4,
         tools=_anthropic_tools(all_tools),
     )
@@ -345,18 +382,22 @@ def _run_anthropic_chat(*, content, session_id, model):
 
     tool_calls = _filter_tool_calls(content["text"], tool_calls)
     tool_results = []
+    tool_result_by_id = {}
     for tool_call in tool_calls:
         try:
-            tool_results.append(
-                _handle_single_tool_call(
-                    tool_call,
-                    handle_water_tool_call,
-                    handle_songhinh_tool_calls,
-                    handle_vinhson_tool_calls,
-                )
+            result = _handle_single_tool_call(
+                tool_call,
+                handle_water_tool_call,
+                handle_songhinh_tool_calls,
+                handle_vinhson_tool_calls,
             )
+            tool_results.append(result)
+            tool_result_by_id[tool_call.id] = result["content"] if isinstance(result, dict) else str(result)
         except Exception as exc:
-            tool_results.append(f"Loi khi chay tool {tool_call.function.name}: {exc}")
+            logger.exception("AI tool execution failed: %s", tool_call.function.name)
+            result = f"Loi khi chay tool {tool_call.function.name}: {exc}"
+            tool_results.append(result)
+            tool_result_by_id[tool_call.id] = result
 
     assistant_message = _format_tool_results(tool_results) if tool_results else _anthropic_text(response)
 
@@ -394,6 +435,7 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
 
     if not total_tokens:
         total_tokens = prompt_tokens + completion_tokens
+    assistant_message = sanitize_tool_content(assistant_message)
     cost_usd = _estimate_cost_usd(provider, selected_model, prompt_tokens, completion_tokens)
     latency_ms = int((time.time() - start_time) * 1000)
     meta = {

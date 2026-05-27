@@ -4,13 +4,7 @@ Normalizers for Sông Hinh tool responses → unified schema: tool, title, summa
 
 from typing import Any, Dict, Optional
 
-# Import from parent week2 so both packages can use it when run from week2
-import sys
-import os
-_week2 = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _week2 not in sys.path:
-    sys.path.insert(0, _week2)
-from tool_format import parse_markdown_blocks
+from ai_tools.tool_format import parse_markdown_blocks
 
 # Tool names (must match tool_definitions)
 OPERATIONAL = "get_songinh_operational_data"
@@ -20,6 +14,7 @@ HIERARCHICAL = "get_songhinh_hierarchical_statistics"
 RAINFALL_STAT = "get_songhinh_rainfall_statistics"
 RAINFALL_RANGE = "get_songhinh_rainfall_range_statistics"
 RAINFALL_DAILY = "get_songhinh_rainfall_daily_statistics"
+FORECAST = "get_songhinh_forecast"
 
 
 def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, Any]:
@@ -29,7 +24,7 @@ def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, An
         "title": (blocks.get("title") or "").strip(),
         "summary": (blocks.get("summary") or "").strip(),
         "table": "\n\n".join(tables).strip() if tables else "",
-        "chart": "",
+        "chart": (blocks.get("chart") or "").strip(),
         "notes": (blocks.get("notes") or "").strip(),
         "raw": raw,
     }
@@ -77,6 +72,12 @@ def normalize_rainfall_range_statistics(raw: str) -> Dict[str, Any]:
     return _to_schema(RAINFALL_RANGE, raw, blocks)
 
 
+def normalize_forecast(raw: str) -> Dict[str, Any]:
+    """Normalize get_songhinh_forecast output."""
+    blocks = parse_markdown_blocks(raw)
+    return _to_schema(FORECAST, raw, blocks)
+
+
 _NORMALIZERS = {
     OPERATIONAL: normalize_operational_data,
     COMPARATIVE: normalize_comparative_analysis,
@@ -85,6 +86,7 @@ _NORMALIZERS = {
     RAINFALL_STAT: normalize_rainfall_statistics,
     RAINFALL_DAILY: normalize_rainfall_daily_statistics,
     RAINFALL_RANGE: normalize_rainfall_range_statistics,
+    FORECAST: normalize_forecast,
 }
 
 

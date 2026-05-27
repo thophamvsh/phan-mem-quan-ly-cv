@@ -165,6 +165,47 @@ class RainfallService:
                     row_vals = [monthly_total_by_year.get((m, y), 0.0) for y in years]
                     result += f"| **Tháng {m}** | {' | '.join(f'{v:.1f}' for v in row_vals)} |\n"
 
+                # Chart 1: Lượng mưa chi tiết các trạm năm được hỏi
+                chart_data = []
+                for m in range(1, 13):
+                    item = {"Thang": f"Tháng {m}"}
+                    per = monthly_station.get(m, {})
+                    for c in station_columns:
+                        item[STATION_COLUMN_MAP[c]] = round(per.get(c, 0.0), 1)
+                    chart_data.append(item)
+
+                chart_json = {
+                    "type": "bar",
+                    "title": f"Biểu đồ lượng mưa các trạm đo năm {year} (mm)",
+                    "data": chart_data,
+                    "xKey": "Thang",
+                    "yKeys": [STATION_COLUMN_MAP[c] for c in station_columns],
+                    "colors": ["#10b981", "#3b82f6", "#ef4444", "#f59e0b", "#06b6d4", "#a855f7"],
+                    "unit": " mm"
+                }
+                import json
+                result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
+                # Chart 2: So sánh qua các năm nếu có so sánh
+                if compare_years > 1:
+                    comp_chart_data = []
+                    for m in range(1, 13):
+                        item = {"Thang": f"Tháng {m}"}
+                        for y in years:
+                            item[str(y)] = round(monthly_total_by_year.get((m, y), 0.0), 1)
+                        comp_chart_data.append(item)
+
+                    comp_chart_json = {
+                        "type": "line",
+                        "title": f"So sánh tổng lượng mưa tháng qua các năm (mm)",
+                        "data": comp_chart_data,
+                        "xKey": "Thang",
+                        "yKeys": [str(y) for y in years],
+                        "colors": ["#10b981", "#3b82f6", "#ef4444", "#f59e0b"],
+                        "unit": " mm"
+                    }
+                    result += f"\n\n```chart\n{json.dumps(comp_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
                 result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
                 return result.strip()
 
@@ -257,6 +298,45 @@ class RainfallService:
 |-------|{"|".join(["-------------"] * 4)}|
 """
                 result += f"| **Tháng {month}** | {' | '.join(f'{monthly_total_by_year.get((month, y), 0.0):.1f}' for y in years)} |\n"
+
+                # Chart 1: Daily rainfall
+                daily_chart_data = []
+                for day in range(1, last_day + 1):
+                    item = {"Ngay": str(day)}
+                    for col in station_columns:
+                        item[STATION_COLUMN_MAP[col]] = round(daily_data_by_station[col][day - 1], 1)
+                    daily_chart_data.append(item)
+
+                daily_chart_json = {
+                    "type": "line",
+                    "title": f"Biểu đồ lượng mưa hàng ngày tháng {month}/{year} (mm)",
+                    "data": daily_chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": [STATION_COLUMN_MAP[c] for c in station_columns],
+                    "colors": ["#10b981", "#3b82f6", "#ef4444", "#f59e0b", "#06b6d4", "#a855f7"],
+                    "unit": " mm"
+                }
+                import json
+                result += f"\n\n```chart\n{json.dumps(daily_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
+                # Chart 2: 4 years comparison of monthly total
+                comp_chart_data = []
+                for y in reversed(years):
+                    comp_chart_data.append({
+                        "Nam": str(y),
+                        "TongLuongMua": round(monthly_total_by_year.get((month, y), 0.0), 1)
+                    })
+                comp_chart_json = {
+                    "type": "bar",
+                    "title": f"So sánh tổng lượng mưa tháng {month} qua các năm (mm)",
+                    "data": comp_chart_data,
+                    "xKey": "Nam",
+                    "yKeys": ["TongLuongMua"],
+                    "colors": ["#3b82f6"],
+                    "unit": " mm"
+                }
+                result += f"\n\n```chart\n{json.dumps(comp_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
                 result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
                 return result.strip()
 
@@ -315,6 +395,40 @@ class RainfallService:
                                 break
                         row.append(f"{total:.1f}" if has else "-")
                     result += f"| {' | '.join(row)} |\n"
+
+                week_chart_data = []
+                for d in range(sd, min(ed + 1, 32)):
+                    item = {"Ngay": f"{d}/{month}"}
+                    for y in [year, year - 1, year - 2]:
+                        total = 0.0
+                        for rec in all_records:
+                            ds = rec.get("Thoi_gian", "")
+                            if not ds:
+                                continue
+                            try:
+                                dt = datetime.strptime(ds, "%Y-%m-%d")
+                            except Exception:
+                                continue
+                            if dt.year == y and dt.month == month and dt.day == d:
+                                for c in station_columns:
+                                    v = parse_float_loose(rec.get(c))
+                                    if v is not None:
+                                        total += v
+                                break
+                        item[str(y)] = round(total, 1)
+                    week_chart_data.append(item)
+
+                week_chart_json = {
+                    "type": "bar",
+                    "title": f"So sánh lượng mưa tuần {week_num} tháng {month} qua 3 năm (mm)",
+                    "data": week_chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": [str(y) for y in [year, year - 1, year - 2]],
+                    "colors": ["#10b981", "#3b82f6", "#ef4444"],
+                    "unit": " mm"
+                }
+                import json
+                result += f"\n\n```chart\n{json.dumps(week_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
                 result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
                 return result.strip()
@@ -443,6 +557,28 @@ class RainfallService:
                 result += f"| {' | '.join(row)} |\n"
 
             range_total = sum(v for v in monthly_totals.values() if v is not None)
+
+            # Chart: Monthly totals in range
+            range_chart_data = []
+            for (m, y) in months:
+                val = monthly_totals.get((m, y))
+                range_chart_data.append({
+                    "Thang": f"{m}/{y}",
+                    "TongLuongMua": round(val, 1) if val is not None else 0.0
+                })
+
+            range_chart_json = {
+                "type": "bar",
+                "title": "Biểu đồ tổng lượng mưa theo tháng (mm)",
+                "data": range_chart_data,
+                "xKey": "Thang",
+                "yKeys": ["TongLuongMua"],
+                "colors": ["#3b82f6"],
+                "unit": " mm"
+            }
+            import json
+            result += f"\n\n```chart\n{json.dumps(range_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
             result += f"""
 
 ---
@@ -558,6 +694,25 @@ class RainfallService:
                 row_data.append(f"**{day_total:.1f}**")
                 total_range += day_total
                 result += f"| {' | '.join(row_data)} |\n"
+
+            daily_chart_data = []
+            for date_key in sorted_dates:
+                item = {"Ngay": date_key}
+                for col in station_columns:
+                    item[STATION_COLUMN_MAP[col]] = round(daily_data[date_key].get(col, 0.0), 1)
+                daily_chart_data.append(item)
+
+            daily_chart_json = {
+                "type": "line",
+                "title": "Biểu đồ lượng mưa hàng ngày theo trạm (mm)",
+                "data": daily_chart_data,
+                "xKey": "Ngay",
+                "yKeys": [STATION_COLUMN_MAP[c] for c in station_columns],
+                "colors": ["#10b981", "#3b82f6", "#ef4444", "#f59e0b", "#06b6d4", "#a855f7"],
+                "unit": " mm"
+            }
+            import json
+            result += f"\n\n```chart\n{json.dumps(daily_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
             result += f"""
 ---

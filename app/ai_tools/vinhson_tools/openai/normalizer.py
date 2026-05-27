@@ -4,12 +4,7 @@ Normalizers for Vĩnh Sơn tool responses → unified schema: tool, title, summa
 
 from typing import Any, Dict, Optional
 
-import os
-import sys
-_week2 = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _week2 not in sys.path:
-    sys.path.insert(0, _week2)
-from tool_format import parse_markdown_blocks
+from ai_tools.tool_format import parse_markdown_blocks
 
 OPERATIONAL = "get_vinhson_operational_data"
 COMPARATIVE = "get_vinhson_comparative_analysis"

@@ -154,6 +154,35 @@ Xem console log để biết chi tiết lỗi.
                         f" | {safe_cell(row, self.cols.COL_SELF_USE)} |\n"
                     )
 
+                # Build chart data
+                chart_data = []
+                for row in filtered:
+                    try:
+                        qve = parse_float_loose(safe_cell(row, self.cols.COL_INFLOW)) or 0.0
+                        qcm = parse_float_loose(safe_cell(row, self.cols.COL_TURBINE)) or 0.0
+                        qxl = parse_float_loose(safe_cell(row, self.cols.COL_SPILLWAY)) or 0.0
+                        chart_data.append({
+                            "Ngay": safe_cell(row, self.cols.COL_DATE),
+                            "Qve": qve,
+                            "Qcm": qcm,
+                            "Qxl": qxl
+                        })
+                    except Exception:
+                        pass
+
+                if chart_data:
+                    chart_json = {
+                        "type": "line",
+                        "title": "Biểu đồ lưu lượng nước (m³/s)",
+                        "data": chart_data,
+                        "xKey": "Ngay",
+                        "yKeys": ["Qve", "Qcm", "Qxl"],
+                        "colors": ["#10b981", "#3b82f6", "#ef4444"],
+                        "unit": " m³/s"
+                    }
+                    import json
+                    result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
                 result += "\n---\n\n**Nguồn:** Google Sheets - Thủy điện Sông Hinh"
                 return result.strip()
 
@@ -406,10 +435,34 @@ Xem console log để biết chi tiết lỗi.
                     f" | {safe_cell(row, self.cols.COL_SELF_USE)} |\n"
                 )
 
-            result += """
+            # Build chart data
+            chart_data = []
+            for row in filtered:
+                try:
+                    qve = parse_float_loose(safe_cell(row, self.cols.COL_INFLOW)) or 0.0
+                    qcm = parse_float_loose(safe_cell(row, self.cols.COL_TURBINE)) or 0.0
+                    qxl = parse_float_loose(safe_cell(row, self.cols.COL_SPILLWAY)) or 0.0
+                    chart_data.append({
+                        "Ngay": safe_cell(row, self.cols.COL_DATE),
+                        "Qve": qve,
+                        "Qcm": qcm,
+                        "Qxl": qxl
+                    })
+                except Exception:
+                    pass
 
----
+            if chart_data:
+                chart_json = {
+                    "type": "line",
+                    "title": "Biểu đồ lưu lượng nước (m³/s)",
+                    "data": chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["Qve", "Qcm", "Qxl"],
+                    "colors": ["#10b981", "#3b82f6", "#ef4444"],
+                    "unit": " m³/s"
+                }
+                import json
+                result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-**Nguồn:** Google Sheets - Thủy điện Sông Hinh
-"""
+            result += "\n---\n\n**Nguồn:** Google Sheets - Thủy điện Sông Hinh"
             return result.strip()

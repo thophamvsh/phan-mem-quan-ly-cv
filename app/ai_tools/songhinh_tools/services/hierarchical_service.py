@@ -170,6 +170,33 @@ class HierarchicalStatisticsService:
                             row_cells.append("-")
                     out += f"| {' | '.join(row_cells)} |\n"
 
+                # Tự động vẽ đồ thị cho từng tham số theo năm
+                chart_data = []
+                for m in range(1, 13):
+                    item = {"Thang": f"Tháng {m}"}
+                    for y in years:
+                        vals = []
+                        for r in rows:
+                            dt = parse_stats_date(safe_cell(r, col_date))
+                            if dt and dt.year == y and dt.month == m:
+                                v = extract_col_value(r, col, param)
+                                if v is not None:
+                                    vals.append(v)
+                        item[str(y)] = round(sum(vals) / len(vals), 2) if vals else 0.0
+                    chart_data.append(item)
+
+                chart_json = {
+                    "type": "line" if param == "water_level" else "bar",
+                    "title": f"Biểu đồ {name.split(' (')[0]} trung bình tháng",
+                    "data": chart_data,
+                    "xKey": "Thang",
+                    "yKeys": [str(y) for y in years],
+                    "colors": ["#10b981", "#3b82f6", "#ef4444", "#f59e0b", "#06b6d4"],
+                    "unit": " m" if param == "water_level" else " m³/s"
+                }
+                import json
+                out += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
                 out += "\n---\n"
 
             out += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Sông Hinh"
@@ -258,6 +285,34 @@ class HierarchicalStatisticsService:
                         else:
                             avg_cells.append("-")
                     out += "| " + " | ".join(avg_cells) + " |\n"
+
+                    # Tự động vẽ đồ thị so sánh theo ngày
+                    chart_data = []
+                    for d in range(1, max_day + 1):
+                        item = {"Ngay": str(d)}
+                        for (m, y) in periods_to_show:
+                            vals = []
+                            for r in rows:
+                                dt = parse_stats_date(safe_cell(r, col_date))
+                                if dt and dt.year == y and dt.month == m and dt.day == d:
+                                    v = extract_col_value(r, col, param)
+                                    if v is not None:
+                                        vals.append(v)
+                            item[f"T{m}/{y}"] = round(sum(vals)/len(vals), 2) if vals else 0.0
+                        chart_data.append(item)
+
+                    chart_json = {
+                        "type": "line",
+                        "title": f"Biểu đồ so sánh {name.split(' (')[0]} hàng ngày",
+                        "data": chart_data,
+                        "xKey": "Ngay",
+                        "yKeys": [f"T{m}/{y}" for (m, y) in periods_to_show],
+                        "colors": ["#10b981", "#3b82f6", "#ef4444", "#f59e0b"],
+                        "unit": " m" if param == "water_level" else " m³/s"
+                    }
+                    import json
+                    out += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
                     out += "\n---\n"
             else:
                 # Thống kê cả tháng (từ ngày 1 đến ngày cuối tháng), không theo tuần
@@ -288,6 +343,29 @@ class HierarchicalStatisticsService:
                             out += f"| {min_val:.2f}{_NBSP}/{_NBSP}{max_val:.2f}{_NBSP}/{_NBSP}{avg_val:.2f} |\n"
                         else:
                             out += f"| {min(vals):.2f}{_NBSP}/{_NBSP}{max(vals):.2f}{_NBSP}/{_NBSP}{sum(vals)/len(vals):.2f} |\n"
+                        
+                        # Tự động vẽ đồ thị hàng ngày trong tháng
+                        day_vals = []
+                        for r in rows:
+                            dt = parse_stats_date(safe_cell(r, col_date))
+                            if dt and dt.year == year and dt.month == month and 1 <= dt.day <= last_day:
+                                v = extract_col_value(r, col, param)
+                                if v is not None:
+                                    day_vals.append((dt.day, v))
+                        day_vals.sort()
+                        chart_data = [{"Ngay": str(d), "GiaTri": round(val, 2)} for d, val in day_vals]
+                        if chart_data:
+                            chart_json = {
+                                "type": "line",
+                                "title": f"Biểu đồ {name.split(' (')[0]} hàng ngày tháng {month}/{year}",
+                                "data": chart_data,
+                                "xKey": "Ngay",
+                                "yKeys": ["GiaTri"],
+                                "colors": ["#3b82f6"],
+                                "unit": " m" if param == "water_level" else " m³/s"
+                            }
+                            import json
+                            out += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
                     else:
                         out += "| -\n"
                     out += "\n---\n"
@@ -358,6 +436,29 @@ class HierarchicalStatisticsService:
                     if compare and compare_week_num:
                         line.append(day_val(compare_year, compare_month, d))
                     out += f"| {' | '.join(line)} |\n"
+
+                # Tự động vẽ đồ thị cho tuần
+                chart_data = []
+                for d in range(sd, min(ed + 1, 32)):
+                    item = {"Ngay": f"{d}/{month}"}
+                    v_str_cur = day_val(year, month, d)
+                    item[str(year)] = float(v_str_cur) if v_str_cur != "-" else 0.0
+                    if compare and compare_week_num:
+                        v_str_comp = day_val(compare_year, compare_month, d)
+                        item[str(compare_year)] = float(v_str_comp) if v_str_comp != "-" else 0.0
+                    chart_data.append(item)
+
+                chart_json = {
+                    "type": "bar" if param == "qve" else "line",
+                    "title": f"Biểu đồ {name.split(' (')[0]} tuần {week_num} tháng {month}/{year}",
+                    "data": chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": [str(year)] + ([str(compare_year)] if (compare and compare_week_num) else []),
+                    "colors": ["#3b82f6", "#10b981"],
+                    "unit": " m" if param == "water_level" else " m³/s"
+                }
+                import json
+                out += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
                 out += "\n---\n"
 
@@ -437,6 +538,36 @@ class HierarchicalStatisticsService:
 
             avg_str = f"{sum(values_in_range) / len(values_in_range):.2f}" if values_in_range else "-"
             out += f"| **Trung bình** | {avg_str} |\n"
+
+            # Tự động vẽ đồ thị cho khoảng ngày
+            chart_data = []
+            current_dt = start_dt
+            while current_dt <= end_dt:
+                for r in rows:
+                    dt = parse_stats_date(safe_cell(r, col_date))
+                    if dt and dt.year == current_dt.year and dt.month == current_dt.month and dt.day == current_dt.day:
+                        v = extract_col_value(r, col, param)
+                        if v is not None:
+                            chart_data.append({
+                                "Ngay": f"{current_dt.day}/{current_dt.month}",
+                                "GiaTri": round(v, 2)
+                            })
+                        break
+                current_dt += timedelta(days=1)
+
+            if chart_data:
+                chart_json = {
+                    "type": "bar" if param == "qve" else "line",
+                    "title": f"Biểu đồ biến động {name.split(' (')[0]}",
+                    "data": chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["GiaTri"],
+                    "colors": ["#3b82f6"],
+                    "unit": f" {unit}"
+                }
+                import json
+                out += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
             out += "\n---\n"
 
         out += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Sông Hinh"
