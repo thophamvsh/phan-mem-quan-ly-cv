@@ -482,6 +482,29 @@ class ChiTietSoGiaoNhanCaVH(TimestampedUUIDModel):
         return self.tieu_de or f"Noi dung chi tiet {self.thu_tu}"
 
 
+class LuuYChiDaoSoGiaoNhanCaVH(TimestampedUUIDModel):
+    so_giao_nhan_ca = models.ForeignKey(
+        SogiaonhancaVH,
+        on_delete=models.CASCADE,
+        related_name="luu_y_chi_daos",
+    )
+    thoi_gian = models.DateTimeField(default=timezone.now)
+    noi_dung = models.TextField()
+    nguoi_tao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="luu_y_chi_dao_so_giao_nhan_ca_vh_da_tao",
+    )
+
+    class Meta:
+        ordering = ["thoi_gian", "created_at"]
+        verbose_name = "Luu y chi dao so giao nhan ca van hanh"
+        verbose_name_plural = "Luu y chi dao so giao nhan ca van hanh"
+
+    def __str__(self):
+        return f"Luu y chi dao {self.so_giao_nhan_ca_id} - {self.thoi_gian:%Y-%m-%d %H:%M}"
+
+
 class SogiaonhancaHC(TimestampedUUIDModel):
     class TrangThai(models.TextChoices):
         CHO_XAC_NHAN = "cho_xac_nhan", "Chờ xác nhận"

@@ -31,6 +31,7 @@ from .models import (
     DienBienSuKien,
     KhacPhucSuKien,
     LanChuyenDoiThietBi,
+    LuuYChiDaoSoGiaoNhanCaVH,
     MauChuyenDoiThietBi,
     MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
@@ -53,6 +54,7 @@ from .serializers import (
     DienBienSuKienSerializer,
     KhacPhucSuKienSerializer,
     LanChuyenDoiThietBiSerializer,
+    LuuYChiDaoSoGiaoNhanCaVHSerializer,
     MauChuyenDoiThietBiSerializer,
     MauChuyenDoiTBThangSerializer,
     NhatKySuKienSerializer,
@@ -584,6 +586,31 @@ def _can_edit_shift_log(user, so):
 
 def _can_delete_shift_log(user, so):
     return has_profile_permission(user, "can_delete_shift_handover_logs") or _is_creator_of_shift_log(user, so)
+
+
+def _can_view_shift_directives(user):
+    return (
+        has_profile_permission(user, "can_view_shift_handover_directives")
+        or has_profile_permission(user, "can_view_shift_handover_logs")
+    )
+
+
+def _can_create_shift_directive(user, so=None):
+    if has_profile_permission(user, "can_create_shift_handover_directives"):
+        return True
+    if has_profile_permission(user, "can_edit_shift_handover_logs"):
+        return True
+    if so and (user.is_superuser or so.user_giao_ca_id == user.id):
+        return True
+    return False
+
+
+def _can_update_shift_directive(user, directive):
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.is_superuser or directive.nguoi_tao_id == user.id)
+    )
 
 
 def _operation_logbook_locked(item):
@@ -1625,7 +1652,10 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
             "user_giao_ca",
             "user_nhan_ca",
             "nguoi_tao",
-        ).prefetch_related("noi_dung_chi_tiets__nguoi_tao").all()
+        ).prefetch_related(
+            "noi_dung_chi_tiets__nguoi_tao",
+            "luu_y_chi_daos__nguoi_tao",
+        ).all()
         return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
 
     def perform_create(self, serializer):
@@ -1732,6 +1762,65 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
 
         serializer = ChiTietSoGiaoNhanCaVHSerializer(
             chi_tiet,
+            data=request.data,
+            partial=True,
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        response_serializer = self.get_serializer(so)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="luu-y-chi-dao")
+    def tao_luu_y_chi_dao(self, request, pk=None):
+        so = self.get_object()
+        if not _can_create_shift_directive(request.user, so):
+            return Response(
+                {"detail": "User khong co quyen tao luu y chi dao."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = LuuYChiDaoSoGiaoNhanCaVHSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(so_giao_nhan_ca=so, nguoi_tao=request.user)
+        response_serializer = self.get_serializer(so)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["patch", "delete"],
+        url_path=r"luu-y-chi-dao/(?P<directive_id>[^/.]+)",
+    )
+    def cap_nhat_luu_y_chi_dao(self, request, pk=None, directive_id=None):
+        so = self.get_object()
+        if not _can_view_shift_directives(request.user):
+            return Response(
+                {"detail": "User khong co quyen xem luu y chi dao."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            directive = so.luu_y_chi_daos.get(pk=directive_id)
+        except LuuYChiDaoSoGiaoNhanCaVH.DoesNotExist:
+            return Response(
+                {"detail": "Khong tim thay luu y chi dao."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not _can_update_shift_directive(request.user, directive):
+            return Response(
+                {"detail": "Chi user tao luu y chi dao moi duoc cap nhat hoac xoa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if request.method == "DELETE":
+            directive.delete()
+            response_serializer = self.get_serializer(so)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+        serializer = LuuYChiDaoSoGiaoNhanCaVHSerializer(
+            directive,
             data=request.data,
             partial=True,
             context=self.get_serializer_context(),

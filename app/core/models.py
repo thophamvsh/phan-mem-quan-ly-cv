@@ -336,6 +336,14 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so giao nhan ca van hanh"
     )
+    can_view_shift_handover_directives = models.BooleanField(
+        default=False,
+        help_text="Co quyen xem luu y chi dao so giao nhan ca van hanh"
+    )
+    can_create_shift_handover_directives = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao luu y chi dao so giao nhan ca van hanh"
+    )
     can_view_admin_shift_handover_logs = models.BooleanField(
         default=True,
         help_text="Co quyen xem so giao nhan ca hanh chinh"

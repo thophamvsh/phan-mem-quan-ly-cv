@@ -14,6 +14,7 @@ from .models import (
     ChiTietChuyenDoiThietBi,
     ChiTietChuyenDoiTBThang,
     LanChuyenDoiThietBi,
+    LuuYChiDaoSoGiaoNhanCaVH,
     MauChuyenDoiThietBi,
     MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
@@ -581,6 +582,33 @@ class ChiTietSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMi
         return self._get_user_display(obj.nguoi_tao)
 
 
+class LuuYChiDaoSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    nguoi_tao_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LuuYChiDaoSoGiaoNhanCaVH
+        fields = [
+            "id",
+            "so_giao_nhan_ca",
+            "thoi_gian",
+            "noi_dung",
+            "nguoi_tao",
+            "nguoi_tao_display",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "so_giao_nhan_ca",
+            "nguoi_tao",
+            "nguoi_tao_display",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_nguoi_tao_display(self, obj):
+        return self._get_user_display(obj.nguoi_tao)
+
+
 class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     user_giao_ca_display = serializers.SerializerMethodField()
     user_nhan_ca_display = serializers.SerializerMethodField()
@@ -592,6 +620,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     nha_may_code = serializers.SerializerMethodField()
     nha_may_name = serializers.SerializerMethodField()
     noi_dung_chi_tiets = ChiTietSoGiaoNhanCaVHSerializer(many=True, read_only=True)
+    luu_y_chi_daos = serializers.SerializerMethodField()
 
     class Meta:
         model = SogiaonhancaVH
@@ -612,6 +641,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "thoi_gian_bat_dau_ca",
             "thoi_gian_giao_ca",
             "noi_dung_chi_tiets",
+            "luu_y_chi_daos",
             "tinh_trang_van_hanh_trong_ca",
             "cac_phuong_tien_trang_bi_ca",
             "luu_y",
@@ -639,6 +669,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may_code",
             "nha_may_name",
             "noi_dung_chi_tiets",
+            "luu_y_chi_daos",
             "chu_ky_user_giao_ca",
             "chu_ky_user_giao_ca_url",
             "chu_ky_user_nhan_ca",
@@ -660,6 +691,24 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
     def get_nha_may_name(self, obj):
         return obj.nha_may.ten_nha_may if obj.nha_may else None
+
+    def get_luu_y_chi_daos(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return []
+        if not user.is_superuser:
+            try:
+                profile = user.profile
+                if not (profile.can_view_shift_handover_directives or profile.can_view_shift_handover_logs):
+                    return []
+            except Exception:
+                return []
+        return LuuYChiDaoSoGiaoNhanCaVHSerializer(
+            obj.luu_y_chi_daos.all(),
+            many=True,
+            context=self.context,
+        ).data
 
     def get_user_giao_ca_display(self, obj):
         return self._get_user_display(obj.user_giao_ca)

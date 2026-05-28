@@ -94,6 +94,8 @@ class UserProfileInline(admin.StackedInline):
                 'can_receive_shift_handover_logs',
                 'can_edit_shift_handover_logs',
                 'can_delete_shift_handover_logs',
+                'can_view_shift_handover_directives',
+                'can_create_shift_handover_directives',
             ),
             'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca VH.'
         }),
@@ -198,12 +200,17 @@ class UserProfileInline(admin.StackedInline):
             'fields': (
                 'can_view_hydrology_settings',
                 'can_edit_hydrology_settings',
-                'can_use_ai_tools',
             ),
             'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
+        }),
+        ('Quyen Tro ly AI', {
+            'fields': (
+                'can_use_ai_tools',
+            ),
+            'description': 'Quyen xem icon va su dung Tro ly AI Nami.'
         }),
         ('Thời gian', {
             'fields': ('created_at', 'updated_at'),
@@ -309,6 +316,8 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_receive_shift_handover_logs',
                 'can_edit_shift_handover_logs',
                 'can_delete_shift_handover_logs',
+                'can_view_shift_handover_directives',
+                'can_create_shift_handover_directives',
             ),
             'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca VH.'
         }),

@@ -250,6 +250,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_view_shift_handover_logs', 'can_create_shift_handover_logs',
                  'can_receive_shift_handover_logs', 'can_edit_shift_handover_logs',
                  'can_delete_shift_handover_logs',
+                 'can_view_shift_handover_directives',
+                 'can_create_shift_handover_directives',
                  'can_view_admin_shift_handover_logs', 'can_create_admin_shift_handover_logs',
                  'can_receive_admin_shift_handover_logs', 'can_edit_admin_shift_handover_logs',
                  'can_delete_admin_shift_handover_logs',

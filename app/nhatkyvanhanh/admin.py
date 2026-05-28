@@ -17,6 +17,7 @@ from .models import (
     DienBienSuKien,
     KhacPhucSuKien,
     LanChuyenDoiThietBi,
+    LuuYChiDaoSoGiaoNhanCaVH,
     MauChuyenDoiThietBi,
     MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
@@ -220,6 +221,12 @@ class ChiTietSoGiaoNhanCaVHInline(admin.TabularInline):
     extra = 0
 
 
+class LuuYChiDaoSoGiaoNhanCaVHInline(admin.TabularInline):
+    model = LuuYChiDaoSoGiaoNhanCaVH
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+    extra = 0
+
+
 class ChiTietSoGiaoNhanCaHCInline(admin.TabularInline):
     model = ChiTietSoGiaoNhanCaHC
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
@@ -385,13 +392,26 @@ class SogiaonhancaVHAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("nguoi_tao", "chu_ky_user_giao_ca", "chu_ky_user_nhan_ca", "created_at", "updated_at")
     exclude = ("chu_ky_user_giao_ca", "chu_ky_user_nhan_ca")
-    inlines = [ChiTietSoGiaoNhanCaVHInline]
+    inlines = [ChiTietSoGiaoNhanCaVHInline, LuuYChiDaoSoGiaoNhanCaVHInline]
 
     def co_chu_ky(self, obj):
         return bool(obj.chu_ky_user_giao_ca or obj.chu_ky_user_nhan_ca)
 
     co_chu_ky.boolean = True
     co_chu_ky.short_description = "Có chữ ký"
+
+
+@admin.register(LuuYChiDaoSoGiaoNhanCaVH)
+class LuuYChiDaoSoGiaoNhanCaVHAdmin(admin.ModelAdmin):
+    list_display = ("so_giao_nhan_ca", "thoi_gian", "nguoi_tao", "created_at")
+    list_filter = ("thoi_gian", "created_at")
+    search_fields = (
+        "noi_dung",
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+        "so_giao_nhan_ca__dia_diem",
+    )
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
 
 
 @admin.register(SogiaonhancaHC)
