@@ -1,7 +1,7 @@
 import requests
 from django.core.cache import cache
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -46,7 +46,7 @@ def _vrain_error_response(error):
 
 
 class SyncVrainRainfallAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def process_sync(self, request):
         date_param = request.GET.get("date") or request.data.get("date")
@@ -63,7 +63,7 @@ class SyncVrainRainfallAPIView(APIView):
 
 
 class VrainRealtimeAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         cache_key = "vrain_realtime_24h_data"

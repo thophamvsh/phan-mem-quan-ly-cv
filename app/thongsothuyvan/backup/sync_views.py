@@ -4,15 +4,12 @@ from google.oauth2.service_account import Credentials
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
 from django.conf import settings
 from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import ThongsoSanxuat, ThongsoGioPhat
 from .serializers import ThongsoSanxuatSerializer
 from .plants import normalize_plant_code
-from .views.views_sanxuat import user_can_access_plant
 
 
 SAN_LUONG_SYNC_FIELDS = (
@@ -246,13 +243,10 @@ def get_spreadsheet_id(nhamay):
 
 class PreviewGoogleSheetAPIView(APIView):
     """API đọc dữ liệu từ Google Sheet để hiển thị (chưa lưu vào DB)"""
-    permission_classes = [IsAuthenticated]
     
     def get(self, request):
         try:
             nhamay = normalize_plant_code(request.query_params.get('nhamay', 'songhinh'))
-            if not user_can_access_plant(request.user, nhamay):
-                return Response({'error': 'Bạn không có quyền truy cập dữ liệu của nhà máy này.'}, status=status.HTTP_403_FORBIDDEN)
             filter_date_str = request.query_params.get('date')
             filter_date = parse_filter_date(filter_date_str)
 
@@ -338,7 +332,6 @@ class PreviewGoogleSheetAPIView(APIView):
 
 class SaveGoogleSheetDataAPIView(APIView):
     """API lưu dữ liệu đã xem trước vào database"""
-    permission_classes = [IsAuthenticated]
     
     def post(self, request):
         if not user_can_write_hydrology(request.user):
@@ -349,11 +342,6 @@ class SaveGoogleSheetDataAPIView(APIView):
 
         data_list = request.data.get('data', [])
         nhamay = normalize_plant_code(request.query_params.get('nhamay', 'songhinh'))
-        if not user_can_access_plant(request.user, nhamay):
-            return Response(
-                {"error": "Bạn không có quyền đồng bộ dữ liệu của nhà máy này."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         
         if not data_list:
             return Response({'error': 'Không có dữ liệu để lưu'}, status=400)
@@ -436,13 +424,10 @@ class SaveGoogleSheetDataAPIView(APIView):
 
 class PreviewGioPhatAPIView(APIView):
     """API đọc dữ liệu từ tab Giờ phát"""
-    permission_classes = [IsAuthenticated]
     
     def get(self, request):
         try:
             nhamay = normalize_plant_code(request.query_params.get('nhamay', 'songhinh'))
-            if not user_can_access_plant(request.user, nhamay):
-                return Response({'error': 'Bạn không có quyền truy cập dữ liệu của nhà máy này.'}, status=status.HTTP_403_FORBIDDEN)
             filter_date_str = request.query_params.get('date')
             filter_date = parse_filter_date(filter_date_str)
 
@@ -516,7 +501,6 @@ class PreviewGioPhatAPIView(APIView):
 
 class SaveGioPhatAPIView(APIView):
     """API lưu dữ liệu Giờ phát vào database"""
-    permission_classes = [IsAuthenticated]
     
     def post(self, request):
         if not user_can_write_hydrology(request.user):
@@ -528,11 +512,6 @@ class SaveGioPhatAPIView(APIView):
         from .models import ThongsoGioPhat
         data_list = request.data.get('data', [])
         nhamay = normalize_plant_code(request.query_params.get('nhamay', 'songhinh'))
-        if not user_can_access_plant(request.user, nhamay):
-            return Response(
-                {"error": "Bạn không có quyền đồng bộ dữ liệu của nhà máy này."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         
         if not data_list:
             return Response({'error': 'Không có dữ liệu để lưu'}, status=400)
