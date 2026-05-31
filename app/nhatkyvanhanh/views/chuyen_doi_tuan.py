@@ -19,6 +19,8 @@ from nhatkyvanhanh.permissions import (
     CanCreateOperationLogbooks,
     CanViewWeeklyEquipmentSwitchLogs,
     CanCreateWeeklyEquipmentSwitchLogs,
+    CanEditWeeklyEquipmentSwitchLogs,
+    CanDeleteWeeklyEquipmentSwitchLogs,
 )
 from .helpers import (
     _can_edit_weekly_equipment_switch_log,
@@ -107,6 +109,10 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewWeeklyEquipmentSwitchLogs]
         if self.action == "create":
             permission_classes = [CanCreateWeeklyEquipmentSwitchLogs]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditWeeklyEquipmentSwitchLogs]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteWeeklyEquipmentSwitchLogs]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):

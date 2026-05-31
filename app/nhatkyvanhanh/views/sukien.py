@@ -27,6 +27,8 @@ from nhatkyvanhanh.serializers import (
 from nhatkyvanhanh.permissions import (
     CanViewOperationEvents,
     CanCreateOperationEvents,
+    CanEditOperationEvents,
+    CanDeleteOperationEvents,
     CanAcknowledgeOperationEvents,
     CanProcessOperationEvents,
     CanConfirmOperationEvents,
@@ -113,8 +115,10 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewOperationEvents]
         if self.action == "create":
             permission_classes = [CanCreateOperationEvents]
-        elif self.action in ["update", "partial_update", "destroy"]:
-            permission_classes = [CanViewOperationEvents]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditOperationEvents]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteOperationEvents]
         elif self.action == "ghi_nhan_su_kien":
             permission_classes = [CanAcknowledgeOperationEvents]
         elif self.action in ["tao_khac_phuc", "cap_nhat_khac_phuc", "xu_ly_xong"]:

@@ -64,6 +64,12 @@ class SogiaonhancaHC(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-ngay_truc", "-thoi_gian_bat_dau_ca", "-thoi_gian_giao_ca", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nha_may", "ngay_truc"],
+                name="uq_sogiaonhancahc_nha_may_ngay",
+            )
+        ]
         verbose_name = "Sổ giao nhận ca hành chính"
         verbose_name_plural = "Sổ giao nhận ca hành chính"
 

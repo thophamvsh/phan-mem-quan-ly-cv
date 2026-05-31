@@ -14,8 +14,12 @@ from nhatkyvanhanh.permissions import (
     CanViewOperationLogbooks,
     CanCreateOperationLogbooks,
     CanConfirmOperationLogbooks,
+    CanEditOperationLogbooks,
+    CanDeleteOperationLogbooks,
     CanViewDieselOperationLogbooks,
     CanCreateDieselOperationLogbooks,
+    CanEditDieselOperationLogbooks,
+    CanDeleteDieselOperationLogbooks,
 )
 from .helpers import (
     _operation_logbook_locked,
@@ -72,6 +76,10 @@ class SonhatkyvanhanhViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewOperationLogbooks]
         if self.action == "create":
             permission_classes = [CanCreateOperationLogbooks]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditOperationLogbooks]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteOperationLogbooks]
         elif self.action == "xac_nhan":
             permission_classes = [CanConfirmOperationLogbooks]
 
@@ -159,6 +167,10 @@ class SonhatkyvanhanhDieselViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewDieselOperationLogbooks]
         if self.action == "create":
             permission_classes = [CanCreateDieselOperationLogbooks]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditDieselOperationLogbooks]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteDieselOperationLogbooks]
 
         return [permission() for permission in permission_classes]
 

@@ -46,19 +46,37 @@ from .views_settings import build_hydrology_settings_payload
 # --- Permission Helper Functions ---
 
 def user_can_write_hydrology(user):
+    return user_can_create_hydrology(user) or user_can_edit_hydrology(user)
+
+
+def user_can_create_hydrology(user):
     if not user or not user.is_authenticated:
         return False
     if user.is_superuser:
         return True
 
     profile = getattr(user, "profile", None)
-    return bool(
-        profile
-        and (
-            profile.can_create_hydrology_data
-            or profile.can_edit_hydrology_data
-        )
-    )
+    return bool(profile and profile.can_create_hydrology_data)
+
+
+def user_can_edit_hydrology(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(profile and profile.can_edit_hydrology_data)
+
+
+def user_can_view_hydrology_data(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(profile and profile.can_view_hydrology_data)
 
 
 def user_can_view_hydrology(user):
@@ -99,6 +117,14 @@ def user_can_delete_hydrology(user):
 
     profile = getattr(user, "profile", None)
     return bool(profile and profile.can_delete_hydrology_data)
+
+
+def user_can_access_hydrology_viewset_action(user, action):
+    if action in ("update", "partial_update"):
+        return user_can_edit_hydrology(user)
+    if action == "destroy":
+        return user_can_delete_hydrology(user)
+    return user_can_view_hydrology_data(user)
 
 
 def user_can_view_realtime_hydrology(user):
@@ -274,6 +300,12 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if not user_can_access_hydrology_viewset_action(
+            self.request.user,
+            getattr(self, "action", ""),
+        ):
+            raise PermissionDenied("Bạn không có quyền thao tác dữ liệu thủy văn.")
+
         nhamay = normalize_plant_code(self.request.query_params.get('nhamay', 'songhinh'))
         if not user_can_access_plant(self.request.user, nhamay):
             raise PermissionDenied("Bạn không có quyền truy cập dữ liệu của nhà máy này.")
@@ -296,6 +328,9 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
         return queryset[:limit] if limit > 0 else queryset
 
     def perform_create(self, serializer):
+        if not user_can_create_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền tạo dữ liệu thủy văn.")
+
         nhamay = normalize_plant_code(serializer.validated_data.get('nha_may', 'songhinh'))
         if not user_can_access_plant(self.request.user, nhamay):
             raise PermissionDenied("Bạn không có quyền tạo dữ liệu cho nhà máy này.")
@@ -303,6 +338,9 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
 
     def perform_update(self, serializer):
+        if not user_can_edit_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu thủy văn.")
+
         obj = self.get_object()
         if not user_can_access_plant(self.request.user, obj.nha_may):
             raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu của nhà máy này.")
@@ -315,6 +353,9 @@ class ThongsoSanxuatViewSet(viewsets.ModelViewSet):
         serializer.save(**save_kwargs)
 
     def perform_destroy(self, instance):
+        if not user_can_delete_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền xóa dữ liệu thủy văn.")
+
         if not user_can_access_plant(self.request.user, instance.nha_may):
             raise PermissionDenied("Bạn không có quyền xóa dữ liệu của nhà máy này.")
         if not user_can_modify_hydrology_object(self.request.user, instance):
@@ -328,6 +369,12 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if not user_can_access_hydrology_viewset_action(
+            self.request.user,
+            getattr(self, "action", ""),
+        ):
+            raise PermissionDenied("Bạn không có quyền thao tác dữ liệu thủy văn.")
+
         nhamay = normalize_plant_code(self.request.query_params.get('nhamay', 'songhinh'))
         if not user_can_access_plant(self.request.user, nhamay):
             raise PermissionDenied("Bạn không có quyền truy cập dữ liệu của nhà máy này.")
@@ -350,12 +397,18 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
         return queryset[:limit] if limit > 0 else queryset
 
     def perform_create(self, serializer):
+        if not user_can_create_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền tạo dữ liệu thủy văn.")
+
         nhamay = normalize_plant_code(serializer.validated_data.get('nha_may', 'songhinh'))
         if not user_can_access_plant(self.request.user, nhamay):
             raise PermissionDenied("Bạn không có quyền tạo dữ liệu cho nhà máy này.")
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
 
     def perform_update(self, serializer):
+        if not user_can_edit_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu thủy văn.")
+
         obj = self.get_object()
         if not user_can_access_plant(self.request.user, obj.nha_may):
             raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu của nhà máy này.")
@@ -368,6 +421,9 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
         serializer.save(**save_kwargs)
 
     def perform_destroy(self, instance):
+        if not user_can_delete_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền xóa dữ liệu thủy văn.")
+
         if not user_can_access_plant(self.request.user, instance.nha_may):
             raise PermissionDenied("Bạn không có quyền xóa dữ liệu của nhà máy này.")
         if not user_can_modify_hydrology_object(self.request.user, instance):

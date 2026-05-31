@@ -22,12 +22,37 @@ class UserProfilePermission(permissions.BasePermission):
         return has_profile_permission(request.user, self.permission_name)
 
 
+class AnyUserProfilePermission(permissions.BasePermission):
+    permission_names = ()
+
+    def has_permission(self, request, view):
+        return any(
+            has_profile_permission(request.user, permission_name)
+            for permission_name in self.permission_names
+        )
+
+
 class CanViewOperationEvents(UserProfilePermission):
     permission_name = "can_view_operation_events"
 
 
 class CanCreateOperationEvents(UserProfilePermission):
     permission_name = "can_create_operation_events"
+
+
+class CanEditOperationEvents(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_own_operation_events",
+        "can_edit_all_operation_events",
+        "can_edit_leadership_directives",
+    )
+
+
+class CanDeleteOperationEvents(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_own_operation_events",
+        "can_delete_all_operation_events",
+    )
 
 
 class CanAcknowledgeOperationEvents(UserProfilePermission):
@@ -58,6 +83,20 @@ class CanReceiveShiftHandoverLogs(UserProfilePermission):
     permission_name = "can_receive_shift_handover_logs"
 
 
+class CanEditShiftHandoverLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_shift_handover_logs",
+        "can_create_shift_handover_logs",
+    )
+
+
+class CanDeleteShiftHandoverLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_shift_handover_logs",
+        "can_create_shift_handover_logs",
+    )
+
+
 class CanViewAdminShiftHandoverLogs(UserProfilePermission):
     permission_name = "can_view_admin_shift_handover_logs"
 
@@ -68,6 +107,20 @@ class CanCreateAdminShiftHandoverLogs(UserProfilePermission):
 
 class CanReceiveAdminShiftHandoverLogs(UserProfilePermission):
     permission_name = "can_receive_admin_shift_handover_logs"
+
+
+class CanEditAdminShiftHandoverLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_admin_shift_handover_logs",
+        "can_create_admin_shift_handover_logs",
+    )
+
+
+class CanDeleteAdminShiftHandoverLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_admin_shift_handover_logs",
+        "can_create_admin_shift_handover_logs",
+    )
 
 
 class CanViewOperationLogbooks(UserProfilePermission):
@@ -82,12 +135,40 @@ class CanConfirmOperationLogbooks(UserProfilePermission):
     permission_name = "can_confirm_operation_logbooks"
 
 
+class CanEditOperationLogbooks(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_operation_logbooks",
+        "can_create_operation_logbooks",
+    )
+
+
+class CanDeleteOperationLogbooks(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_operation_logbooks",
+        "can_create_operation_logbooks",
+    )
+
+
 class CanViewWeeklyEquipmentSwitchLogs(UserProfilePermission):
     permission_name = "can_view_weekly_equipment_switch_logs"
 
 
 class CanCreateWeeklyEquipmentSwitchLogs(UserProfilePermission):
     permission_name = "can_create_weekly_equipment_switch_logs"
+
+
+class CanEditWeeklyEquipmentSwitchLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_weekly_equipment_switch_logs",
+        "can_create_weekly_equipment_switch_logs",
+    )
+
+
+class CanDeleteWeeklyEquipmentSwitchLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_weekly_equipment_switch_logs",
+        "can_create_weekly_equipment_switch_logs",
+    )
 
 
 class CanViewMonthlyEquipmentSwitchLogs(UserProfilePermission):
@@ -98,12 +179,40 @@ class CanCreateMonthlyEquipmentSwitchLogs(UserProfilePermission):
     permission_name = "can_create_monthly_equipment_switch_logs"
 
 
+class CanEditMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_monthly_equipment_switch_logs",
+        "can_create_monthly_equipment_switch_logs",
+    )
+
+
+class CanDeleteMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_monthly_equipment_switch_logs",
+        "can_create_monthly_equipment_switch_logs",
+    )
+
+
 class CanViewDieselOperationLogbooks(UserProfilePermission):
     permission_name = "can_view_diesel_operation_logbooks"
 
 
 class CanCreateDieselOperationLogbooks(UserProfilePermission):
     permission_name = "can_create_diesel_operation_logbooks"
+
+
+class CanEditDieselOperationLogbooks(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_diesel_operation_logbooks",
+        "can_create_diesel_operation_logbooks",
+    )
+
+
+class CanDeleteDieselOperationLogbooks(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_diesel_operation_logbooks",
+        "can_create_diesel_operation_logbooks",
+    )
 
 
 class CanViewBCHCSongHinh(UserProfilePermission):
@@ -135,4 +244,3 @@ class IsNotShiftLogCreator(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return obj.user_giao_ca_id != request.user.id
-

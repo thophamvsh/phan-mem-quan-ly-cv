@@ -13,6 +13,7 @@ HIERARCHICAL = "get_vinhson_hierarchical_statistics"
 RAINFALL_STAT = "get_vinhson_rainfall_statistics"
 RAINFALL_RANGE = "get_vinhson_rainfall_range_statistics"
 RAINFALL_DAILY = "get_vinhson_rainfall_daily_statistics"
+FORECAST = "get_vinhson_forecast"
 
 
 def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, Any]:
@@ -22,7 +23,7 @@ def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, An
         "title": (blocks.get("title") or "").strip(),
         "summary": (blocks.get("summary") or "").strip(),
         "table": "\n\n".join(tables).strip() if tables else "",
-        "chart": "",
+        "chart": (blocks.get("chart") or "").strip(),
         "notes": (blocks.get("notes") or "").strip(),
         "raw": raw,
     }
@@ -63,6 +64,11 @@ def normalize_rainfall_range_statistics(raw: str) -> Dict[str, Any]:
     return _to_schema(RAINFALL_RANGE, raw, blocks)
 
 
+def normalize_forecast(raw: str) -> Dict[str, Any]:
+    blocks = parse_markdown_blocks(raw)
+    return _to_schema(FORECAST, raw, blocks)
+
+
 _NORMALIZERS = {
     OPERATIONAL: normalize_operational_data,
     COMPARATIVE: normalize_comparative_analysis,
@@ -71,6 +77,7 @@ _NORMALIZERS = {
     RAINFALL_STAT: normalize_rainfall_statistics,
     RAINFALL_DAILY: normalize_rainfall_daily_statistics,
     RAINFALL_RANGE: normalize_rainfall_range_statistics,
+    FORECAST: normalize_forecast,
 }
 
 

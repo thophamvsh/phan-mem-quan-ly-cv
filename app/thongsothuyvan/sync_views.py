@@ -206,6 +206,27 @@ def safe_float(val):
     except:
         return None
 
+def safe_int_vinhson(val):
+    try:
+        if isinstance(val, (int, float)):
+            return float(int(val))
+        if isinstance(val, str):
+            val = val.strip().replace(' ', '')
+            if not val:
+                return None
+            val = val.replace('.', '').replace(',', '')
+            return float(int(val))
+        return None
+    except:
+        return None
+
+def safe_float_vinhson_decimal(val):
+    res = safe_float(val)
+    if res is not None:
+        return round(res, 2)
+    return None
+
+
 def parse_to_may(val):
     text = str(val or '').strip().upper()
     if text.startswith('H'):
@@ -298,32 +319,60 @@ class PreviewGoogleSheetAPIView(APIView):
                 if filter_date and thoi_gian.date() != filter_date:
                     continue
                     
-                record = {
-                    'thoi_gian': thoi_gian,
-                    'thoi_gian_str': thoi_gian_str,
-                    'cot_c': parse_cot_c(padded_row[2], nhamay),
-                    'cot_d': safe_float(padded_row[3]),
-                    # Bỏ qua cột E (index 4)
-                    'cot_f': safe_float(padded_row[5]),
-                    'cot_g': safe_float(padded_row[6]),
-                    'cot_h': safe_float(padded_row[7]),
-                    'cot_i': safe_float(padded_row[8]),
-                    'cot_j': safe_float(padded_row[9]),
-                    'cot_k': safe_float(padded_row[10]),
-                    'cot_l': safe_float(padded_row[11]),
-                    'cot_m': safe_float(padded_row[12]),
-                    'cot_n': safe_float(padded_row[13]),
-                    'cot_o': safe_float(padded_row[14]),
-                    'cot_p': safe_float(padded_row[15]),
-                    'cot_q': safe_float(padded_row[16]),
-                    'cot_r': safe_float(padded_row[17]),
-                    'cot_s': safe_float(padded_row[18]),
-                    'cot_t': safe_float(padded_row[19]),
-                    'cot_u': safe_float(padded_row[20]),
-                    'cot_v': safe_float(padded_row[21]),
-                    'cot_w': safe_float(padded_row[22]),
-                    'cot_x': safe_float(padded_row[23]),
-                }
+                if nhamay == 'vinhson':
+                    record = {
+                        'thoi_gian': thoi_gian,
+                        'thoi_gian_str': thoi_gian_str,
+                        'cot_c': parse_cot_c(padded_row[2], nhamay),
+                        'cot_d': safe_float_vinhson_decimal(padded_row[3]),
+                        # Bỏ qua cột E (index 4)
+                        'cot_f': safe_float_vinhson_decimal(padded_row[5]),
+                        'cot_g': safe_float_vinhson_decimal(padded_row[6]),
+                        'cot_h': safe_float_vinhson_decimal(padded_row[7]),
+                        'cot_i': safe_float_vinhson_decimal(padded_row[8]),
+                        'cot_j': safe_float_vinhson_decimal(padded_row[9]),
+                        'cot_k': safe_float_vinhson_decimal(padded_row[10]),
+                        'cot_l': safe_int_vinhson(padded_row[11]),
+                        'cot_m': safe_int_vinhson(padded_row[12]),
+                        'cot_n': safe_int_vinhson(padded_row[13]),
+                        'cot_o': safe_int_vinhson(padded_row[14]),
+                        'cot_p': safe_int_vinhson(padded_row[15]),
+                        'cot_q': safe_int_vinhson(padded_row[16]),
+                        'cot_r': safe_int_vinhson(padded_row[17]),
+                        'cot_s': safe_int_vinhson(padded_row[18]),
+                        'cot_t': safe_int_vinhson(padded_row[19]),
+                        'cot_u': safe_int_vinhson(padded_row[20]),
+                        'cot_v': safe_int_vinhson(padded_row[21]),
+                        'cot_w': safe_int_vinhson(padded_row[22]),
+                        'cot_x': safe_int_vinhson(padded_row[23]),
+                    }
+                else:
+                    record = {
+                        'thoi_gian': thoi_gian,
+                        'thoi_gian_str': thoi_gian_str,
+                        'cot_c': parse_cot_c(padded_row[2], nhamay),
+                        'cot_d': safe_float(padded_row[3]),
+                        # Bỏ qua cột E (index 4)
+                        'cot_f': safe_float(padded_row[5]),
+                        'cot_g': safe_float(padded_row[6]),
+                        'cot_h': safe_float(padded_row[7]),
+                        'cot_i': safe_float(padded_row[8]),
+                        'cot_j': safe_float(padded_row[9]),
+                        'cot_k': safe_float(padded_row[10]),
+                        'cot_l': safe_float(padded_row[11]),
+                        'cot_m': safe_float(padded_row[12]),
+                        'cot_n': safe_float(padded_row[13]),
+                        'cot_o': safe_float(padded_row[14]),
+                        'cot_p': safe_float(padded_row[15]),
+                        'cot_q': safe_float(padded_row[16]),
+                        'cot_r': safe_float(padded_row[17]),
+                        'cot_s': safe_float(padded_row[18]),
+                        'cot_t': safe_float(padded_row[19]),
+                        'cot_u': safe_float(padded_row[20]),
+                        'cot_v': safe_float(padded_row[21]),
+                        'cot_w': safe_float(padded_row[22]),
+                        'cot_x': safe_float(padded_row[23]),
+                    }
                 parsed_data.append(record)
                 
             return Response({

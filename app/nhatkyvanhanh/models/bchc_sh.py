@@ -3,7 +3,7 @@ from django.db import models
 from .base import TimestampedUUIDModel, _lay_chu_ky_profile
 
 class SoBCHCSongHinh(TimestampedUUIDModel):
-    ngay_dong_bo = models.DateField(unique=True)
+    ngay_dong_bo = models.DateField()
     nha_may = models.ForeignKey(
         "khovattu.Bang_nha_may",
         on_delete=models.PROTECT,
@@ -36,6 +36,12 @@ class SoBCHCSongHinh(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-ngay_dong_bo", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nha_may", "ngay_dong_bo"],
+                name="uq_sobchcsonghinh_nha_may_ngay",
+            )
+        ]
         verbose_name = "Sổ BCHC Sông Hinh"
         verbose_name_plural = "Sổ BCHC Sông Hinh"
 

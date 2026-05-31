@@ -383,13 +383,18 @@ def _co_quyen_them_dien_bien(user):
 
 
 def _can_edit_event(user, su_kien):
-    if has_profile_permission(user, "can_edit_all_operation_events"):
-        return True
+    if (
+        not user
+        or not user.is_authenticated
+        or su_kien.trang_thai == SuKien.TrangThaiXuLy.XU_LY_XONG
+        or su_kien.ben_ghi_nhan_su_kien_id
+        or su_kien.nguoi_tao_id != user.id
+    ):
+        return False
+
     return (
         has_profile_permission(user, "can_edit_own_operation_events")
-        and su_kien.nguoi_tao_id == user.id
-        and not su_kien.ben_ghi_nhan_su_kien_id
-        and su_kien.trang_thai == SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG
+        or has_profile_permission(user, "can_edit_all_operation_events")
     )
 
 

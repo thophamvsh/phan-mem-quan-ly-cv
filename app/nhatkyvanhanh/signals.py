@@ -4,6 +4,7 @@ import threading
 import requests
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -84,7 +85,10 @@ def notify_new_sukien(sender, instance, created, **kwargs):
     """
     Sends a Telegram notification when a new SuKien (Event) is created.
     """
-    if created:
+    if not created:
+        return
+
+    def notify_after_commit():
         try:
             thoi_gian = timezone.localtime(instance.thoi_gian_xay_ra).strftime("%d/%m/%Y %H:%M")
         except Exception:
@@ -93,11 +97,7 @@ def notify_new_sukien(sender, instance, created, **kwargs):
         nha_may_str = instance.nha_may.ten_nha_may if instance.nha_may else "Không rõ"
         thiet_bi_str = instance.thiet_bi.ten if instance.thiet_bi else "Không rõ"
         loai_str = instance.get_loai_display()
-        
-        # Determine the user who created it
-        nguoi_tao_str = "Hệ thống"
-        if instance.nguoi_tao:
-            nguoi_tao_str = get_user_display_name(instance.nguoi_tao)
+        nguoi_tao_str = get_user_display_name(instance.nguoi_tao) if instance.nguoi_tao else "Hệ thống"
 
         text = (
             f"<b>🔔 CÓ SỰ KIỆN MỚI</b>\n\n"
@@ -110,13 +110,18 @@ def notify_new_sukien(sender, instance, created, **kwargs):
         )
         send_telegram_notification(text)
 
+    transaction.on_commit(notify_after_commit)
+
 
 @receiver(post_save, sender=ChiDaoSuKien)
 def notify_new_chidao(sender, instance, created, **kwargs):
     """
     Sends a Telegram notification when a new ChiDaoSuKien (Directive) is created.
     """
-    if created:
+    if not created:
+        return
+
+    def notify_after_commit():
         su_kien = instance.su_kien
         nha_may_str = su_kien.nha_may.ten_nha_may if su_kien.nha_may else "Không rõ"
         
@@ -137,3 +142,4 @@ def notify_new_chidao(sender, instance, created, **kwargs):
         )
         send_telegram_notification(text)
 
+    transaction.on_commit(notify_after_commit)

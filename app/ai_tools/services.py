@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from django.conf import settings
 
+from .permissions import can_user_use_ai_tool, filter_ai_tools_for_user
 from .storage import get_conversation, save_exchange
 from .tool_format import sanitize_tool_content
 
@@ -202,7 +203,7 @@ def _estimate_cost_usd(provider, model, prompt_tokens, completion_tokens):
     )
 
 
-def _get_tools_and_handlers():
+def _get_tools_and_handlers(user=None):
     (
         WATER_TOOLS,
         handle_water_tool_call,
@@ -213,6 +214,8 @@ def _get_tools_and_handlers():
         handle_vinhson_tool_calls,
     ) = _lazy_import_tools()
     all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS
+    if user is not None:
+        all_tools = filter_ai_tools_for_user(user, all_tools)
     return (
         all_tools,
         handle_water_tool_call,
@@ -222,8 +225,14 @@ def _get_tools_and_handlers():
     )
 
 
-def _handle_single_tool_call(tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls):
+def _ensure_tool_allowed(user, tool_name):
+    if not can_user_use_ai_tool(user, tool_name):
+        raise AiToolsError("Ban khong co quyen su dung du lieu nha may nay.")
+
+
+def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls):
     tool_name = tool_call.function.name
+    _ensure_tool_allowed(user, tool_name)
     if "songhinh" in tool_name.lower() or "songinh" in tool_name.lower():
         return handle_songhinh_tool_calls(tool_call)
     if "vinhson" in tool_name.lower():
@@ -231,7 +240,7 @@ def _handle_single_tool_call(tool_call, handle_water_tool_call, handle_songhinh_
     return handle_water_tool_call(tool_call)
 
 
-def _run_openai_chat(*, content, session_id, model):
+def _run_openai_chat(*, user, content, session_id, model):
     api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", None)
     if not api_key:
         raise AiToolsError("Backend chua cau hinh OPENAI_API_KEY.")
@@ -247,7 +256,7 @@ def _run_openai_chat(*, content, session_id, model):
         handle_water_tool_calls,
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
-    ) = _get_tools_and_handlers()
+    ) = _get_tools_and_handlers(user)
 
     client = OpenAI(api_key=api_key)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -275,6 +284,7 @@ def _run_openai_chat(*, content, session_id, model):
 
         for tool_call in tool_calls:
             try:
+                _ensure_tool_allowed(user, tool_call.function.name)
                 if "songhinh" in tool_call.function.name.lower() or "songinh" in tool_call.function.name.lower():
                     tool_results.append(handle_songhinh_tool_calls(tool_call))
                 elif "vinhson" in tool_call.function.name.lower():
@@ -334,7 +344,7 @@ def _anthropic_content_blocks(message):
     return blocks
 
 
-def _run_anthropic_chat(*, content, session_id, model):
+def _run_anthropic_chat(*, user, content, session_id, model):
     api_key = os.getenv("ANTHROPIC_API_KEY") or getattr(settings, "ANTHROPIC_API_KEY", None)
     if not api_key:
         raise AiToolsError("Backend chua cau hinh ANTHROPIC_API_KEY.")
@@ -350,7 +360,7 @@ def _run_anthropic_chat(*, content, session_id, model):
         _handle_water_tool_calls,
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
-    ) = _get_tools_and_handlers()
+    ) = _get_tools_and_handlers(user)
 
     client = anthropic.Anthropic(api_key=api_key)
     messages = list(content["history"])
@@ -386,6 +396,7 @@ def _run_anthropic_chat(*, content, session_id, model):
     for tool_call in tool_calls:
         try:
             result = _handle_single_tool_call(
+                user,
                 tool_call,
                 handle_water_tool_call,
                 handle_songhinh_tool_calls,
@@ -422,12 +433,14 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
 
     if provider == "anthropic":
         assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens = _run_anthropic_chat(
+            user=user,
             content=chat_content,
             session_id=session_id,
             model=selected_model,
         )
     else:
         assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens = _run_openai_chat(
+            user=user,
             content=chat_content,
             session_id=session_id,
             model=selected_model,

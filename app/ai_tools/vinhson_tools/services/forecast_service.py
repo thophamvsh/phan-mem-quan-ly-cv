@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional, List, Tuple, Dict
 import calendar
+import json
 
 from ..config.settings import GS_CONFIG
 from ..config.columns import COL_DATE, COL_OUTPUT_DAY
@@ -54,13 +55,14 @@ def pick_stats_worksheet(spreadsheet, prefer_sheet_name=None):
 def find_data_start_row(all_data: List[List[str]]) -> int:
     """Tìm dòng bắt đầu dữ liệu thực (bỏ qua header)."""
     for i, row in enumerate(all_data[:50]):
-        if not row or len(row) <= COL_DATE:
+        if not row:
             continue
-        cell_str = str(row[COL_DATE]).strip() if COL_DATE < len(row) else ""
-        if '/' in cell_str and any(c.isdigit() for c in cell_str):
-            parts = cell_str.split('/')
-            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
-                return i
+        for date_col in (COL_DATE_STATS, COL_DATE):
+            cell_str = str(row[date_col]).strip() if date_col < len(row) else ""
+            if '/' in cell_str and any(c.isdigit() for c in cell_str):
+                parts = cell_str.split('/')
+                if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                    return i
     return 7 if len(all_data) > 7 else 1
 
 
@@ -86,6 +88,21 @@ def get_month_data_all_reservoirs(rows: List[list], year: int, month: int) -> Di
         qve = get_month_data(rows, year, month, col_qve)
         if qve is not None:
             result[res_label] = qve
+    return result
+
+
+def get_year_data_all_reservoirs(rows: List[list], year: int) -> Dict[str, float]:
+    result = {}
+    for res_label, col_qve in [("Hồ A", COL_QVE_A), ("Hồ B", COL_QVE_B), ("Hồ C", COL_QVE_C)]:
+        vals: List[float] = []
+        for row in rows:
+            dt = _date_from_stats_row(row)
+            if dt and dt.year == year:
+                value = parse_number_for_qve(_cell(row, col_qve))
+                if value is not None:
+                    vals.append(value)
+        if vals:
+            result[res_label] = sum(vals) / len(vals)
     return result
 
 
@@ -129,7 +146,114 @@ def get_output_month(year: int, month: int) -> Optional[float]:
     return None
 
 
+def get_output_year(year: int) -> Optional[float]:
+    try:
+        _, spreadsheet = get_stats_export_client(GS_CONFIG.spreadsheet_id)
+        if not spreadsheet:
+            return None
+
+        worksheets = spreadsheet.worksheets()
+        op_ws = None
+        for ws in worksheets:
+            if "Sản lượng" in ws.title:
+                op_ws = ws
+                break
+        op_ws = op_ws or (worksheets[0] if worksheets else None)
+        if not op_ws:
+            return None
+
+        all_data = op_ws.get_all_values()
+        data_start_row = find_data_start_row(all_data)
+        data_rows = all_data[data_start_row:] if data_start_row < len(all_data) else []
+
+        total_output = 0.0
+        for row in data_rows:
+            if len(row) <= COL_DATE:
+                continue
+            dt = normalize_date(str(row[COL_DATE]).strip())
+            if dt and dt.year == year and len(row) > COL_OUTPUT_DAY:
+                value = parse_number(_cell(row, COL_OUTPUT_DAY))
+                if value is not None:
+                    total_output += value
+
+        if total_output > 0:
+            return total_output
+    except Exception as e:
+        print(f"[WARN] Lỗi lấy sản lượng năm: {e}")
+    return None
+
+
 def get_daily_data_for_month_vinhson(year: int, month: int) -> Tuple[Dict[int, Dict[str, float]], Dict[int, float]]:
+    """Lấy dữ liệu Qve cho từng hồ A, B, C và Sản lượng ngày.
+    - Qve: từ stats_export_spreadsheet_id (sheet TV VS) - cột E, F, G (ngày ở cột A)
+    - Sản lượng: từ spreadsheet_id (sheet Sản lượng) - cột M (ngày ở cột B)
+
+    Trả về: (dict of {day: {res_label: qve}}, dict of {day: commercial_output})
+    """
+    # Lấy Qve từ stats_export_spreadsheet_id (sheet TV VS)
+    _, spreadsheet_qve = get_stats_export_client(GS_CONFIG.stats_export_spreadsheet_id)
+
+    qve_by_day: Dict[int, Dict[str, float]] = {}
+
+    if spreadsheet_qve:
+        worksheets = spreadsheet_qve.worksheets()
+        # Tìm sheet TV VS (thường có tên chứa "TV" hoặc "VS" hoặc là sheet đầu tiên)
+        stats_ws = None
+        for ws in worksheets:
+            title = ws.title.upper()
+            if "TV" in title or "THỐNG KÊ" in title or "VS" in title or "202" in title:
+                stats_ws = ws
+                break
+        stats_ws = stats_ws or (worksheets[0] if worksheets else None)
+        if stats_ws:
+            all_data = stats_ws.get_all_values()
+            data_start = find_data_start_row(all_data)
+            data_rows = all_data[data_start:] if data_start < len(all_data) else []
+
+            for row in data_rows:
+                # Sheet TV VS: ngày ở cột A (index 0)
+                if len(row) <= 0:
+                    continue
+                cell_str = _cell(row, 0)
+                dt = normalize_date(cell_str)
+                if not dt or dt.year != year or dt.month != month:
+                    continue
+
+                day = dt.day
+
+                if day not in qve_by_day:
+                    qve_by_day[day] = {}
+
+                # Lấy Qve của từng hồ A, B, C từ cột E, F, G (index 4, 5, 6)
+                for res_label, col_qve in [("Hồ A", COL_QVE_A), ("Hồ B", COL_QVE_B), ("Hồ C", COL_QVE_C)]:
+                    if len(row) > col_qve:
+                        val = parse_number_for_qve(_cell(row, col_qve))
+                        if val is not None:
+                            qve_by_day[day][res_label] = val
+
+    # Lấy Sản lượng từ spreadsheet_id (sheet Sản lượng)
+    _, spreadsheet_output = get_stats_export_client(GS_CONFIG.spreadsheet_id)
+    commercial_by_day: Dict[int, float] = {}
+
+    if spreadsheet_output:
+        worksheets = spreadsheet_output.worksheets()
+        op_ws = None
+        for ws in worksheets:
+            if "Sản lượng" in ws.title:
+                op_ws = ws
+                break
+        op_ws = op_ws or (worksheets[0] if worksheets else None)
+        if op_ws:
+            all_data = op_ws.get_all_values()
+            data_start = find_data_start_row(all_data)
+            data_rows = all_data[data_start:] if data_start < len(all_data) else []
+
+            for row in data_rows:
+                # Sheet Sản lượng: ngày ở cột B (COL_DATE = 1)
+                if len(row) <= COL_DATE:
+                    continue
+                cell_str = _cell(row, COL_DATE)
+                dt = normalize_date(cell_str)
     """Lấy dữ liệu Qve cho từng hồ A, B, C và Sản lượng ngày.
     - Qve: từ stats_export_spreadsheet_id (sheet TV VS) - cột E, F, G (ngày ở cột A)
     - Sản lượng: từ spreadsheet_id (sheet Sản lượng) - cột M (ngày ở cột B)
@@ -209,7 +333,7 @@ def get_daily_data_for_month_vinhson(year: int, month: int) -> Tuple[Dict[int, D
                 if len(row) > COL_OUTPUT_DAY:
                     val = parse_number(_cell(row, COL_OUTPUT_DAY))
                     if val is not None:
-                        commercial_by_day[day] = val
+                        commercial_by_day[day] = commercial_by_day.get(day, 0.0) + val
 
     return qve_by_day, commercial_by_day
 
@@ -266,44 +390,77 @@ class ForecastService:
 
             # Lấy Qve tháng trước của năm hiện tại
             current_qve_by_res = get_month_data_all_reservoirs(rows, target_year, compare_month)
-
-            # Tính trung bình Qve của 3 hồ cho từng năm
+            # Tính tổng Qve của 3 hồ cho từng năm làm cơ sở so sánh tương đồng
             qve_data: List[Tuple[int, float]] = []
             for yr, year_qve_values in qve_data_by_year.items():
-                avg_qve_for_year = sum(year_qve_values.values()) / len(year_qve_values)
-                qve_data.append((yr, avg_qve_for_year))
+                sum_qve_for_year = sum(year_qve_values.values())
+                qve_data.append((yr, sum_qve_for_year))
 
-            current_month_qve = sum(current_qve_by_res.values()) / len(current_qve_by_res) if current_qve_by_res else None
+            current_month_qve = sum(current_qve_by_res.values()) if current_qve_by_res else None
 
-            # Tính trung bình Qve của từng hồ qua các năm
+            # Tính trung bình tổng Qve của các năm qua
+            avg_qve = sum([q for _, q in qve_data]) / len(qve_data)
+
+            # Tính trung bình Qve của từng hồ qua các năm để hiển thị
             avg_qve_by_res: Dict[str, float] = {}
             for res_label in res_labels:
                 vals = [year_qve.get(res_label, 0) for year_qve in qve_data_by_year.values() if res_label in year_qve]
                 if vals:
                     avg_qve_by_res[res_label] = sum(vals) / len(vals)
 
-            avg_qve = sum([q for _, q in qve_data]) / len(qve_data)
-
-            # Chọn năm gần nhất
+            # Chọn năm tương đồng nhất
             if current_month_qve is not None:
                 closest_year = min(qve_data, key=lambda x: abs(x[1] - current_month_qve))[0]
                 compare_value = current_month_qve
-                compare_label = f"Qve tháng {compare_month}/{target_year}"
+                compare_label = f"Tổng Qve tháng {compare_month}/{target_year}"
             else:
                 closest_year = min(qve_data, key=lambda x: abs(x[1] - avg_qve))[0]
                 compare_value = avg_qve
-                compare_label = "trung bình"
+                compare_label = "Tổng Qve trung bình"
 
-            # ===== LẤY DỮ LIỆU TỪNG NGÀY =====
-            # Lấy dữ liệu chi tiết từng ngày để lấy giá trị trung bình
+            # ===== LẤY DỮ LIỆU TỪNG NGÀY VÀ TÍCH HỢP THỜI TIẾT =====
+            from ai_tools.water_tools.weather_service import (
+                get_rainfall_forecast,
+                get_reservoir_useful_capacity,
+                get_reservoir_max_useful_capacity,
+                get_initial_levels_and_volumes,
+                get_daily_rainfall_history,
+                get_monthly_rainfall
+            )
+
+            # Lấy dự báo thời tiết cho Vĩnh Sơn
+            rainfall_forecast = get_rainfall_forecast(lat=14.365095, lon=108.694488)
+
+            # Lấy mực nước & dung tích đầu kỳ
+            init_data = get_initial_levels_and_volumes('vinhson', target_year, target_month)
+            H_dau_A, V_dau_A = init_data.get('vinhson_a', (770.0, 1.0))
+            H_dau_B, V_dau_B = init_data.get('vinhson_b', (820.0, 5.0))
+            H_dau_C, V_dau_C = init_data.get('vinhson_c', (976.0, 2.5))
+
+            # Tính lượng mưa tháng trước để xác định độ ẩm đất và hệ số hiệu chỉnh lưu lượng về (soil moisture scaling)
+            compare_year = target_year - 1 if target_month == 1 else target_year
+            compare_year_analog = closest_year - 1 if target_month == 1 else closest_year
+            
+            R_cur = get_monthly_rainfall('vinhson', compare_year, compare_month)
+            R_ana = get_monthly_rainfall('vinhson', compare_year_analog, compare_month)
+            
+            ratio = R_cur / R_ana if R_ana > 0.0 else 1.0
+            wetness_factor = 1.0 + (ratio - 1.0) * 0.2
+            wetness_factor = max(0.8, min(1.3, wetness_factor))
+
             qve_by_day, commercial_by_day = get_daily_data_for_month_vinhson(closest_year, target_month)
+            analog_daily_rain = get_daily_rainfall_history('vinhson', closest_year, target_month)
 
             # Tính toán giá trị từ dữ liệu hàng ngày
             total_commercial = 0.0
             qve_values_a, qve_values_b, qve_values_c = [], [], []
+            forecast_chart_data = []
 
+            import calendar
             last_day_forecast = calendar.monthrange(target_year, target_month)[1]
 
+            # Tạo bảng dữ liệu từng ngày
+            table_rows = ""
             for day in range(1, last_day_forecast + 1):
                 day_qve_dict = qve_by_day.get(day, {})
                 commercial_val = commercial_by_day.get(day, "-")
@@ -312,28 +469,138 @@ class ForecastService:
                 qve_b = day_qve_dict.get("Hồ B", "-")
                 qve_c = day_qve_dict.get("Hồ C", "-")
 
-                # Bỏ qua dòng nếu tất cả đều không có dữ liệu
                 if qve_a == "-" and qve_b == "-" and qve_c == "-" and commercial_val == "-":
                     continue
 
-                # Thu thập giá trị để tính trung bình
+                # Dự báo lượng mưa
+                date_str = f"{target_year}-{target_month:02d}-{day:02d}"
+                rain_val = rainfall_forecast.get(date_str, 0.0)
+                rain_display = f"{rain_val:.1f}" if date_str in rainfall_forecast else "-"
+
+                # Lấy lượng mưa lịch sử của ngày này ở năm tương đồng
+                hist_rain_val = analog_daily_rain.get(day, 0.0)
+                hist_rain_display = f"{hist_rain_val:.1f}"
+
+                # Hiệu chỉnh Qve dựa trên hệ số độ ẩm đất và lượng mưa dự báo
+                factor = 1.0
+                if rain_val >= 35.0:
+                    factor = 2.0
+                elif rain_val >= 15.0:
+                    factor = 1.5
+                elif rain_val >= 5.0:
+                    factor = 1.2
+
                 if isinstance(qve_a, (int, float)):
+                    qve_a = qve_a * wetness_factor * factor
                     qve_values_a.append(qve_a)
                 if isinstance(qve_b, (int, float)):
+                    qve_b = qve_b * wetness_factor * factor
                     qve_values_b.append(qve_b)
                 if isinstance(qve_c, (int, float)):
+                    qve_c = qve_c * wetness_factor * factor
                     qve_values_c.append(qve_c)
+
                 if isinstance(commercial_val, (int, float)):
                     total_commercial += commercial_val
 
+                day_display = f"{day}/{target_month}/{target_year}"
+                qve_a_str = f"{qve_a:.2f}" if isinstance(qve_a, (int, float)) else "-"
+                qve_b_str = f"{qve_b:.2f}" if isinstance(qve_b, (int, float)) else "-"
+                qve_c_str = f"{qve_c:.2f}" if isinstance(qve_c, (int, float)) else "-"
+                commercial_str = f"{commercial_val:,.0f}" if isinstance(commercial_val, (int, float)) else "-"
+
+                table_rows += f"| {day_display} | {qve_a_str} | {qve_b_str} | {qve_c_str} | {hist_rain_display} | {rain_display} | {commercial_str} |\n"
+
+                forecast_chart_data.append({
+                    "Ngay": f"{day}/{target_month}",
+                    "QveHoA": round(qve_a, 2) if isinstance(qve_a, (int, float)) else 0.0,
+                    "QveHoB": round(qve_b, 2) if isinstance(qve_b, (int, float)) else 0.0,
+                    "QveHoC": round(qve_c, 2) if isinstance(qve_c, (int, float)) else 0.0,
+                    "SanLuong": round(commercial_val, 0) if isinstance(commercial_val, (int, float)) else 0.0,
+                })
+
             # Tính trung bình từng hồ từ dữ liệu hàng ngày
-            avg_a = sum(qve_values_a) / len(qve_values_a) if qve_values_a else 0
-            avg_b = sum(qve_values_b) / len(qve_values_b) if qve_values_b else 0
-            avg_c = sum(qve_values_c) / len(qve_values_c) if qve_values_c else 0
+            avg_a = sum(qve_values_a) / len(qve_values_a) if qve_values_a else 0.0
+            avg_b = sum(qve_values_b) / len(qve_values_b) if qve_values_b else 0.0
+            avg_c = sum(qve_values_c) / len(qve_values_c) if qve_values_c else 0.0
+
+            # Tính toán cân bằng nước cho Vĩnh Sơn
+            STH = 0.69
+            Total_Time = 86400
+            total_V_phat = (total_commercial * STH) / 1000000 # triệu m3
+            
+            # Thể tích nước về cho từng hồ
+            total_V_ve_a = (sum(qve_values_a) * Total_Time) / 1000000 if qve_values_a else 0.0
+            total_V_ve_b = (sum(qve_values_b) * Total_Time) / 1000000 if qve_values_b else 0.0
+            total_V_ve_c = (sum(qve_values_c) * Total_Time) / 1000000 if qve_values_c else 0.0
+
+            # Tính toán cuối kỳ
+            V_cuoi_A = V_dau_A + total_V_ve_a - total_V_phat
+            V_cuoi_B = V_dau_B + total_V_ve_b
+            V_cuoi_C = V_dau_C + total_V_ve_c
+
+            V_max_A = get_reservoir_max_useful_capacity('vinhson_a')
+            V_max_B = get_reservoir_max_useful_capacity('vinhson_b')
+            V_max_C = get_reservoir_max_useful_capacity('vinhson_c')
+
+            # Cảnh báo
+            alert_lines = []
+            has_warning = False
+            has_caution = False
+
+            # Hồ A
+            if V_cuoi_A > V_max_A:
+                alert_lines.append(f"* **Hồ A:** Dự kiến đầy hồ (**{V_cuoi_A:.2f} triệu m3** / **{V_max_A:.2f} triệu m3**). Nguy cơ xả tràn.")
+                has_warning = True
+            elif V_cuoi_A < 0.0:
+                alert_lines.append(f"* **Hồ A:** Nguy cơ thiếu nước nghiêm trọng (**{V_cuoi_A:.2f} triệu m3** < 0.0). Lượng nước đầu kỳ và nước về không đủ phát điện.")
+                has_caution = True
+            else:
+                alert_lines.append(f"* **Hồ A:** Vận hành an toàn (dự kiến cuối kỳ đạt **{V_cuoi_A:.2f} triệu m3** / **{V_max_A:.2f} triệu m3**).")
+
+            # Hồ B
+            if V_cuoi_B > V_max_B:
+                alert_lines.append(f"* **Hồ B:** Dự kiến đầy hồ (**{V_cuoi_B:.2f} triệu m3** / **{V_max_B:.2f} triệu m3**). Nguy cơ xả tràn.")
+                has_warning = True
+            else:
+                alert_lines.append(f"* **Hồ B:** Vận hành an toàn (dự kiến cuối kỳ đạt **{V_cuoi_B:.2f} triệu m3** / **{V_max_B:.2f} triệu m3**).")
+
+            # Hồ C
+            if V_cuoi_C > V_max_C:
+                alert_lines.append(f"* **Hồ C:** Dự kiến đầy hồ (**{V_cuoi_C:.2f} triệu m3** / **{V_max_C:.2f} triệu m3**). Nguy cơ xả tràn.")
+                has_warning = True
+            else:
+                alert_lines.append(f"* **Hồ C:** Vận hành an toàn (dự kiến cuối kỳ đạt **{V_cuoi_C:.2f} triệu m3** / **{V_max_C:.2f} triệu m3**).")
+
+            alert_block = "\n".join(alert_lines)
+            if has_caution:
+                alert_str = f"""> [!CAUTION]
+> **Cảnh báo vận hành hồ chứa Vĩnh Sơn:**
+{alert_block}
+"""
+            elif has_warning:
+                alert_str = f"""> [!WARNING]
+> **Cảnh báo vận hành hồ chứa Vĩnh Sơn:**
+{alert_block}
+"""
+            else:
+                alert_str = f"""> [!NOTE]
+> **Cảnh báo vận hành hồ chứa Vĩnh Sơn:**
+{alert_block}
+"""
+
+            # Tính toán lưu lượng máy chạy máy Qcm trung bình
+            total_Qcm = (total_commercial * STH) / (Total_Time * last_day_forecast)
 
             # ===== BUILD RESULT =====
             result = f"""### 📊 Dự báo Qve và Sản lượng - Vĩnh Sơn (A, B, C)
 **Tháng dự báo:** {target_month}/{target_year}
+
+> [!NOTE]
+> **Hiệu chỉnh độ ẩm lưu vực (Soil Moisture Scaling):**
+> * Lượng mưa lũy kế tháng trước ({compare_month:02d}/{compare_year}): **{R_cur:.1f} mm** (thực tế đo được)
+> * Lượng mưa lũy kế tháng trước năm tương đồng ({compare_month:02d}/{compare_year_analog}): **{R_ana:.1f} mm**
+> * Hệ số hiệu chỉnh lưu lượng về (Qve): **{wetness_factor:.2f}** (lưu lượng về lịch sử được nhân với hệ số này trước khi hiệu chỉnh theo dự báo mưa)
 
 ---
 
@@ -341,8 +608,8 @@ class ForecastService:
 
 Dựa trên phân tích **tháng {compare_month}** của các năm liền kề:
 
-| Năm | {" | ".join(res_labels)} |
-|:---:|---:|---:|---:|---:|
+| Năm | {' | '.join(res_labels)} | Tổng Qve (m3/s) |
+|:---:|---:|---:|---:|---:|---:|
 """
             # Kết hợp dữ liệu Qve
             for yr in sorted(qve_data_by_year.keys(), key=lambda x: -x):
@@ -351,21 +618,25 @@ Dựa trên phân tích **tháng {compare_month}** của các năm liền kề:
                 for res_label in res_labels:
                     qv = year_qve_values.get(res_label, "-")
                     if isinstance(qv, (int, float)):
-                        marker = " ←" if yr == closest_year else ""
-                        row_data.append(f"{qv:.2f}{marker}")
+                        row_data.append(f"{qv:.2f}")
                     else:
                         row_data.append("-")
-                result += "| " + " | ".join(row_data) + " |\n"
+                # Thêm cột tổng Qve của năm
+                sum_yr = sum(year_qve_values.values())
+                marker = " ←" if yr == closest_year else ""
+                row_data.append(f"{sum_yr:.2f}{marker}")
+                result += "| " + ' | '.join(row_data) + " |\n"
 
             result += f"""
-**Giá trị so sánh:** {compare_label} = {compare_value:.2f} m³/s
+**Giá trị so sánh:** {compare_label} = {compare_value:.2f} m3/s
 
 ---
-**Qve Hồ A:** {avg_a:.2f} m³/s
-**Qve Hồ B:** {avg_b:.2f} m³/s
-**Qve Hồ C:** {avg_c:.2f} m³/s
-**Sản lượng dự báo:** {total_commercial:,.0f} kWh
-*(Tổng sản lượng từ bảng chi tiết từng ngày)*
+**Qve Hồ A trung bình:** {avg_a:.2f} m3/s
+**Qve Hồ B trung bình:** {avg_b:.2f} m3/s
+**Qve Hồ C trung bình:** {avg_c:.2f} m3/s
+**Qcm trung bình dự báo:** {total_Qcm:.2f} m3/s *(Suất tiêu hao: {STH} m3/kWh)*
+**Sản lượng đầu cực dự báo:** {total_commercial:,.0f} kWh
+*(Tổng sản lượng đầu cực ngày từ bảng chi tiết)*
 
 ---
 
@@ -374,162 +645,202 @@ Dựa trên phân tích **tháng {compare_month}** của các năm liền kề:
 
 """
             # Tạo bảng dữ liệu từng ngày
-            result += f"| Ngày | Qve Hồ A (m³/s) | Qve Hồ B (m³/s) | Qve Hồ C (m³/s) | Sản lượng (kWh) |\n"
-            result += "|:---:|---:|---:|---:|---:|\n"
+            result += f"| Ngày | Qve Hồ A (m3/s) | Qve Hồ B (m3/s) | Qve Hồ C (m3/s) | Lượng mưa lịch sử ({closest_year}) (mm) | Dự báo lượng mưa (mm) | Sản lượng đầu cực (kWh) |\n"
+            result += "|:---:|---:|---:|---:|---:|---:|---:|\n"
+            result += table_rows
+            result += f"| **Trung bình/Tổng** | **{avg_a:.2f}** | **{avg_b:.2f}** | **{avg_c:.2f}** | **-** | **-** | **{total_commercial:,.0f}** |\n"
 
-            for day in range(1, last_day_forecast + 1):
-                day_qve_dict = qve_by_day.get(day, {})
-                commercial_val = commercial_by_day.get(day, "-")
+            # Phần kết luận và cảnh báo vận hành
+            result += f"""
+---
 
-                qve_a = day_qve_dict.get("Hồ A", "-")
-                qve_b = day_qve_dict.get("Hồ B", "-")
-                qve_c = day_qve_dict.get("Hồ C", "-")
+#### 🔮 Kết luận & Cân bằng nước dự báo
 
-                qve_a_str = f"{qve_a:.2f}" if isinstance(qve_a, (int, float)) else "-"
-                qve_b_str = f"{qve_b:.2f}" if isinstance(qve_b, (int, float)) else "-"
-                qve_c_str = f"{qve_c:.2f}" if isinstance(qve_c, (int, float)) else "-"
-                commercial_str = f"{commercial_val:,.0f}" if isinstance(commercial_val, (int, float)) else "-"
+**Mực nước & dung tích đầu kỳ:**
+*   **Hồ A:** H_đầu = **{H_dau_A:.2f} m**, V_đầu = **{V_dau_A:.2f} triệu m3**
+*   **Hồ B:** H_đầu = **{H_dau_B:.2f} m**, V_đầu = **{V_dau_B:.2f} triệu m3**
+*   **Hồ C:** H_đầu = **{H_dau_C:.2f} m**, V_đầu = **{V_dau_C:.2f} triệu m3**
 
-                if qve_a == "-" and qve_b == "-" and qve_c == "-" and commercial_val == "-":
-                    continue
+**Tổng nước phát điện tiêu thụ:** **{total_V_phat:.2f} triệu m3**
 
-                day_display = f"{day}/{target_month}/{target_year}"
-                result += f"| {day_display} | {qve_a_str} | {qve_b_str} | {qve_c_str} | {commercial_str} |\n"
+{alert_str}
+"""
 
-            # Thêm hàng trung bình
-            result += f"| **Trung bình** | **{avg_a:.2f}** | **{avg_b:.2f}** | **{avg_c:.2f}** | **{total_commercial:,.0f}** |\n"""
+            if forecast_chart_data:
+                qve_chart_json = {
+                    "type": "line",
+                    "title": f"Biểu đồ dự báo Qve hàng ngày Vĩnh Sơn tháng {target_month}/{target_year}",
+                    "data": forecast_chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["QveHoA", "QveHoB", "QveHoC"],
+                    "colors": ["#10b981", "#3b82f6", "#f59e0b"],
+                    "unit": " m3/s",
+                }
+                output_chart_json = {
+                    "type": "bar",
+                    "title": f"Biểu đồ dự báo Sản lượng đầu cực hàng ngày Vĩnh Sơn tháng {target_month}/{target_year}",
+                    "data": forecast_chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["SanLuong"],
+                    "colors": ["#6366f1"],
+                    "unit": " kWh",
+                }
+                result += f"\n\n```chart\n{json.dumps(qve_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                result += f"\n\n```chart\n{json.dumps(output_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
             result += """---
 
 **Lưu ý:**
-**Để có dự báo chính xác hơn, cần xem xét nhiều yếu tố như: lượng mưa dự báo, mực nước hồ, kế hoạch vận hành.**
-
+**Để có dự báo chính xác hơn, cần xem xét nhiều yếu tố như: lượng mưa dự báo thực tế, mực nước hồ hiện tại, kế hoạch vận hành.**
 """
             return result.strip()
 
         except Exception as e:
             return f"### Lỗi dự báo\n\n{str(e)}"
 
-#     def forecast_year(self, target_year: int, reservoir: str = "All") -> str:
-#         """Dự báo Qve cho cả năm - hiển thị 3 cột cho hồ A, B, C.
+    def forecast_year(self, target_year: int, reservoir: str = "All") -> str:
+        """Dự báo Qve và Sản lượng cho cả năm cho bậc thang Vĩnh Sơn."""
+        try:
+            _, spreadsheet_stats = get_stats_export_client(GS_CONFIG.stats_export_spreadsheet_id)
+            if not spreadsheet_stats:
+                return "### Lỗi kết nối Google Sheets\n\nKhông thể kết nối với sheet TV VS."
 
-#         Args:
-#             target_year: Năm dự báo
-#             reservoir: Tham số giữ lại để tương thích (hiện tại luôn dự báo cho cả 3 hồ)
-#         """
-#         try:
-#             _, spreadsheet_stats = get_stats_export_client(GS_CONFIG.stats_export_spreadsheet_id)
-#             if not spreadsheet_stats:
-#                 return "### Lỗi kết nối Google Sheets\n\nKhông thể kết nối."
+            stats_ws = pick_stats_worksheet(spreadsheet_stats)
+            if not stats_ws:
+                return "### Lỗi\n\nKhông tìm thấy worksheet TV VS."
 
-#             stats_ws = pick_stats_worksheet(spreadsheet_stats)
-#             if not stats_ws:
-#                 return "### Lỗi\n\nKhông tìm thấy worksheet TV VS."
+            all_data = retry_with_backoff(stats_ws.get_all_values, max_retries=3, initial_delay=1)
+            if not all_data or len(all_data) < 2:
+                return "Không có dữ liệu."
 
-#             all_data = retry_with_backoff(stats_ws.get_all_values, max_retries=3, initial_delay=1)
-#             if not all_data or len(all_data) < 2:
-#                 return "Không có dữ liệu."
+            data_start = find_data_start_row(all_data)
+            rows = all_data[data_start:] if data_start < len(all_data) else []
+            years_to_check = [target_year - 1, target_year - 2, target_year - 3, target_year - 4]
+            res_labels = ["Hồ A", "Hồ B", "Hồ C"]
 
-#             data_start = find_data_start_row(all_data)
-#             rows = all_data[data_start:] if data_start < len(all_data) else []
+            qve_data_by_year: Dict[int, Dict[str, float]] = {}
+            for yr in years_to_check:
+                year_qve_values = get_year_data_all_reservoirs(rows, yr)
+                if year_qve_values:
+                    qve_data_by_year[yr] = year_qve_values
 
-#             years_to_check = [target_year - 1, target_year - 2, target_year - 3, target_year - 4]
-#             res_labels = ["Hồ A", "Hồ B", "Hồ C"]
-#             qve_cols = [COL_QVE_A, COL_QVE_B, COL_QVE_C]
+            if not qve_data_by_year:
+                return "### Không đủ dữ liệu\n\nKhông có dữ liệu Qve của các năm liền kề để dự báo."
 
-#             # Lấy Qve cả năm của từng hồ
-#             qve_data_by_year: Dict[int, Dict[str, float]] = {}
-#             for yr in years_to_check:
-#                 year_qve_values = {}
-#                 for res_label, col_qve in zip(res_labels, qve_cols):
-#                     year_vals: List[float] = []
-#                     for r in rows:
-#                         dt = _date_from_stats_row(r)
-#                         if dt and dt.year == yr:
-#                             val_str = _cell(r, col_qve)
-#                             v = parse_number_for_qve(val_str)
-#                             if v is not None:
-#                                 year_vals.append(v)
-#                     if year_vals:
-#                         year_qve_values[res_label] = sum(year_vals) / len(year_vals)
-#                 if year_qve_values:
-#                     qve_data_by_year[yr] = year_qve_values
+            # Tính tổng Qve 3 hồ cho từng năm
+            qve_data: List[Tuple[int, float]] = []
+            for yr, year_qve_values in qve_data_by_year.items():
+                qve_data.append((yr, sum(year_qve_values.values())))
 
-#             if not qve_data_by_year:
-#                 return "### Không đủ dữ liệu\n\nKhông có dữ liệu Qve của các năm liền kề để dự báo."
+            # Tính trung bình tổng Qve các năm
+            avg_qve = sum(q for _, q in qve_data) / len(qve_data)
+            closest_year = min(qve_data, key=lambda x: abs(x[1] - avg_qve))[0]
+            forecast_qve_by_res = qve_data_by_year.get(closest_year, {})
+            forecast_output = get_output_year(closest_year)
 
-#             # Tính trung bình Qve của 3 hồ cho từng năm
-#             qve_data: List[Tuple[int, float]] = []
-#             for yr, year_qve_values in qve_data_by_year.items():
-#                 avg_qve_for_year = sum(year_qve_values.values()) / len(year_qve_values)
-#                 qve_data.append((yr, avg_qve_for_year))
+            # Tính trung bình từng hồ qua các năm
+            avg_qve_by_res: Dict[str, float] = {}
+            for res_label in res_labels:
+                vals = [
+                    year_qve[res_label]
+                    for year_qve in qve_data_by_year.values()
+                    if res_label in year_qve
+                ]
+                if vals:
+                    avg_qve_by_res[res_label] = sum(vals) / len(vals)
 
-#             avg_qve = sum([q for _, q in qve_data]) / len(qve_data)
-#             closest_year = min(qve_data, key=lambda x: abs(x[1] - avg_qve))[0]
+            result = f"""### 📊 Dự báo Qve và Sản lượng - Vĩnh Sơn (A, B, C)
+**Năm dự báo:** {target_year}
 
-#             # Lấy forecast Qve của từng hồ
-#             forecast_qve_by_res = qve_data_by_year.get(closest_year, {})
+---
 
-#             # Tính trung bình Qve của từng hồ qua các năm
-#             avg_qve_by_res: Dict[str, float] = {}
-#             for res_label in res_labels:
-#                 vals = [year_qve.get(res_label, 0) for year_qve in qve_data_by_year.values() if res_label in year_qve]
-#                 if vals:
-#                     avg_qve_by_res[res_label] = sum(vals) / len(vals)
+#### 📋 Phương pháp dự báo
 
-#             result = f"""### 📊 Dự báo Qve - Vĩnh Sơn (A, B, C)
-# **Năm dự báo:** {target_year}
+Dựa trên phân tích các năm liền kề:
 
-# ---
+| Năm | {' | '.join(res_labels)} | Tổng cả năm (m3/s) | Sản lượng đầu cực (kWh) |
+|:---:|---:|---:|---:|---:|---:|
+"""
 
-# #### 📋 Phương pháp dự báo
+            year_chart_data = []
+            for yr in sorted(qve_data_by_year.keys(), key=lambda x: -x):
+                year_qve_values = qve_data_by_year[yr]
+                row_data = [str(yr)]
+                for res_label in res_labels:
+                    qv = year_qve_values.get(res_label, "-")
+                    if isinstance(qv, (int, float)):
+                        row_data.append(f"{qv:.2f}")
+                    else:
+                        row_data.append("-")
+                sum_yr = sum(year_qve_values.values())
+                output_yr = get_output_year(yr)
+                marker = " ←" if yr == closest_year else ""
+                row_data.append(f"{sum_yr:.2f}{marker}")
+                row_data.append(f"{output_yr:,.0f}" if output_yr else "-")
+                result += "| " + ' | '.join(row_data) + " |\n"
+                year_chart_data.append({
+                    "Nam": str(yr),
+                    "QveHoA": round(year_qve_values.get(res_labels[0], 0), 2),
+                    "QveHoB": round(year_qve_values.get(res_labels[1], 0), 2),
+                    "QveHoC": round(year_qve_values.get(res_labels[2], 0), 2),
+                    "SanLuong": round(output_yr or 0, 0),
+                })
 
-# Dựa trên phân tích các năm liền kề:
+            avg_a_yr = avg_qve_by_res.get('Hồ A', 0.0)
+            avg_b_yr = avg_qve_by_res.get('Hồ B', 0.0)
+            avg_c_yr = avg_qve_by_res.get('Hồ C', 0.0)
+            fc_a_yr = forecast_qve_by_res.get('Hồ A', 0.0)
+            fc_b_yr = forecast_qve_by_res.get('Hồ B', 0.0)
+            fc_c_yr = forecast_qve_by_res.get('Hồ C', 0.0)
+            result += f"""
+**Trung bình Qve cả năm:**
+- Hồ A: {avg_a_yr:.2f} m3/s
+- Hồ B: {avg_b_yr:.2f} m3/s
+- Hồ C: {avg_c_yr:.2f} m3/s
+- **Tổng trung bình:** {avg_qve:.2f} m3/s
 
-# | Năm | {" | ".join(res_labels)} | TB cả năm (m³/s) |
-# |:---:|---:|---:|---:|---:|
-# """
-#             for yr in sorted(qve_data_by_year.keys(), key=lambda x: -x):
-#                 year_qve_values = qve_data_by_year[yr]
-#                 row_data = [str(yr)]
-#                 for res_label in res_labels:
-#                     qv = year_qve_values.get(res_label, "-")
-#                     if isinstance(qv, (int, float)):
-#                         marker = " ←" if yr == closest_year else ""
-#                         row_data.append(f"{qv:.2f}{marker}")
-#                     else:
-#                         row_data.append("-")
-#                 # Thêm trung bình cả năm
-#                 avg_yr = sum(year_qve_values.values()) / len(year_qve_values)
-#                 row_data.append(f"{avg_yr:.2f}")
-#                 result += "| " + " | ".join(row_data) + " |\n"
+**Năm được chọn để dự báo:** {closest_year}
 
-#             result += f"""
-# **Trung bình Qve cả năm:**
-# - Hồ A: {avg_qve_by_res.get('Hồ A', 0):.2f} m³/s
-# - Hồ B: {avg_qve_by_res.get('Hồ B', 0):.2f} m³/s
-# - Hồ C: {avg_qve_by_res.get('Hồ C', 0):.2f} m³/s
-# - **Trung bình chung:** {avg_qve:.2f} m³/s
+---
 
-# **Năm được chọn để dự báo:** {closest_year}
+#### 🔮 Dự báo cho năm {target_year}
 
-# ---
+**Qve dự báo:**
+- Hồ A: {fc_a_yr:.2f} m3/s
+- Hồ B: {fc_b_yr:.2f} m3/s
+- Hồ C: {fc_c_yr:.2f} m3/s
 
-# #### 🔮 Dự báo cho năm {target_year}
+**Sản lượng đầu cực dự báo:** {forecast_output or 0:,.0f} kWh
+*(Dựa trên sản lượng năm {closest_year})*
 
-# **Qve dự báo:**
-# - Hồ A: {forecast_qve_by_res.get('Hồ A', 0):.2f} m³/s
-# - Hồ B: {forecast_qve_by_res.get('Hồ B', 0):.2f} m³/s
-# - Hồ C: {forecast_qve_by_res.get('Hồ C', 0):.2f} m³/s
+---
 
-# ---
+**Lưu ý:**
+**Để có dự báo chính xác hơn, cần xem xét nhiều yếu tố như: lượng mưa dự báo, mực nước hồ, kế hoạch vận hành.**
+"""
+            if year_chart_data:
+                qve_year_chart_json = {
+                    "type": "line",
+                    "title": f"Biểu đồ dự báo Qve Vĩnh Sơn năm {target_year}",
+                    "data": year_chart_data,
+                    "xKey": "Nam",
+                    "yKeys": ["QveHoA", "QveHoB", "QveHoC"],
+                    "colors": ["#10b981", "#3b82f6", "#f59e0b"],
+                    "unit": " m3/s",
+                }
+                output_year_chart_json = {
+                    "type": "bar",
+                    "title": f"Biểu đồ dự báo Sản lượng Vĩnh Sơn năm {target_year}",
+                    "data": year_chart_data,
+                    "xKey": "Nam",
+                    "yKeys": ["SanLuong"],
+                    "colors": ["#6366f1"],
+                    "unit": " kWh",
+                }
+                result += f"\n\n```chart\n{json.dumps(qve_year_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                result += f"\n\n```chart\n{json.dumps(output_year_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-# **Lưu ý:**
-# - Đây là dự báo đơn giản dựa trên Qve trung bình của năm liền kề.
+            return result.strip()
 
-# **Nguồn dữ liệu:** Google Sheets thống kê (Vĩnh Sơn)
-# """
-#             return result.strip()
-
-#         except Exception as e:
-#             return f"### Lỗi dự báo\n\n{str(e)}"
+        except Exception as e:
+            return f"### Lỗi dự báo\n\n{str(e)}"

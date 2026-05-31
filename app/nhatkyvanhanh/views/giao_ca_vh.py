@@ -18,6 +18,8 @@ from nhatkyvanhanh.permissions import (
     CanViewShiftHandoverLogs,
     CanCreateShiftHandoverLogs,
     CanReceiveShiftHandoverLogs,
+    CanEditShiftHandoverLogs,
+    CanDeleteShiftHandoverLogs,
     IsShiftLogCreator,
     IsNotShiftLogCreator,
 )
@@ -85,6 +87,10 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewShiftHandoverLogs]
         if self.action == "create":
             permission_classes = [CanCreateShiftHandoverLogs]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditShiftHandoverLogs]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteShiftHandoverLogs]
         elif self.action == "ky_nhan_ca":
             permission_classes = [CanReceiveShiftHandoverLogs, IsNotShiftLogCreator]
         elif self.action == "ky_giao_ca":

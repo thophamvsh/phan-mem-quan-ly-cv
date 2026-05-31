@@ -18,6 +18,8 @@ from nhatkyvanhanh.serializers import (
 from nhatkyvanhanh.permissions import (
     CanViewMonthlyEquipmentSwitchLogs,
     CanCreateMonthlyEquipmentSwitchLogs,
+    CanEditMonthlyEquipmentSwitchLogs,
+    CanDeleteMonthlyEquipmentSwitchLogs,
 )
 from .helpers import (
     _get_song_hinh_factory,
@@ -106,6 +108,10 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewMonthlyEquipmentSwitchLogs]
         if self.action == "create":
             permission_classes = [CanCreateMonthlyEquipmentSwitchLogs]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditMonthlyEquipmentSwitchLogs]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteMonthlyEquipmentSwitchLogs]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):

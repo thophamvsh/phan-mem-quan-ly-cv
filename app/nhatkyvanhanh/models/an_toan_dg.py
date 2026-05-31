@@ -37,7 +37,12 @@ class SoAnToanDauGio(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["-ngay_dong_bo", "-ca_truc", "-created_at"]
-        unique_together = ["ngay_dong_bo", "ca_truc"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nha_may", "ngay_dong_bo", "ca_truc"],
+                name="uq_soantoandaugio_nha_may_ngay_ca",
+            )
+        ]
         verbose_name = "Sổ an toàn đầu giờ"
         verbose_name_plural = "Sổ an toàn đầu giờ"
 

@@ -124,6 +124,62 @@ class ThongSoThuyVanAPITests(APITestCase):
         response = self.client.post(url, data_vs)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_thongsosanxuat_requires_hydrology_view_permission(self):
+        url = reverse("thongsothuyvan:thongsosanxuat-list")
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=timezone.now(),
+            cot_g=200.5,
+            created_by=self.sh_user,
+            updated_by=self.sh_user,
+        )
+
+        self.client.force_authenticate(user=self.unprivileged_user)
+        response = self.client.get(url, {"nhamay": "songhinh"})
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_thongsosanxuat_requires_hydrology_create_permission(self):
+        url = reverse("thongsothuyvan:thongsosanxuat-list")
+        self.client.force_authenticate(user=self.unprivileged_user)
+
+        response = self.client.post(
+            url,
+            {
+                "nha_may": "songhinh",
+                "thoi_gian": timezone.now().isoformat(),
+                "cot_g": 200.5,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_thongsogiophat_requires_hydrology_permissions(self):
+        url = reverse("thongsothuyvan:thongsogiophat-list")
+        ThongsoGioPhat.objects.create(
+            nha_may="songhinh",
+            ngay=date(2026, 5, 30),
+            to_may=1,
+            gio_phat_dien=12.5,
+            created_by=self.sh_user,
+            updated_by=self.sh_user,
+        )
+
+        self.client.force_authenticate(user=self.unprivileged_user)
+        list_response = self.client.get(url, {"nhamay": "songhinh"})
+        create_response = self.client.post(
+            url,
+            {
+                "nha_may": "songhinh",
+                "ngay": "2026-05-30",
+                "to_may": 2,
+                "gio_phat_dien": 8,
+            },
+        )
+
+        self.assertEqual(list_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_google_sheet_preview_factory_scoping(self):
         url = reverse("thongsothuyvan:sync-preview")
 
