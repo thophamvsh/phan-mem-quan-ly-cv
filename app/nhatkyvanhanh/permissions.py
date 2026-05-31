@@ -120,3 +120,19 @@ class CanEditBCHCSongHinh(UserProfilePermission):
 
 class CanViewSoAnToanDauGio(UserProfilePermission):
     permission_name = "can_view_so_an_toan_dau_gio"
+
+
+class IsShiftLogCreator(permissions.BasePermission):
+    message = "Chi user tao so giao nhan ca moi duoc ky giao ca."
+
+    def has_object_permission(self, request, view, obj):
+        from .views.helpers import _is_creator_of_shift_log
+        return _is_creator_of_shift_log(request.user, obj)
+
+
+class IsNotShiftLogCreator(permissions.BasePermission):
+    message = "User giao ca khong duoc tu ky nhan ca."
+
+    def has_object_permission(self, request, view, obj):
+        return obj.user_giao_ca_id != request.user.id
+

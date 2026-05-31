@@ -18,6 +18,8 @@ from nhatkyvanhanh.permissions import (
     CanViewShiftHandoverLogs,
     CanCreateShiftHandoverLogs,
     CanReceiveShiftHandoverLogs,
+    IsShiftLogCreator,
+    IsNotShiftLogCreator,
 )
 from .helpers import (
     _sync_truc_ktvh_from_admin_shift_log,
@@ -84,7 +86,9 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             permission_classes = [CanCreateShiftHandoverLogs]
         elif self.action == "ky_nhan_ca":
-            permission_classes = [CanReceiveShiftHandoverLogs]
+            permission_classes = [CanReceiveShiftHandoverLogs, IsNotShiftLogCreator]
+        elif self.action == "ky_giao_ca":
+            permission_classes = [CanViewShiftHandoverLogs, IsShiftLogCreator]
 
         return [permission() for permission in permission_classes]
 
@@ -132,11 +136,6 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def ky_giao_ca(self, request, pk=None):
         so = self.get_object()
-        if not _is_creator_of_shift_log(request.user, so):
-            return Response(
-                {"detail": "Chi user tao so giao nhan ca moi duoc ky giao ca."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         if not so.nhan_ca_ky_at:
             return Response(
                 {"detail": "Can ky nhan ca truoc khi ky giao ca."},
@@ -275,11 +274,6 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def ky_nhan_ca(self, request, pk=None):
         so = self.get_object()
-        if so.user_giao_ca_id == request.user.id:
-            return Response(
-                {"detail": "User giao ca khong duoc tu ky nhan ca."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         if so.user_nhan_ca_id and so.user_nhan_ca_id != request.user.id:
             return Response(
                 {"detail": "So da duoc gan user nhan ca khac."},

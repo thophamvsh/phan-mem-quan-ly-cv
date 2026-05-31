@@ -94,7 +94,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'app.wsgi.application'
 ASGI_APPLICATION = 'app.asgi.application'
 
-if os.environ.get('DB_HOST'):
+if os.environ.get('DB_HOST') and not env_bool('SQLITE'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',

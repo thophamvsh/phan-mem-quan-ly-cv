@@ -31,19 +31,19 @@ urlpatterns = [
 
     # Legacy API routes (backward compatibility)
     path('api/', include('core.urls')),
-    path("api/khovattu/", include("khovattu.urls")),
-    path("api/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
-    path("api/quanlyvanhanh/", include("quanlyvanhanh.urls")),
+    path("api/khovattu/", include(("khovattu.urls", "khovattu"), namespace="legacy-khovattu")),
+    path("api/nhatkyvanhanh/", include(("nhatkyvanhanh.urls", "nhatkyvanhanh"), namespace="legacy-nhatkyvanhanh")),
+    path("api/quanlyvanhanh/", include(("quanlyvanhanh.urls", "quanlyvanhanh"), namespace="legacy-quanlyvanhanh")),
     path("api/ai/", include("ai_tools.urls")),
 
     # Versioned API routes (v1)
     path('api/v1/', include('core.urls')),
-    path("api/v1/khovattu/", include("khovattu.urls")),
-    path("api/v1/nhatkyvanhanh/", include("nhatkyvanhanh.urls")),
-    path("api/v1/quanlyvanhanh/", include("quanlyvanhanh.urls")),
+    path("api/v1/khovattu/", include(("khovattu.urls", "khovattu"), namespace="v1-khovattu")),
+    path("api/v1/nhatkyvanhanh/", include(("nhatkyvanhanh.urls", "nhatkyvanhanh"), namespace="v1-nhatkyvanhanh")),
+    path("api/v1/quanlyvanhanh/", include(("quanlyvanhanh.urls", "quanlyvanhanh"), namespace="v1-quanlyvanhanh")),
     path("api/v1/ai/", include("ai_tools.urls")),
-    path("api/thongsothuyvan/", include("thongsothuyvan.urls")),
-    path("api/v1/thongsothuyvan/", include("thongsothuyvan.urls")),
+    path("api/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="legacy-thongsothuyvan")),
+    path("api/v1/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="v1-thongsothuyvan")),
 ]
 
 # Serve media files in development
