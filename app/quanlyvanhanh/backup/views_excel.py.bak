@@ -1,11 +1,10 @@
 import os
 import io
-import json
 from django.http import HttpResponse, JsonResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -85,26 +84,34 @@ def excel_template(request):
             cell.alignment = Alignment(horizontal='center')
             cell.fill = PatternFill(start_color='DDA0DD', end_color='DDA0DD', fill_type='solid')
 
-        # Tạo 48 chu kỳ
+        # Tạo dữ liệu mẫu cho 48 chu kỳ (00:00 - 23:30) - KHÔNG có Min/Max
+        from datetime import datetime, timedelta
+
+        current_date = datetime.now()
+
+        # Tạo 48 chu kỳ (00:30 - 24:00) - chỉ có thông số, không có cột Ngày và Thời điểm
         row_index = 4  # Bắt đầu từ hàng 4 (sau 3 hàng header)
 
+        # Tạo đúng 48 dòng từ 00:00 đến 23:30
         slots = []
         for hour in range(24):
+            # Mỗi giờ có 2 slot: XX:00 và XX:30
             slots.append(f"{hour:02d}:00")
             slots.append(f"{hour:02d}:30")
 
+        # Đảm bảo có đúng 48 slots
         if len(slots) != 48:
             if len(slots) == 47:
                 slots.append("23:30")
 
-        # Tạo 48 dòng dữ liệu trống
+        # Tạo 48 dòng dữ liệu
         for slot in slots:
             for col in range(1, 34):  # 33 thông số
                 ws.cell(row=row_index, column=col, value="")
             row_index += 1
 
-        # Điều chỉnh độ rộng cột
-        column_widths = [15] * 33
+        # Điều chỉnh độ rộng cột cho 33 thông số (không có cột Ngày và Thời điểm)
+        column_widths = [15] * 33  # 33 thông số
         for i, width in enumerate(column_widths, 1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = width
 
@@ -149,9 +156,10 @@ def excel_import(request):
             return JsonResponse({'error': 'Vui lòng chọn ngày import'}, status=400)
 
         # Parse time slots
+        import json
         try:
             time_slots = json.loads(time_slots_json)
-        except Exception:
+        except:
             time_slots = []
 
         # Tạo time cycles list trước khi đọc Excel
@@ -160,14 +168,18 @@ def excel_import(request):
         else:
             # Tạo thời điểm mặc định cho 48 chu kỳ (00:00 đến 23:30)
             time_cycles_list = []
+            # 00:00 → 23:30 (48 slot) - backend đồng bộ với frontend
             for hour in range(24):
+                # Mỗi giờ có 2 slot: XX:00 và XX:30
                 time_cycles_list.append(f"{hour:02d}:00")
                 time_cycles_list.append(f"{hour:02d}:30")
 
+            # Đảm bảo có đúng 48 slots
             if len(time_cycles_list) != 48:
                 if len(time_cycles_list) == 47:
                     time_cycles_list.append("23:30")
 
+            # Đảm bảo chỉ có 48 slot
             time_cycles_list = time_cycles_list[:48]
 
         # Đọc file Excel: Template có 3 hàng header (row 1-3), dữ liệu bắt đầu từ hàng 4
@@ -181,11 +193,14 @@ def excel_import(request):
                 engine="openpyxl",
             )
         except Exception as e:
+            # Log error internally without printing
             return JsonResponse({'error': f'Lỗi đọc file Excel: {str(e)}'}, status=400)
 
+        # Lấy dữ liệu từ các cột cụ thể (48 giờ, chỉ lấy 24 giờ đầu)
         imported_count = 0
 
         # Mapping cột Excel với thông số và thiết bị (33 thông số)
+        # Dựa trên vị trí cột trong Excel (A=0, B=1, C=2, ...)
         column_mapping = [
             # TỔ MÁY H1 (7 thông số đầu - cột A-G)
             {'name': 'Điện áp kích từ', 'device': 'SH.TB.H1', 'field': 'dien_ap_kich_tu_h1', 'unit': 'V'},
@@ -226,7 +241,13 @@ def excel_import(request):
         ]
 
         # Lấy danh sách thiết bị cần thiết
+        # Tìm hoặc tạo thiết bị theo mã
         thiet_bi_map = {}
+        device_names = {
+            'SH.TB.H1': 'Tổ máy H1',
+            'SH.TB.H2': 'Tổ máy H2',
+            'SH.TB.TPP': 'Trạm phân phối'
+        }
         scoped_thiet_bi = filter_queryset_by_factory(
             ThietBi.objects.all(),
             request.user,
@@ -244,91 +265,81 @@ def excel_import(request):
         if not thiet_bi_map:
             return JsonResponse({'error': 'Không tìm thấy thiết bị trong phạm vi nhà máy được phân quyền'}, status=403)
 
-        # Lấy trước các bản ghi hiện có để so khớp nhanh trên bộ nhớ
-        existing_records = ThongSoVanHanh.objects.filter(
-            thiet_bi__in=thiet_bi_map.values(),
-            ngay_nhap=import_date
-        )
-        existing_lookup = {
-            (rec.thiet_bi_id, rec.ma_thong_so, rec.thoi_diem_nhap): rec
-            for rec in existing_records
-        }
-
-        to_create = []
-        to_update = []
-
         # Xử lý từng dòng (48 chu kỳ)
         for index, row in df.iterrows():
             try:
+                # Sử dụng ngày từ form và thời điểm từ chu kỳ
                 ngay = import_date
                 thoi_diem = time_cycles_list[index] if index < len(time_cycles_list) else f"{index:02d}:00"
 
                 # Tạo timezone-aware datetime với Vietnam timezone
                 datetime_str = f"{ngay} {thoi_diem}:00"
+
                 naive_datetime = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
-                
+                # Sử dụng Asia/Ho_Chi_Minh timezone cụ thể thay vì get_current_timezone()
                 import pytz
                 vietnam_tz = pytz.timezone('Asia/Ho_Chi_Minh')
                 timezone_aware_datetime = vietnam_tz.localize(naive_datetime)
 
+                # Xử lý từng thông số (33 cột)
+                row_imported = 0
+
                 for col_index, mapping_info in enumerate(column_mapping):
-                    try:
-                        value = row.iloc[col_index] if col_index < len(row) else None
-                        device_code = mapping_info['device']
-                        field_name = mapping_info['field']
-                        unit = mapping_info['unit']
-                        param_name = mapping_info['name']
+                    # Lấy giá trị từ cột tương ứng
+                    value = row.iloc[col_index] if col_index < len(row) else None
 
-                        if pd.isna(value) or value == '' or value is None:
-                            value = None
+                    # Lấy thông tin thiết bị từ mapping
+                    device_code = mapping_info['device']
+                    field_name = mapping_info['field']
+                    unit = mapping_info['unit']
+                    param_name = mapping_info['name']
 
-                        if device_code not in thiet_bi_map:
-                            continue
+                    # Xử lý cả ô có giá trị và ô trống
+                    # Ô trống sẽ được lưu với giá trị NULL
+                    if pd.isna(value) or value == '' or value is None:
+                        value = None  # Lưu NULL cho ô trống
 
-                        thiet_bi = thiet_bi_map[device_code]
-                        gia_tri_str = str(value) if value is not None else None
-                        nha_may_val = get_user_factory_name(request.user) or thiet_bi.nha_may
-
-                        lookup_key = (thiet_bi.id, field_name, timezone_aware_datetime)
-                        if lookup_key in existing_lookup:
-                            thong_so = existing_lookup[lookup_key]
-                            if (thong_so.gia_tri != gia_tri_str or
-                                thong_so.don_vi != unit or
-                                thong_so.ten_thong_so != param_name or
-                                thong_so.nha_may != nha_may_val):
-                                
-                                thong_so.gia_tri = gia_tri_str
-                                thong_so.don_vi = unit
-                                thong_so.ten_thong_so = param_name
-                                thong_so.nha_may = nha_may_val
-                                to_update.append(thong_so)
-                        else:
-                            thong_so = ThongSoVanHanh(
-                                thiet_bi=thiet_bi,
-                                ma_thong_so=field_name,
-                                thoi_diem_nhap=timezone_aware_datetime,
-                                gia_tri=gia_tri_str,
-                                don_vi=unit,
-                                ten_thong_so=param_name,
-                                ngay_nhap=ngay,
-                                nha_may=nha_may_val
-                            )
-                            to_create.append(thong_so)
-                            existing_lookup[lookup_key] = thong_so
-
-                        imported_count += 1
-
-                    except Exception:
+                    # Kiểm tra thiết bị có tồn tại không
+                    if device_code not in thiet_bi_map:
                         continue
 
-            except Exception:
-                continue
+                    thiet_bi = thiet_bi_map[device_code]
 
-        # Ghi hàng loạt
-        if to_create:
-            ThongSoVanHanh.objects.bulk_create(to_create)
-        if to_update:
-            ThongSoVanHanh.objects.bulk_update(to_update, ['gia_tri', 'don_vi', 'ten_thong_so', 'nha_may'])
+                    # Tạo hoặc cập nhật bản ghi
+                    try:
+                        # Lookup gồm cả thời điểm để mỗi chu kỳ tạo bản ghi riêng
+                        # Xử lý giá trị NULL cho ô trống
+                        gia_tri_str = str(value) if value is not None else None
+
+                        thong_so, created = ThongSoVanHanh.objects.get_or_create(
+                            thiet_bi=thiet_bi,
+                            ma_thong_so=field_name,
+                            thoi_diem_nhap=timezone_aware_datetime,
+                            defaults={
+                                'gia_tri': gia_tri_str,
+                                'don_vi': unit,
+                                'ten_thong_so': param_name,
+                                'ngay_nhap': ngay,
+                                'nha_may': get_user_factory_name(request.user) or thiet_bi.nha_may,
+                            }
+                        )
+
+                        if not created:
+                            thong_so.gia_tri = gia_tri_str
+                            thong_so.don_vi = unit
+                            thong_so.ten_thong_so = param_name
+                            thong_so.ngay_nhap = ngay
+                            thong_so.nha_may = get_user_factory_name(request.user) or thiet_bi.nha_may
+                            thong_so.save()
+
+                        imported_count += 1
+                        row_imported += 1
+
+                    except Exception as e:
+                        continue
+
+            except Exception as e:
+                continue
 
         return JsonResponse({
             'message': 'Import thành công',

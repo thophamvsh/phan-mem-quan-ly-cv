@@ -419,6 +419,19 @@ def import_excel_h2(request):
 
         imported_count = 0
 
+        # Lấy trước các bản ghi hiện có để tra cứu trên memory
+        existing_records = ThongSoToMay.objects.filter(
+            thiet_bi=thiet_bi,
+            ngay_nhap=target_date
+        )
+        existing_lookup = {
+            (rec.ten_thong_so, rec.thoi_diem_nhap): rec
+            for rec in existing_records
+        }
+
+        to_create = []
+        to_update = []
+
         # Xử lý dữ liệu từ A4 đến T27 (24 rows × 20 columns = 480 ô)
         for row_idx in range(3, 27):  # A4 to A27
             if row_idx >= len(df):
@@ -449,31 +462,40 @@ def import_excel_h2(request):
 
                 # Tạo hoặc cập nhật thông số cho tất cả ô
                 try:
-                    # Luôn lưu record (kể cả ô trống) để đảm bảo đủ 24x20 ô
-                    obj, created = ThongSoToMay.objects.get_or_create(
-                        thiet_bi=thiet_bi,
-                        ten_thong_so=mapping["ten"],
-                        thoi_diem_nhap=time_cycle,  # DateTime (aware) theo VN
-                        ngay_nhap=target_date,
-                        defaults={
-                            'ma_thong_so': mapping["ma"],
-                            'don_vi': mapping["don_vi"],
-                            'gia_tri': numeric_value,
-                            'nha_may': get_user_factory_name(request.user) or thiet_bi.nha_may,
-                            'ky_hieu_van_hanh': f'{device_code.split(".")[-2]}_{mapping["ma"]}',
-                            'ghi_chu': f'Import từ Excel - {target_date}'
-                        }
-                    )
-                    if not created:
-                        # Cập nhật giá trị nếu đã tồn tại
-                        obj.gia_tri = numeric_value
-                        obj.nha_may = get_user_factory_name(request.user) or thiet_bi.nha_may
-                        obj.save(update_fields=['gia_tri', 'nha_may'])
+                    nha_may_val = get_user_factory_name(request.user) or thiet_bi.nha_may
+                    lookup_key = (mapping["ten"], time_cycle)
+
+                    if lookup_key in existing_lookup:
+                        obj = existing_lookup[lookup_key]
+                        if obj.gia_tri != numeric_value or obj.nha_may != nha_may_val:
+                            obj.gia_tri = numeric_value
+                            obj.nha_may = nha_may_val
+                            to_update.append(obj)
+                    else:
+                        obj = ThongSoToMay(
+                            thiet_bi=thiet_bi,
+                            ten_thong_so=mapping["ten"],
+                            thoi_diem_nhap=time_cycle,
+                            ngay_nhap=target_date,
+                            ma_thong_so=mapping["ma"],
+                            don_vi=mapping["don_vi"],
+                            gia_tri=numeric_value,
+                            nha_may=nha_may_val,
+                            ky_hieu_van_hanh=f'{device_code.split(".")[-2]}_{mapping["ma"]}',
+                            ghi_chu=f'Import từ Excel - {target_date}'
+                        )
+                        to_create.append(obj)
+                        existing_lookup[lookup_key] = obj
 
                     imported_count += 1
                 except Exception:
-                    # Không tăng số lượng khi lỗi để không báo cáo sai
                     continue
+
+        # Ghi hàng loạt xuống DB
+        if to_create:
+            ThongSoToMay.objects.bulk_create(to_create)
+        if to_update:
+            ThongSoToMay.objects.bulk_update(to_update, ['gia_tri', 'nha_may'])
 
         return JsonResponse({
             'message': f'Import thành công {imported_count} bản ghi',

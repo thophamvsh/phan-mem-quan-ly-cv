@@ -11,8 +11,8 @@ from .models import ThietBi, ThongSoToMay
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def excel_template_h1(request):
-    """Tạo template Excel cho thông số tổ máy (H1/H2)"""
+def excel_template_h2(request):
+    """Tạo template Excel cho thông số tổ máy H2"""
     try:
         # Tạo 24 chu kỳ từ 00:00 đến 23:00 (mỗi giờ)
         time_cycles = []
@@ -47,7 +47,7 @@ def excel_template_h1(request):
         data = []
 
         # Header rows
-        header_row1 = ["THÔNG SỐ H1"] + [""] * (len(thong_so_to_may) - 1)  # A1:T1
+        header_row1 = ["THÔNG SỐ H2"] + [""] * (len(thong_so_to_may) - 1)  # A1:T1
         header_row2 = [ts["ten"] for ts in thong_so_to_may]  # A2:T2 - 20 tiêu đề
         header_row3 = [ts["don_vi"] for ts in thong_so_to_may]  # A3:T3 - 20 đơn vị
 
@@ -67,16 +67,16 @@ def excel_template_h1(request):
         # Tạo Excel file
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Thông số H1', index=False, header=False)
+            df.to_excel(writer, sheet_name='Thông số H2', index=False, header=False)
 
             # Lấy workbook và worksheet để format
             workbook = writer.book
-            worksheet = writer.sheets['Thông số H1']
+            worksheet = writer.sheets['Thông số H2']
 
             # Merge cells cho header
             from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
-            # Merge A1:T1 cho "THÔNG SỐ H1" (20 cột từ A đến T)
+            # Merge A1:T1 cho "THÔNG SỐ H2" (20 cột từ A đến T)
             worksheet.merge_cells('A1:T1')
 
             # Style cho header
@@ -133,7 +133,7 @@ def excel_template_h1(request):
             file_content,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = 'attachment; filename="ThongSoToMay_Template.xlsx"'
+        response['Content-Disposition'] = 'attachment; filename="ThongSoToMayH2_Template.xlsx"'
         response['Access-Control-Allow-Origin'] = '*'
         response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
         response['Access-Control-Allow-Headers'] = 'Content-Type'
@@ -149,8 +149,8 @@ def excel_template_h1(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def import_excel_h1(request):
-    """Import dữ liệu từ Excel cho thông số tổ máy"""
+def import_excel_h2(request):
+    """Import dữ liệu từ Excel cho thông số tổ máy H2"""
     try:
         # Lấy file Excel
         excel_file = request.FILES.get('file')
@@ -172,11 +172,11 @@ def import_excel_h1(request):
         # Đọc Excel file
         df = pd.read_excel(excel_file, header=None)
 
-        # ===== VALIDATION: Kiểm tra file Excel có phải là file H1 không =====
+        # ===== VALIDATION: Kiểm tra file Excel có phải là file H2 không =====
         # 1. Kiểm tra số hàng và số cột cơ bản
         if len(df) < 27:
             return JsonResponse({
-                'error': f'File Excel không hợp lệ: File thông số H1 phải có ít nhất 27 hàng (3 header + 24 data rows). File hiện tại có {len(df)} hàng.',
+                'error': f'File Excel không hợp lệ: File thông số H2 phải có ít nhất 27 hàng (3 header + 24 data rows). File hiện tại có {len(df)} hàng.',
                 'status': 'error',
                 'expected_rows': 27,
                 'actual_rows': len(df)
@@ -184,13 +184,13 @@ def import_excel_h1(request):
 
         if len(df.columns) < 20:
             return JsonResponse({
-                'error': f'File Excel không hợp lệ: File thông số H1 phải có ít nhất 20 cột (A đến T). File hiện tại có {len(df.columns)} cột.',
+                'error': f'File Excel không hợp lệ: File thông số H2 phải có ít nhất 20 cột (A đến T). File hiện tại có {len(df.columns)} cột.',
                 'status': 'error',
                 'expected_columns': 20,
                 'actual_columns': len(df.columns)
             }, status=400)
 
-        # 2. Kiểm tra header row 1 (A1) phải chứa "THÔNG SỐ H1"
+        # 2. Kiểm tra header row 1 (A1) phải chứa "THÔNG SỐ H2"
         header_row1 = df.iloc[0, 0] if len(df) > 0 and len(df.columns) > 0 else None
         if pd.isna(header_row1) or not isinstance(header_row1, str):
             header_row1 = ""
@@ -198,24 +198,24 @@ def import_excel_h1(request):
         # Kiểm tra không phải là file thông số vận hành
         if "VẬN HÀNH" in str(header_row1).upper():
             return JsonResponse({
-                'error': 'File Excel không hợp lệ: Đây là file Thông số Vận hành, không phải file Thông số H1. Vui lòng sử dụng file template Thông số H1.',
+                'error': 'File Excel không hợp lệ: Đây là file Thông số Vận hành, không phải file Thông số H2. Vui lòng sử dụng file template Thông số H2.',
                 'status': 'error',
                 'detected_type': 'thong_so_van_hanh',
-                'expected_type': 'thong_so_h1'
+                'expected_type': 'thong_so_h2'
             }, status=400)
 
-        # Kiểm tra header có chứa "THÔNG SỐ H1" hoặc "H1"
-        if "THÔNG SỐ H1" not in str(header_row1).upper() and "H1" not in str(header_row1).upper():
+        # Kiểm tra header có chứa "THÔNG SỐ H2" hoặc "H2"
+        if "THÔNG SỐ H2" not in str(header_row1).upper() and "H2" not in str(header_row1).upper():
             return JsonResponse({
-                'error': f'File Excel không hợp lệ: Header row 1 (A1) phải chứa "THÔNG SỐ H1". Giá trị hiện tại: "{header_row1}". Vui lòng sử dụng file template Thông số H1.',
+                'error': f'File Excel không hợp lệ: Header row 1 (A1) phải chứa "THÔNG SỐ H2". Giá trị hiện tại: "{header_row1}". Vui lòng sử dụng file template Thông số H2.',
                 'status': 'error',
-                'expected_header': 'THÔNG SỐ H1',
+                'expected_header': 'THÔNG SỐ H2',
                 'actual_header': str(header_row1)
             }, status=400)
 
-        # 3. Kiểm tra header row 2 (A2:T2) phải chứa các tên thông số H1 đúng
-        # Định nghĩa danh sách tên thông số H1 bắt buộc (20 thông số)
-        expected_params_h1 = [
+        # 3. Kiểm tra header row 2 (A2:T2) phải chứa các tên thông số H2 đúng
+        # Định nghĩa danh sách tên thông số H2 bắt buộc (20 thông số)
+        expected_params_h2 = [
             "Áp lực nước",
             "Áp lực chèn trục",
             "Lưu lượng chèn trục",
@@ -250,7 +250,7 @@ def import_excel_h1(request):
         # Kiểm tra từng cột trong header row 2
         # Normalize tất cả về lowercase để so sánh không phân biệt hoa thường
         missing_params = []
-        for idx, expected_param in enumerate(expected_params_h1):
+        for idx, expected_param in enumerate(expected_params_h2):
             if idx >= len(header_row2):
                 missing_params.append(f'Cột {chr(65 + idx)}: Thiếu "{expected_param}"')
                 continue
@@ -346,7 +346,7 @@ def import_excel_h1(request):
 
         if missing_params:
             return JsonResponse({
-                'error': f'File Excel không hợp lệ: Header row 2 (tên thông số) không khớp với template Thông số H1. Các cột không hợp lệ:\n' + '\n'.join(missing_params[:5]) + (f'\n... và {len(missing_params) - 5} cột khác' if len(missing_params) > 5 else ''),
+                'error': f'File Excel không hợp lệ: Header row 2 (tên thông số) không khớp với template Thông số H2. Các cột không hợp lệ:\n' + '\n'.join(missing_params[:5]) + (f'\n... và {len(missing_params) - 5} cột khác' if len(missing_params) > 5 else ''),
                 'status': 'error',
                 'missing_params': missing_params[:10]  # Chỉ trả về 10 đầu tiên
             }, status=400)
@@ -355,7 +355,7 @@ def import_excel_h1(request):
         data_row_count = len(df) - 3  # Trừ 3 header rows
         if data_row_count < 24:
             return JsonResponse({
-                'error': f'File Excel không hợp lệ: File thông số H1 phải có đúng 24 hàng dữ liệu (từ A4 đến A27). File hiện tại có {data_row_count} hàng dữ liệu.',
+                'error': f'File Excel không hợp lệ: File thông số H2 phải có đúng 24 hàng dữ liệu (từ A4 đến A27). File hiện tại có {data_row_count} hàng dữ liệu.',
                 'status': 'error',
                 'expected_data_rows': 24,
                 'actual_data_rows': data_row_count
@@ -364,7 +364,7 @@ def import_excel_h1(request):
         # 5. Cảnh báo nếu có quá nhiều hàng (có thể là file 48 slots)
         if data_row_count >= 48:
             return JsonResponse({
-                'error': 'File Excel không hợp lệ: File có quá nhiều hàng dữ liệu (>48). Có thể đây là file Thông số Vận hành (48 slots) thay vì file Thông số H1 (24 slots). Vui lòng sử dụng file template Thông số H1.',
+                'error': 'File Excel không hợp lệ: File có quá nhiều hàng dữ liệu (>48). Có thể đây là file Thông số Vận hành (48 slots) thay vì file Thông số H2 (24 slots). Vui lòng sử dụng file template Thông số H2.',
                 'status': 'error',
                 'detected_rows': data_row_count,
                 'expected_rows': 24,
@@ -373,8 +373,8 @@ def import_excel_h1(request):
 
         # ===== VALIDATION HOÀN TẤT =====
 
-        # Lấy thiết bị (có thể là H1 hoặc H2)
-        device_code = request_data.get('device_code', 'SH.TB.H1.GE')  # Default to H1
+        # Lấy thiết bị H2
+        device_code = request_data.get('device_code', 'SH.TB.H2.GE')  # Default to H2
         try:
             thiet_bi = filter_queryset_by_factory(
                 ThietBi.objects.all(),
@@ -419,19 +419,6 @@ def import_excel_h1(request):
 
         imported_count = 0
 
-        # Lấy trước các bản ghi hiện có để tra cứu trên memory
-        existing_records = ThongSoToMay.objects.filter(
-            thiet_bi=thiet_bi,
-            ngay_nhap=target_date
-        )
-        existing_lookup = {
-            (rec.ten_thong_so, rec.thoi_diem_nhap): rec
-            for rec in existing_records
-        }
-
-        to_create = []
-        to_update = []
-
         # Xử lý dữ liệu từ A4 đến T27 (24 rows × 20 columns = 480 ô)
         for row_idx in range(3, 27):  # A4 to A27
             if row_idx >= len(df):
@@ -462,40 +449,31 @@ def import_excel_h1(request):
 
                 # Tạo hoặc cập nhật thông số cho tất cả ô
                 try:
-                    nha_may_val = get_user_factory_name(request.user) or thiet_bi.nha_may
-                    lookup_key = (mapping["ten"], time_cycle)
-
-                    if lookup_key in existing_lookup:
-                        obj = existing_lookup[lookup_key]
-                        if obj.gia_tri != numeric_value or obj.nha_may != nha_may_val:
-                            obj.gia_tri = numeric_value
-                            obj.nha_may = nha_may_val
-                            to_update.append(obj)
-                    else:
-                        obj = ThongSoToMay(
-                            thiet_bi=thiet_bi,
-                            ten_thong_so=mapping["ten"],
-                            thoi_diem_nhap=time_cycle,
-                            ngay_nhap=target_date,
-                            ma_thong_so=mapping["ma"],
-                            don_vi=mapping["don_vi"],
-                            gia_tri=numeric_value,
-                            nha_may=nha_may_val,
-                            ky_hieu_van_hanh=f'{device_code.split(".")[-2]}_{mapping["ma"]}',
-                            ghi_chu=f'Import từ Excel - {target_date}'
-                        )
-                        to_create.append(obj)
-                        existing_lookup[lookup_key] = obj
+                    # Luôn lưu record (kể cả ô trống) để đảm bảo đủ 24x20 ô
+                    obj, created = ThongSoToMay.objects.get_or_create(
+                        thiet_bi=thiet_bi,
+                        ten_thong_so=mapping["ten"],
+                        thoi_diem_nhap=time_cycle,  # DateTime (aware) theo VN
+                        ngay_nhap=target_date,
+                        defaults={
+                            'ma_thong_so': mapping["ma"],
+                            'don_vi': mapping["don_vi"],
+                            'gia_tri': numeric_value,
+                            'nha_may': get_user_factory_name(request.user) or thiet_bi.nha_may,
+                            'ky_hieu_van_hanh': f'{device_code.split(".")[-2]}_{mapping["ma"]}',
+                            'ghi_chu': f'Import từ Excel - {target_date}'
+                        }
+                    )
+                    if not created:
+                        # Cập nhật giá trị nếu đã tồn tại
+                        obj.gia_tri = numeric_value
+                        obj.nha_may = get_user_factory_name(request.user) or thiet_bi.nha_may
+                        obj.save(update_fields=['gia_tri', 'nha_may'])
 
                     imported_count += 1
                 except Exception:
+                    # Không tăng số lượng khi lỗi để không báo cáo sai
                     continue
-
-        # Ghi hàng loạt xuống DB
-        if to_create:
-            ThongSoToMay.objects.bulk_create(to_create)
-        if to_update:
-            ThongSoToMay.objects.bulk_update(to_update, ['gia_tri', 'nha_may'])
 
         return JsonResponse({
             'message': f'Import thành công {imported_count} bản ghi',
@@ -508,3 +486,4 @@ def import_excel_h1(request):
             'error': f'Lỗi khi import: {str(e)}',
             'status': 'error'
         }, status=500)
+

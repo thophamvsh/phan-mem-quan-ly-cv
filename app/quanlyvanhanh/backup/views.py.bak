@@ -511,18 +511,21 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
             )
 
         if include_children:
-            # Lấy tất cả thiết bị (chính + con) bằng truy vấn prefix mã đầy đủ để tránh đệ quy N+1
-            if thiet_bi.ma_day_du:
-                all_thiet_bi = [thiet_bi] + list(
-                    filter_queryset_by_factory(
-                        ThietBi.objects.filter(ma_day_du__startswith=f"{thiet_bi.ma_day_du}."),
-                        request.user,
-                        'nha_may',
-                        'string',
-                    )
+            # Lấy tất cả thiết bị con (recursive)
+            def get_all_children(thiet_bi):
+                children = filter_queryset_by_factory(
+                    ThietBi.objects.filter(cha=thiet_bi),
+                    request.user,
+                    'nha_may',
+                    'string',
                 )
-            else:
-                all_thiet_bi = [thiet_bi]
+                all_children = list(children)
+                for child in children:
+                    all_children.extend(get_all_children(child))
+                return all_children
+
+            # Lấy tất cả thiết bị (chính + con)
+            all_thiet_bi = [thiet_bi] + get_all_children(thiet_bi)
             all_thiet_bi_ids = [tb.id for tb in all_thiet_bi]
 
             # Lấy thông số của tất cả thiết bị
