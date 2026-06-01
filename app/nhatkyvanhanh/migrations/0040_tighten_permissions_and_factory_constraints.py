@@ -2,9 +2,65 @@
 
 from django.conf import settings
 from django.db import migrations, models
+from django.db.models import Count
+
+
+def _dedupe_by_fields(model, fields, child_reassignments=None):
+    child_reassignments = child_reassignments or []
+    duplicate_keys = (
+        model.objects.filter(nha_may_id__isnull=False)
+        .order_by()
+        .values(*fields)
+        .annotate(row_count=Count("id"))
+        .filter(row_count__gt=1)
+    )
+
+    for duplicate_key in duplicate_keys:
+        lookup = {field: duplicate_key[field] for field in fields}
+        rows = list(model.objects.filter(**lookup).order_by("-created_at", "-id"))
+        keeper = rows[0]
+        duplicate_ids = [row.id for row in rows[1:]]
+
+        for child_model, fk_name in child_reassignments:
+            child_model.objects.filter(**{f"{fk_name}_id__in": duplicate_ids}).update(
+                **{fk_name: keeper}
+            )
+
+        model.objects.filter(id__in=duplicate_ids).delete()
+
+
+def dedupe_existing_rows(apps, schema_editor):
+    SoAnToanDauGio = apps.get_model("nhatkyvanhanh", "SoAnToanDauGio")
+    SoBCHCSongHinh = apps.get_model("nhatkyvanhanh", "SoBCHCSongHinh")
+    SogiaonhancaHC = apps.get_model("nhatkyvanhanh", "SogiaonhancaHC")
+    ChiTietSoGiaoNhanCaHC = apps.get_model("nhatkyvanhanh", "ChiTietSoGiaoNhanCaHC")
+    NguoiTrucSoGiaoNhanCaHC = apps.get_model("nhatkyvanhanh", "NguoiTrucSoGiaoNhanCaHC")
+    SogiaonhancaVH = apps.get_model("nhatkyvanhanh", "SogiaonhancaVH")
+    ChiTietSoGiaoNhanCaVH = apps.get_model("nhatkyvanhanh", "ChiTietSoGiaoNhanCaVH")
+    LuuYChiDaoSoGiaoNhanCaVH = apps.get_model("nhatkyvanhanh", "LuuYChiDaoSoGiaoNhanCaVH")
+
+    _dedupe_by_fields(SoAnToanDauGio, ["nha_may_id", "ngay_dong_bo", "ca_truc"])
+    _dedupe_by_fields(SoBCHCSongHinh, ["nha_may_id", "ngay_dong_bo"])
+    _dedupe_by_fields(
+        SogiaonhancaHC,
+        ["nha_may_id", "ngay_truc"],
+        [
+            (ChiTietSoGiaoNhanCaHC, "so_giao_nhan_ca"),
+            (NguoiTrucSoGiaoNhanCaHC, "so_giao_nhan_ca"),
+        ],
+    )
+    _dedupe_by_fields(
+        SogiaonhancaVH,
+        ["nha_may_id", "ngay_truc", "ca_truc"],
+        [
+            (ChiTietSoGiaoNhanCaVH, "so_giao_nhan_ca"),
+            (LuuYChiDaoSoGiaoNhanCaVH, "so_giao_nhan_ca"),
+        ],
+    )
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('khovattu', '0002_bang_de_nghi_nhap_nguoi_de_nghi_and_more'),
@@ -22,6 +78,7 @@ class Migration(migrations.Migration):
             name='ngay_dong_bo',
             field=models.DateField(),
         ),
+        migrations.RunPython(dedupe_existing_rows, migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='soantoandaugio',
             constraint=models.UniqueConstraint(fields=('nha_may', 'ngay_dong_bo', 'ca_truc'), name='uq_soantoandaugio_nha_may_ngay_ca'),
