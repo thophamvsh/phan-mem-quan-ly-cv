@@ -12,9 +12,11 @@ from ai_tools.permissions import (
     AI_TOOL_SCOPE_WATER,
     can_user_use_ai_tool,
     filter_ai_tools_for_user,
+    get_ai_tool_scope_denial_message,
     get_ai_tool_scopes_for_user,
+    get_requested_ai_tool_scope_from_text,
 )
-from ai_tools.services import _get_tools_and_handlers
+from ai_tools.services import _get_tools_and_handlers, run_ai_chat
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
 
@@ -139,6 +141,39 @@ class AiToolFactoryScopeTests(TestCase):
             [tool["function"]["name"] for tool in tools],
             ["calculate_reservoir_volume", "get_vinhson_operational_data"],
         )
+
+    def test_detects_accented_vinhson_request(self):
+        self.assertEqual(
+            get_requested_ai_tool_scope_from_text("Cho tôi xem dữ liệu nhà máy Vĩnh Sơn"),
+            AI_TOOL_SCOPE_VINHSON,
+        )
+
+    def test_songhinh_user_gets_vinhson_denial_message(self):
+        message = get_ai_tool_scope_denial_message(
+            self.songhinh_user,
+            "Cho tôi xem dữ liệu nhà máy Vĩnh Sơn",
+        )
+
+        self.assertEqual(
+            message,
+            "Xin lỗi! Bạn không được quyền hỏi thông tin nhà máy Vĩnh Sơn, xin bạn hãy hỏi nhà máy của mình.",
+        )
+
+    def test_run_ai_chat_denies_cross_factory_before_provider_call(self):
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Cho tôi xem dữ liệu nhà máy Vĩnh Sơn",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(
+            response["response"],
+            "Xin lỗi! Bạn không được quyền hỏi thông tin nhà máy Vĩnh Sơn, xin bạn hãy hỏi nhà máy của mình.",
+        )
+        self.assertEqual(response["tools_called"], 0)
 
 
 class AiToolsApiPermissionTests(APITestCase):

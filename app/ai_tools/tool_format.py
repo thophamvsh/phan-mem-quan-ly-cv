@@ -1,14 +1,14 @@
 """
 Unified tool response format for songhinh_tools and vinhson_tools.
 
-Schema: tool, title, summary, table, chart, notes, raw.
+Schema: tool, title, summary, table, chart, excel, notes, raw.
 """
 
 import re
 from typing import Any, Callable, Dict, List, Optional
 
 # Canonical keys for normalized tool response
-TOOL_RESPONSE_KEYS = ("tool", "title", "summary", "table", "chart", "notes", "raw")
+TOOL_RESPONSE_KEYS = ("tool", "title", "summary", "table", "chart", "excel", "notes", "raw")
 SOURCE_KEYWORDS = (
     "supabase",
     "google sheets",
@@ -82,6 +82,7 @@ def make_tool_response(
         "summary": "",
         "table": "",
         "chart": "",
+        "excel": "",
         "notes": "",
         "raw": sanitize_tool_content(raw_content or ""),
     }
@@ -116,6 +117,8 @@ def _apply_fallback(resp: Dict[str, Any]) -> None:
     seen_hr = False
     in_chart = False
     chart_buf: list = []
+    in_excel = False
+    excel_buf: list = []
     for i, line in enumerate(lines):
         s = line.strip()
         
@@ -130,6 +133,17 @@ def _apply_fallback(resp: Dict[str, Any]) -> None:
                 in_chart = False
                 resp["chart"] = "\n".join(chart_buf)
                 chart_buf = []
+            continue
+        if s.startswith("```excel") or s.startswith("```excel-report"):
+            in_excel = True
+            excel_buf.append(line)
+            continue
+        if in_excel:
+            excel_buf.append(line)
+            if s.startswith("```"):
+                in_excel = False
+                resp["excel"] = "\n".join(excel_buf)
+                excel_buf = []
             continue
 
         # First ### or ## as title
@@ -187,6 +201,7 @@ def render_markdown(resp: Dict[str, Any]) -> str:
     summary = (sanitize_tool_content(resp.get("summary")) or "").strip()
     table = (sanitize_tool_content(resp.get("table")) or "").strip()
     chart = (sanitize_tool_content(resp.get("chart")) or "").strip()
+    excel = (sanitize_tool_content(resp.get("excel")) or "").strip()
     notes = (sanitize_tool_content(resp.get("notes")) or "").strip()
 
     parts = []
@@ -198,6 +213,8 @@ def render_markdown(resp: Dict[str, Any]) -> str:
         parts.append(table)
     if chart:
         parts.append(chart)
+    if excel:
+        parts.append(excel)
     if notes:
         parts.append(notes)
 
@@ -210,6 +227,8 @@ def render_markdown(resp: Dict[str, Any]) -> str:
         parts.append(table)
     if chart:
         parts.append(chart)
+    if excel:
+        parts.append(excel)
     if notes:
         parts.append(notes)
 
@@ -224,7 +243,7 @@ def parse_markdown_blocks(raw: str) -> Dict[str, Any]:
     tables (list of table strings), chart (code block), notes (footer **Nguồn:** etc.).
     Used by module normalizers to build schema.
     """
-    out: Dict[str, Any] = {"title": "", "summary": "", "tables": [], "chart": "", "notes": ""}
+    out: Dict[str, Any] = {"title": "", "summary": "", "tables": [], "chart": "", "excel": "", "notes": ""}
     if not (raw or "").strip():
         return out
     lines = sanitize_tool_content(raw).split("\n")
@@ -235,6 +254,8 @@ def parse_markdown_blocks(raw: str) -> Dict[str, Any]:
     in_table = False
     in_chart = False
     chart_buf: List[str] = []
+    in_excel = False
+    excel_buf: List[str] = []
 
     for i, line in enumerate(lines):
         s = line.strip()
@@ -250,6 +271,17 @@ def parse_markdown_blocks(raw: str) -> Dict[str, Any]:
                 in_chart = False
                 out["chart"] = "\n".join(chart_buf)
                 chart_buf = []
+            continue
+        if s.startswith("```excel") or s.startswith("```excel-report"):
+            in_excel = True
+            excel_buf.append(line)
+            continue
+        if in_excel:
+            excel_buf.append(line)
+            if s.startswith("```"):
+                in_excel = False
+                out["excel"] = "\n".join(excel_buf)
+                excel_buf = []
             continue
 
         # Title: first ### or ##

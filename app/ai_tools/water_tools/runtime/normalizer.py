@@ -29,6 +29,7 @@ def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, An
         "summary": (blocks.get("summary") or "").strip(),
         "table": "\n\n".join(tables).strip() if tables else "",
         "chart": "",
+        "excel": (blocks.get("excel") or "").strip(),
         "notes": (blocks.get("notes") or "").strip(),
         "raw": raw,
     }

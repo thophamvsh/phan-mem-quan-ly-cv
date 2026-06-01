@@ -405,6 +405,13 @@ class ForecastServiceSH:
                 total_commercial = 0.0
                 qve_values = []
                 forecast_chart_data = []
+                forecast_excel_rows = [[
+                    "Ngay",
+                    "Qve (m3/s)",
+                    f"Luong mua lich su {closest_year} (mm)",
+                    "Du bao luong mua (mm)",
+                    "San luong (kWh)",
+                ]]
 
                 for day in range(1, last_day_forecast + 1):
                     qve_val = qve_dict.get(day, "-")
@@ -450,6 +457,13 @@ class ForecastServiceSH:
                         total_commercial += commercial_val
 
                     result += f"| {day_display} | {qve_str} | {hist_rain_display} | {rain_display} | {commercial_str} |\n"
+                    forecast_excel_rows.append([
+                        day_display,
+                        round(qve_val, 2) if isinstance(qve_val, (int, float)) else None,
+                        round(hist_rain_val, 1),
+                        round(rain_val, 1) if date_str in rainfall_forecast else None,
+                        round(commercial_val, 0) if isinstance(commercial_val, (int, float)) else None,
+                    ])
 
                     forecast_chart_data.append({
                         "Ngay": f"{day}/{target_month}",
@@ -475,6 +489,14 @@ class ForecastServiceSH:
 
 
                 # Tạo thông báo cảnh báo vận hành
+                forecast_excel_rows.append([
+                    "Trung binh/Tong",
+                    round(avg_qve, 2),
+                    None,
+                    None,
+                    round(total_commercial, 0),
+                ])
+
                 if V_cuoi > V_max:
                     alert_str = f"""> [!WARNING]
 > **Cảnh báo nguy cơ xả lũ:** Dung tích hữu ích cuối tháng dự kiến đạt **{V_cuoi:.2f} triệu m3**, vượt quá dung tích hữu ích tối đa (**{V_max:.2f} triệu m3**). Nhà máy có nguy cơ phải xả tràn. Đề xuất tăng sản lượng phát điện để hạ bớt mực nước hồ.
@@ -508,14 +530,17 @@ class ForecastServiceSH:
 
             # Tự động vẽ đồ thị
             if forecast_chart_data:
-                qve_chart_json = {
-                    "type": "line",
+                forecast_chart_json = {
+                    "type": "composed",
                     "title": f"Biểu đồ dự báo Qve hàng ngày tháng {target_month}/{target_year}",
                     "data": forecast_chart_data,
                     "xKey": "Ngay",
-                    "yKeys": ["Qve"],
-                    "colors": ["#10b981"],
-                    "unit": " m3/s"
+                    "barKeys": ["SanLuong"],
+                    "lineKeys": ["Qve"],
+                    "barColors": ["#3b82f6"],
+                    "lineColors": ["#10b981"],
+                    "barUnit": " kWh",
+                    "lineUnit": " m3/s"
                 }
                 output_chart_json = {
                     "type": "bar",
@@ -526,9 +551,20 @@ class ForecastServiceSH:
                     "colors": ["#3b82f6"],
                     "unit": " kWh"
                 }
+                excel_report_json = {
+                    "title": f"Bao cao du bao Song Hinh thang {target_month:02d}/{target_year}",
+                    "fileName": f"bao-cao-du-bao-song-hinh-{target_month:02d}-{target_year}.xlsx",
+                    "prompt": "Bạn có cần xuất file Excel để báo cáo không?",
+                    "sheets": [
+                        {
+                            "name": "Du bao ngay",
+                            "rows": forecast_excel_rows,
+                        }
+                    ],
+                }
                 import json
-                result += f"\n\n```chart\n{json.dumps(qve_chart_json, ensure_ascii=False, indent=2)}\n```\n"
-                result += f"\n\n```chart\n{json.dumps(output_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                result += f"\n\n```chart\n{json.dumps(forecast_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                result += f"\n\n```excel\n{json.dumps(excel_report_json, ensure_ascii=False, indent=2)}\n```\n"
 
             result += """---
 

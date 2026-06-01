@@ -43,6 +43,7 @@ INSUFFICIENT_SAN_LUONG_MESSAGE = (
     'Dữ liệu không đủ để đồng bộ. Vui lòng kiểm tra Google Sheet.'
 )
 INVALID_SYNC_DATE_MESSAGE = 'Không được đồng bộ dữ liệu vượt quá ngày D-1.'
+GOOGLE_SHEET_SYNC_START_DATE = datetime(2023, 1, 1).date()
 
 
 def user_can_modify_hydrology_object(user, obj):
@@ -265,6 +266,155 @@ def get_spreadsheet_id(nhamay):
         return get_env_value('VINHSON_SPREADSHEET_ID')
     return get_env_value(f'{nhamay.upper()}_SPREADSHEET_ID')
 
+
+def get_san_luong_sheet_row_number(filter_date):
+    if not filter_date or filter_date < GOOGLE_SHEET_SYNC_START_DATE:
+        return None
+    return (filter_date - GOOGLE_SHEET_SYNC_START_DATE).days + 2
+
+
+def get_gio_phat_sheet_row_number(filter_date):
+    if not filter_date or filter_date < GOOGLE_SHEET_SYNC_START_DATE:
+        return None
+    return (filter_date - GOOGLE_SHEET_SYNC_START_DATE).days * 2 + 3
+
+
+def prefix_sheet_range_rows(rows):
+    return [['', *row] for row in (rows or [])]
+
+
+def get_san_luong_rows(worksheet, filter_date=None):
+    row_number = get_san_luong_sheet_row_number(filter_date)
+    if row_number:
+        return prefix_sheet_range_rows(worksheet.get(f'B{row_number}:X{row_number}'))
+
+    return worksheet.get_all_values()[1:]
+
+
+def get_gio_phat_rows(worksheet, filter_date=None):
+    row_number = get_gio_phat_sheet_row_number(filter_date)
+    if row_number:
+        start_row = max(3, row_number - 2)
+        end_row = row_number + 3
+        return prefix_sheet_range_rows(worksheet.get(f'B{start_row}:E{end_row}'))
+
+    return worksheet.get_all_values()
+
+
+def parse_san_luong_records(rows, nhamay, filter_date=None):
+    parsed_data = []
+
+    for row in rows:
+        padded_row = row + [''] * (24 - len(row))
+
+        thoi_gian_str = padded_row[1]
+        if not thoi_gian_str:
+            continue
+
+        thoi_gian = parse_date(thoi_gian_str)
+        if not thoi_gian:
+            continue
+
+        if thoi_gian.year < 2023 or thoi_gian.date() > get_allowed_sync_date():
+            continue
+
+        if filter_date and thoi_gian.date() != filter_date:
+            continue
+
+        if nhamay == 'vinhson':
+            record = {
+                'thoi_gian': thoi_gian,
+                'thoi_gian_str': thoi_gian_str,
+                'cot_c': parse_cot_c(padded_row[2], nhamay),
+                'cot_d': safe_float_vinhson_decimal(padded_row[3]),
+                'cot_f': safe_float_vinhson_decimal(padded_row[5]),
+                'cot_g': safe_float_vinhson_decimal(padded_row[6]),
+                'cot_h': safe_float_vinhson_decimal(padded_row[7]),
+                'cot_i': safe_float_vinhson_decimal(padded_row[8]),
+                'cot_j': safe_float_vinhson_decimal(padded_row[9]),
+                'cot_k': safe_float_vinhson_decimal(padded_row[10]),
+                'cot_l': safe_int_vinhson(padded_row[11]),
+                'cot_m': safe_int_vinhson(padded_row[12]),
+                'cot_n': safe_int_vinhson(padded_row[13]),
+                'cot_o': safe_int_vinhson(padded_row[14]),
+                'cot_p': safe_int_vinhson(padded_row[15]),
+                'cot_q': safe_int_vinhson(padded_row[16]),
+                'cot_r': safe_int_vinhson(padded_row[17]),
+                'cot_s': safe_int_vinhson(padded_row[18]),
+                'cot_t': safe_int_vinhson(padded_row[19]),
+                'cot_u': safe_int_vinhson(padded_row[20]),
+                'cot_v': safe_int_vinhson(padded_row[21]),
+                'cot_w': safe_int_vinhson(padded_row[22]),
+                'cot_x': safe_int_vinhson(padded_row[23]),
+            }
+        else:
+            record = {
+                'thoi_gian': thoi_gian,
+                'thoi_gian_str': thoi_gian_str,
+                'cot_c': parse_cot_c(padded_row[2], nhamay),
+                'cot_d': safe_float(padded_row[3]),
+                'cot_f': safe_float(padded_row[5]),
+                'cot_g': safe_float(padded_row[6]),
+                'cot_h': safe_float(padded_row[7]),
+                'cot_i': safe_float(padded_row[8]),
+                'cot_j': safe_float(padded_row[9]),
+                'cot_k': safe_float(padded_row[10]),
+                'cot_l': safe_float(padded_row[11]),
+                'cot_m': safe_float(padded_row[12]),
+                'cot_n': safe_float(padded_row[13]),
+                'cot_o': safe_float(padded_row[14]),
+                'cot_p': safe_float(padded_row[15]),
+                'cot_q': safe_float(padded_row[16]),
+                'cot_r': safe_float(padded_row[17]),
+                'cot_s': safe_float(padded_row[18]),
+                'cot_t': safe_float(padded_row[19]),
+                'cot_u': safe_float(padded_row[20]),
+                'cot_v': safe_float(padded_row[21]),
+                'cot_w': safe_float(padded_row[22]),
+                'cot_x': safe_float(padded_row[23]),
+            }
+        parsed_data.append(record)
+
+    return parsed_data
+
+
+def parse_gio_phat_records(rows, filter_date=None):
+    parsed_data = []
+
+    for row in rows:
+        padded_row = row + [''] * (5 - len(row))
+
+        ngay_str = padded_row[1]
+        if not ngay_str or '/' not in ngay_str:
+            continue
+
+        try:
+            ngay = datetime.strptime(ngay_str, '%d/%m/%Y').date()
+        except ValueError:
+            continue
+
+        if ngay.year < 2023 or ngay > get_allowed_sync_date():
+            continue
+
+        if filter_date and ngay != filter_date:
+            continue
+
+        to_may = parse_to_may(padded_row[2])
+        if to_may is None:
+            continue
+
+        parsed_data.append(
+            {
+                'ngay': str(ngay),
+                'ngay_str': ngay_str,
+                'to_may': to_may,
+                'gio_phat_dien': safe_float(padded_row[3]),
+                'gio_ngung': safe_float(padded_row[4]),
+            }
+        )
+
+    return parsed_data
+
 class PreviewGoogleSheetAPIView(APIView):
     """API đọc dữ liệu từ Google Sheet để hiển thị (chưa lưu vào DB)"""
     permission_classes = [IsAuthenticated]
@@ -294,87 +444,13 @@ class PreviewGoogleSheetAPIView(APIView):
             
             # Tab Sản lượng
             worksheet_san_luong = sheet.worksheet('Sản lượng')
-            # Lấy tất cả giá trị. Dữ liệu bắt đầu từ Cột B -> X (index 1 -> 23)
-            all_records = worksheet_san_luong.get_all_values()
-            
-            parsed_data = []
-            
-            # Giả sử dòng 1 là Header, bắt đầu từ dòng 2
-            for row in all_records[1:]:
-                # Đảm bảo row có đủ độ dài tới cột X (index 23)
-                padded_row = row + [''] * (24 - len(row))
-                
-                thoi_gian_str = padded_row[1] # Cột B
-                if not thoi_gian_str:
-                    continue
-                    
-                thoi_gian = parse_date(thoi_gian_str)
-                if not thoi_gian:
-                    continue # Bỏ qua dòng có thời gian không hợp lệ
-                    
-                # Chỉ lấy dữ liệu từ 01/01/2023 đến ngày hiện tại
-                if thoi_gian.year < 2023 or thoi_gian.date() > get_allowed_sync_date():
-                    continue
+            all_records = get_san_luong_rows(worksheet_san_luong, filter_date)
+            parsed_data = parse_san_luong_records(all_records, nhamay, filter_date)
 
-                if filter_date and thoi_gian.date() != filter_date:
-                    continue
-                    
-                if nhamay == 'vinhson':
-                    record = {
-                        'thoi_gian': thoi_gian,
-                        'thoi_gian_str': thoi_gian_str,
-                        'cot_c': parse_cot_c(padded_row[2], nhamay),
-                        'cot_d': safe_float_vinhson_decimal(padded_row[3]),
-                        # Bỏ qua cột E (index 4)
-                        'cot_f': safe_float_vinhson_decimal(padded_row[5]),
-                        'cot_g': safe_float_vinhson_decimal(padded_row[6]),
-                        'cot_h': safe_float_vinhson_decimal(padded_row[7]),
-                        'cot_i': safe_float_vinhson_decimal(padded_row[8]),
-                        'cot_j': safe_float_vinhson_decimal(padded_row[9]),
-                        'cot_k': safe_float_vinhson_decimal(padded_row[10]),
-                        'cot_l': safe_int_vinhson(padded_row[11]),
-                        'cot_m': safe_int_vinhson(padded_row[12]),
-                        'cot_n': safe_int_vinhson(padded_row[13]),
-                        'cot_o': safe_int_vinhson(padded_row[14]),
-                        'cot_p': safe_int_vinhson(padded_row[15]),
-                        'cot_q': safe_int_vinhson(padded_row[16]),
-                        'cot_r': safe_int_vinhson(padded_row[17]),
-                        'cot_s': safe_int_vinhson(padded_row[18]),
-                        'cot_t': safe_int_vinhson(padded_row[19]),
-                        'cot_u': safe_int_vinhson(padded_row[20]),
-                        'cot_v': safe_int_vinhson(padded_row[21]),
-                        'cot_w': safe_int_vinhson(padded_row[22]),
-                        'cot_x': safe_int_vinhson(padded_row[23]),
-                    }
-                else:
-                    record = {
-                        'thoi_gian': thoi_gian,
-                        'thoi_gian_str': thoi_gian_str,
-                        'cot_c': parse_cot_c(padded_row[2], nhamay),
-                        'cot_d': safe_float(padded_row[3]),
-                        # Bỏ qua cột E (index 4)
-                        'cot_f': safe_float(padded_row[5]),
-                        'cot_g': safe_float(padded_row[6]),
-                        'cot_h': safe_float(padded_row[7]),
-                        'cot_i': safe_float(padded_row[8]),
-                        'cot_j': safe_float(padded_row[9]),
-                        'cot_k': safe_float(padded_row[10]),
-                        'cot_l': safe_float(padded_row[11]),
-                        'cot_m': safe_float(padded_row[12]),
-                        'cot_n': safe_float(padded_row[13]),
-                        'cot_o': safe_float(padded_row[14]),
-                        'cot_p': safe_float(padded_row[15]),
-                        'cot_q': safe_float(padded_row[16]),
-                        'cot_r': safe_float(padded_row[17]),
-                        'cot_s': safe_float(padded_row[18]),
-                        'cot_t': safe_float(padded_row[19]),
-                        'cot_u': safe_float(padded_row[20]),
-                        'cot_v': safe_float(padded_row[21]),
-                        'cot_w': safe_float(padded_row[22]),
-                        'cot_x': safe_float(padded_row[23]),
-                    }
-                parsed_data.append(record)
-                
+            if filter_date and not parsed_data:
+                all_records = worksheet_san_luong.get_all_values()[1:]
+                parsed_data = parse_san_luong_records(all_records, nhamay, filter_date)
+
             return Response({
                 'success': True,
                 'data': parsed_data,
@@ -512,47 +588,13 @@ class PreviewGioPhatAPIView(APIView):
             
             # Tab Giờ phát
             worksheet_gio_phat = sheet.worksheet('Giờ phát')
-            all_records = worksheet_gio_phat.get_all_values()
-            
-            parsed_data = []
-            
-            # Dòng 1, 2 là Header/Instruction, dữ liệu thường bắt đầu từ dòng 3 (index 2)
-            # Ta quét qua để tìm dòng có chứa date hợp lệ
-            for row in all_records:
-                # Đảm bảo row có đủ cột tới E (index 4)
-                padded_row = row + [''] * (5 - len(row))
-                
-                ngay_str = padded_row[1] # Cột B
-                
-                # Check nếu B không phải là ngày hợp lệ (ví dụ: dd/mm/yyyy)
-                if not ngay_str or '/' not in ngay_str:
-                    continue
-                
-                try:
-                    ngay = datetime.strptime(ngay_str, '%d/%m/%Y').date()
-                except ValueError:
-                    continue # Bỏ qua header
+            all_records = get_gio_phat_rows(worksheet_gio_phat, filter_date)
+            parsed_data = parse_gio_phat_records(all_records, filter_date)
 
-                if ngay.year < 2023 or ngay > get_allowed_sync_date():
-                    continue
+            if filter_date and not parsed_data:
+                all_records = worksheet_gio_phat.get_all_values()
+                parsed_data = parse_gio_phat_records(all_records, filter_date)
 
-                if filter_date and ngay != filter_date:
-                    continue
-                
-                # Cột C: Tổ máy
-                to_may = parse_to_may(padded_row[2])
-                if to_may is None:
-                    continue
-                    
-                record = {
-                    'ngay': str(ngay), # format yyyy-mm-dd cho JSON response
-                    'ngay_str': ngay_str,
-                    'to_may': to_may,
-                    'gio_phat_dien': safe_float(padded_row[3]), # Cột D
-                    'gio_ngung': safe_float(padded_row[4]), # Cột E
-                }
-                parsed_data.append(record)
-                
             return Response({
                 'success': True,
                 'data': parsed_data,

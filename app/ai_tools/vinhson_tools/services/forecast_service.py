@@ -455,6 +455,15 @@ class ForecastService:
             total_commercial = 0.0
             qve_values_a, qve_values_b, qve_values_c = [], [], []
             forecast_chart_data = []
+            forecast_excel_rows = [[
+                "Ngay",
+                "Qve Ho A (m3/s)",
+                "Qve Ho B (m3/s)",
+                "Qve Ho C (m3/s)",
+                f"Luong mua lich su {closest_year} (mm)",
+                "Du bao luong mua (mm)",
+                "San luong dau cuc (kWh)",
+            ]]
 
             import calendar
             last_day_forecast = calendar.monthrange(target_year, target_month)[1]
@@ -510,6 +519,15 @@ class ForecastService:
                 commercial_str = f"{commercial_val:,.0f}" if isinstance(commercial_val, (int, float)) else "-"
 
                 table_rows += f"| {day_display} | {qve_a_str} | {qve_b_str} | {qve_c_str} | {hist_rain_display} | {rain_display} | {commercial_str} |\n"
+                forecast_excel_rows.append([
+                    day_display,
+                    round(qve_a, 2) if isinstance(qve_a, (int, float)) else None,
+                    round(qve_b, 2) if isinstance(qve_b, (int, float)) else None,
+                    round(qve_c, 2) if isinstance(qve_c, (int, float)) else None,
+                    round(hist_rain_val, 1),
+                    round(rain_val, 1) if date_str in rainfall_forecast else None,
+                    round(commercial_val, 0) if isinstance(commercial_val, (int, float)) else None,
+                ])
 
                 forecast_chart_data.append({
                     "Ngay": f"{day}/{target_month}",
@@ -544,6 +562,59 @@ class ForecastService:
             V_max_C = get_reservoir_max_useful_capacity('vinhson_c')
 
             # Cảnh báo
+            V_trong_A = max(V_max_A - V_dau_A, 0.0)
+            V_trong_B = max(V_max_B - V_dau_B, 0.0)
+            V_trong_C = max(V_max_C - V_dau_C, 0.0)
+            V_nguon_A = max(V_dau_A + total_V_ve_a, 0.0)
+            V_nguon_B = max(V_dau_B + total_V_ve_b, 0.0)
+            V_nguon_C = max(V_dau_C + total_V_ve_c, 0.0)
+            V_nguon_he_thong = V_nguon_A + V_nguon_B + V_nguon_C
+            V_thieu_A = max(total_V_phat - V_nguon_A, 0.0)
+            V_du_A = max(V_nguon_A - total_V_phat, 0.0)
+            V_dieu_tiet_B = min(V_thieu_A, V_nguon_B)
+            V_con_thieu_sau_B = max(V_thieu_A - V_dieu_tiet_B, 0.0)
+            V_dieu_tiet_C = min(V_con_thieu_sau_B, V_nguon_C)
+            V_con_thieu_he_thong = max(V_thieu_A - V_dieu_tiet_B - V_dieu_tiet_C, 0.0)
+            du_nuoc_ho_a = V_thieu_A <= 0.0
+            du_nuoc_he_thong = V_nguon_he_thong >= total_V_phat
+            if du_nuoc_ho_a:
+                dieu_tiet_recommendation = (
+                    f"Hồ A đủ nước cho sản lượng dự báo, không cần bổ sung bắt buộc từ hồ B/C. "
+                    f"Có thể điều tiết B/C theo yêu cầu duy trì MNH vận hành và tránh đầy hồ."
+                )
+            elif du_nuoc_he_thong:
+                dieu_tiet_recommendation = (
+                    f"Hồ A thiếu khoảng **{V_thieu_A:.2f} triệu m3** so với nhu cầu phát điện. "
+                    f"Ưu tiên điều tiết từ hồ B khoảng **{V_dieu_tiet_B:.2f} triệu m3**, "
+                    f"sau đó từ hồ C khoảng **{V_dieu_tiet_C:.2f} triệu m3** về hồ A để đảm bảo sản lượng dự báo."
+                )
+            else:
+                dieu_tiet_recommendation = (
+                    f"Tổng nguồn nước ước tính toàn hệ thống vẫn thiếu khoảng **{V_con_thieu_he_thong:.2f} triệu m3** "
+                    f"sau khi huy động hồ B/C. Cần giảm sản lượng kế hoạch hoặc cập nhật lại dự báo nước về."
+                )
+
+            water_balance_excel_rows = [
+                [
+                    "Ho",
+                    "MNH hien tai (m)",
+                    "Dung tich hien co (trieu m3)",
+                    "Dung tich con trong (trieu m3)",
+                    "Nuoc ve du bao (trieu m3)",
+                    "Dung tich cuoi ky (trieu m3)",
+                ],
+                ["Ho A", round(H_dau_A, 2), round(V_dau_A, 2), round(V_trong_A, 2), round(total_V_ve_a, 2), round(V_cuoi_A, 2)],
+                ["Ho B", round(H_dau_B, 2), round(V_dau_B, 2), round(V_trong_B, 2), round(total_V_ve_b, 2), round(V_cuoi_B, 2)],
+                ["Ho C", round(H_dau_C, 2), round(V_dau_C, 2), round(V_trong_C, 2), round(total_V_ve_c, 2), round(V_cuoi_C, 2)],
+                [],
+                ["Tong nuoc can phat dien (trieu m3)", round(total_V_phat, 2)],
+                ["Nguon nuoc rieng ho A (trieu m3)", round(V_nguon_A, 2)],
+                ["Ho A du/thieu sau phat (trieu m3)", round(V_du_A - V_thieu_A, 2)],
+                ["Dieu tiet uoc tinh tu ho B ve A (trieu m3)", round(V_dieu_tiet_B, 2)],
+                ["Dieu tiet uoc tinh tu ho C ve A (trieu m3)", round(V_dieu_tiet_C, 2)],
+                ["Con thieu sau dieu tiet (trieu m3)", round(V_con_thieu_he_thong, 2)],
+            ]
+
             alert_lines = []
             has_warning = False
             has_caution = False
@@ -648,6 +719,15 @@ Dựa trên phân tích **tháng {compare_month}** của các năm liền kề:
             result += f"| Ngày | Qve Hồ A (m3/s) | Qve Hồ B (m3/s) | Qve Hồ C (m3/s) | Lượng mưa lịch sử ({closest_year}) (mm) | Dự báo lượng mưa (mm) | Sản lượng đầu cực (kWh) |\n"
             result += "|:---:|---:|---:|---:|---:|---:|---:|\n"
             result += table_rows
+            forecast_excel_rows.append([
+                "Trung binh/Tong",
+                round(avg_a, 2),
+                round(avg_b, 2),
+                round(avg_c, 2),
+                None,
+                None,
+                round(total_commercial, 0),
+            ])
             result += f"| **Trung bình/Tổng** | **{avg_a:.2f}** | **{avg_b:.2f}** | **{avg_c:.2f}** | **-** | **-** | **{total_commercial:,.0f}** |\n"
 
             # Phần kết luận và cảnh báo vận hành
@@ -663,18 +743,34 @@ Dựa trên phân tích **tháng {compare_month}** của các năm liền kề:
 
 **Tổng nước phát điện tiêu thụ:** **{total_V_phat:.2f} triệu m3**
 
+#### Đánh giá MNH hiện tại, dung tích và điều tiết bậc thang
+
+| Hồ | MNH hiện tại (m) | Dung tích hiện có (triệu m3) | Dung tích còn trống (triệu m3) | Nước về dự báo (triệu m3) | Dung tích cuối kỳ (triệu m3) |
+|:---:|---:|---:|---:|---:|---:|
+| A | {H_dau_A:.2f} | {V_dau_A:.2f} | {V_trong_A:.2f} | {total_V_ve_a:.2f} | {V_cuoi_A:.2f} |
+| B | {H_dau_B:.2f} | {V_dau_B:.2f} | {V_trong_B:.2f} | {total_V_ve_b:.2f} | {V_cuoi_B:.2f} |
+| C | {H_dau_C:.2f} | {V_dau_C:.2f} | {V_trong_C:.2f} | {total_V_ve_c:.2f} | {V_cuoi_C:.2f} |
+
+**Nguồn nước riêng hồ A:** **{V_nguon_A:.2f} triệu m3** so với nhu cầu phát điện **{total_V_phat:.2f} triệu m3**.
+**Trạng thái hồ A:** {"Đủ nước phát theo sản lượng dự báo" if du_nuoc_ho_a else f"Thiếu khoảng {V_thieu_A:.2f} triệu m3 nếu không điều tiết bổ sung từ B/C"}.
+**Nguồn nước toàn hệ thống A+B+C:** **{V_nguon_he_thong:.2f} triệu m3** - {"đủ" if du_nuoc_he_thong else "chưa đủ"} cho sản lượng dự báo.
+**Phương án điều tiết:** {dieu_tiet_recommendation}
+
 {alert_str}
 """
 
             if forecast_chart_data:
-                qve_chart_json = {
-                    "type": "line",
+                forecast_chart_json = {
+                    "type": "composed",
                     "title": f"Biểu đồ dự báo Qve hàng ngày Vĩnh Sơn tháng {target_month}/{target_year}",
                     "data": forecast_chart_data,
                     "xKey": "Ngay",
-                    "yKeys": ["QveHoA", "QveHoB", "QveHoC"],
-                    "colors": ["#10b981", "#3b82f6", "#f59e0b"],
-                    "unit": " m3/s",
+                    "barKeys": ["SanLuong"],
+                    "lineKeys": ["QveHoA", "QveHoB", "QveHoC"],
+                    "barColors": ["#6366f1"],
+                    "lineColors": ["#10b981", "#3b82f6", "#f59e0b"],
+                    "barUnit": " kWh",
+                    "lineUnit": " m3/s",
                 }
                 output_chart_json = {
                     "type": "bar",
@@ -685,8 +781,23 @@ Dựa trên phân tích **tháng {compare_month}** của các năm liền kề:
                     "colors": ["#6366f1"],
                     "unit": " kWh",
                 }
-                result += f"\n\n```chart\n{json.dumps(qve_chart_json, ensure_ascii=False, indent=2)}\n```\n"
-                result += f"\n\n```chart\n{json.dumps(output_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                excel_report_json = {
+                    "title": f"Bao cao du bao Vinh Son thang {target_month:02d}/{target_year}",
+                    "fileName": f"bao-cao-du-bao-vinh-son-{target_month:02d}-{target_year}.xlsx",
+                    "prompt": "Bạn có cần xuất file Excel để báo cáo không?",
+                    "sheets": [
+                        {
+                            "name": "Du bao ngay",
+                            "rows": forecast_excel_rows,
+                        },
+                        {
+                            "name": "Can bang nuoc",
+                            "rows": water_balance_excel_rows,
+                        }
+                    ],
+                }
+                result += f"\n\n```chart\n{json.dumps(forecast_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+                result += f"\n\n```excel\n{json.dumps(excel_report_json, ensure_ascii=False, indent=2)}\n```\n"
 
             result += """---
 

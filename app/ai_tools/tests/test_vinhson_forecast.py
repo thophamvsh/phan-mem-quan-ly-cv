@@ -58,6 +58,8 @@ FAKE_CONFIG = SimpleNamespace(
 
 
 class VinhsonForecastTests(SimpleTestCase):
+    databases = {"default"}
+
     @patch("ai_tools.vinhson_tools.services.forecast_service.GS_CONFIG", FAKE_CONFIG)
     @patch("ai_tools.vinhson_tools.services.forecast_service.get_stats_export_client", side_effect=_fake_stats_client)
     def test_daily_output_is_summed_across_reservoir_rows(self, _mock_client):
@@ -71,7 +73,7 @@ class VinhsonForecastTests(SimpleTestCase):
     def test_year_forecast_includes_output(self, _mock_client):
         result = ForecastService().forecast_year(2026)
 
-        self.assertIn("Sáº£n lÆ°á»£ng", result)
+        self.assertIn("SanLuong", result)
         self.assertIn("600", result)
         self.assertIn("```chart", result)
         self.assertIn("QveHoA", result)
@@ -80,10 +82,23 @@ class VinhsonForecastTests(SimpleTestCase):
     @patch("ai_tools.vinhson_tools.services.forecast_service.GS_CONFIG", FAKE_CONFIG)
     @patch("ai_tools.vinhson_tools.services.forecast_service.get_stats_export_client", side_effect=_fake_stats_client)
     def test_month_forecast_includes_qve_and_output_charts(self, _mock_client):
-        result = ForecastService().forecast_month(4, 2026)
+        with patch(
+            "ai_tools.water_tools.weather_service.get_initial_levels_and_volumes",
+            return_value={
+                "Hồ A": (100.0, 1.0),
+                "Hồ B": (100.0, 1.0),
+                "Hồ C": (100.0, 1.0),
+            },
+        ), patch(
+            "ai_tools.water_tools.weather_service.get_reservoir_max_useful_capacity",
+            return_value=999.0,
+        ):
+            result = ForecastService().forecast_month(4, 2026)
 
         self.assertIn("```chart", result)
+        self.assertIn('"type": "composed"', result)
         self.assertIn("QveHoA", result)
         self.assertIn("QveHoB", result)
         self.assertIn("QveHoC", result)
         self.assertIn("SanLuong", result)
+        self.assertIn("```excel", result)

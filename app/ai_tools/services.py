@@ -9,7 +9,11 @@ from types import SimpleNamespace
 
 from django.conf import settings
 
-from .permissions import can_user_use_ai_tool, filter_ai_tools_for_user
+from .permissions import (
+    can_user_use_ai_tool,
+    filter_ai_tools_for_user,
+    get_ai_tool_scope_denial_message,
+)
 from .storage import get_conversation, save_exchange
 from .tool_format import sanitize_tool_content
 
@@ -426,6 +430,38 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
     provider, selected_model = _resolve_model(provider, model)
     session_id = session_id or str(uuid.uuid4())
     start_time = time.time()
+
+    denial_message = get_ai_tool_scope_denial_message(user, content)
+    if denial_message:
+        latency_ms = int((time.time() - start_time) * 1000)
+        save_exchange(
+            user=user,
+            session_id=session_id,
+            user_message=content,
+            assistant_message=denial_message,
+            model=selected_model,
+            total_tokens=0,
+            cost_usd=0,
+            tools_called=0,
+            latency_ms=latency_ms,
+            meta={
+                "reservoir_detected": detect_reservoir(content),
+                "tools_called": 0,
+                "provider": provider,
+                "permission_denied": True,
+            },
+        )
+        return {
+            "session_id": session_id,
+            "response": denial_message,
+            "provider": provider,
+            "model": selected_model,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+            "latency_ms": latency_ms,
+            "tools_called": 0,
+        }
+
     chat_content = {
         "text": content,
         "history": get_conversation(user, session_id, limit=20),
