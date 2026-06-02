@@ -4,11 +4,12 @@ Qve analysis service - Phân tích nguyên nhân Qve (so sánh năm hiện tại
 Nguồn:
 - Qve + MNH: Google Sheets stats_export (sheet "Thống kê")
 - Sản lượng: Google Sheets vận hành
-- Lượng mưa: Supabase Do_Mua_VSH
+- Lượng mưa: dữ liệu mưa nội bộ từ app thongsothuyvan
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Tuple, Any, Callable, Dict
@@ -18,6 +19,48 @@ from ..config.columns import OP_COLS
 from ..core.sheets_client import GoogleSheetsClientManager
 from ..utils.dates import parse_dmy_to_date, normalize_date
 from ..utils.numbers import safe_cell, parse_float_loose, parse_kwh_integer
+
+
+def _local_date(dt) -> Optional[date]:
+    if not dt:
+        return None
+    try:
+        from django.utils import timezone
+
+        return timezone.localtime(dt).date()
+    except Exception:
+        return dt.date()
+
+
+def load_songhinh_stats_rows_from_db(start_d: date, end_d: date) -> List[List]:
+    """Load Qve/MNH from thongsothuyvan.ThongsoSanxuat instead of stats sheet."""
+    try:
+        from thongsothuyvan.models import ThongsoSanxuat
+    except Exception:
+        return []
+
+    rows: List[List] = []
+    qs = (
+        ThongsoSanxuat.objects.filter(
+            nha_may="songhinh",
+            thoi_gian__date__gte=start_d,
+            thoi_gian__date__lte=end_d,
+        )
+        .order_by("thoi_gian")
+    )
+    for obj in qs:
+        d = _local_date(obj.thoi_gian)
+        if not d:
+            continue
+        rows.append([
+            d.strftime("%d/%m/%Y"),
+            obj.cot_g,
+            None,
+            None,
+            None,
+            obj.cot_i,
+        ])
+    return rows
 
 
 def _normalize_date_to_month_end(dt: datetime) -> datetime:
@@ -126,6 +169,26 @@ def safe_pct(delta: float, base: float) -> float:
     return (delta / base * 100.0) if base else 0.0
 
 
+def calc_yield_index(avg_qve: float, num_days: int, total_rain: float) -> float:
+    total_V_in = avg_qve * 86400 * num_days / 1000000.0
+    return total_V_in / total_rain if total_rain > 0 else 0.0
+
+
+def get_discharge_stats(period: List[Tuple[date, List]], col_qcm: int, col_qxl: int) -> Tuple[float, float]:
+    qcm_vals = []
+    qxl_vals = []
+    for _, row in period:
+        qcm = _parse_num(safe_cell(row, col_qcm))
+        qxl = _parse_num(safe_cell(row, col_qxl))
+        if qcm is not None:
+            qcm_vals.append(qcm)
+        if qxl is not None:
+            qxl_vals.append(qxl)
+    qcm_avg = sum(qcm_vals) / len(qcm_vals) if qcm_vals else 0.0
+    qxl_avg = sum(qxl_vals) / len(qxl_vals) if qxl_vals else 0.0
+    return qcm_avg, qxl_avg
+
+
 def is_full_year_range(start_obj: datetime, end_obj: datetime) -> bool:
     """Check if date range is a full year."""
     return (
@@ -144,6 +207,16 @@ def is_full_month_range(start_obj: datetime, end_obj: datetime) -> bool:
     else:
         last_day = (end_obj.replace(day=1, month=end_obj.month + 1) - timedelta(days=1)).day
     return end_obj.day == last_day and start_obj.month == end_obj.month and start_obj.year == end_obj.year
+
+
+def shift_year(dt: datetime, years: int) -> datetime:
+    """Chuyển ngày sang năm khác, xử lý các ngày không hợp lệ (ví dụ: 29/02 -> 28/02 khi sang năm không nhuận)."""
+    try:
+        return dt.replace(year=dt.year + years)
+    except ValueError:
+        import calendar
+        max_day = calendar.monthrange(dt.year + years, dt.month)[1]
+        return dt.replace(year=dt.year + years, day=max_day)
 
 
 def find_data_start_row(all_data: List[List]) -> int:
@@ -229,14 +302,14 @@ class QveAnalysisService:
         # Adjust end date to last day of month if it was invalid (e.g., 30/02 -> 28/02)
         end_obj = _normalize_date_to_month_end(end_obj)
 
-        start_ly = start_obj.replace(year=start_obj.year - 1)
-        end_ly = end_obj.replace(year=end_obj.year - 1)
+        start_ly = shift_year(start_obj, -1)
+        end_ly = shift_year(end_obj, -1)
 
         # Thêm 2 năm nữa để so sánh (năm -2 và năm -3)
-        start_ly2 = start_obj.replace(year=start_obj.year - 2)
-        end_ly2 = end_obj.replace(year=end_obj.year - 2)
-        start_ly3 = start_obj.replace(year=start_obj.year - 3)
-        end_ly3 = end_obj.replace(year=end_obj.year - 3)
+        start_ly2 = shift_year(start_obj, -2)
+        end_ly2 = shift_year(end_obj, -2)
+        start_ly3 = shift_year(start_obj, -3)
+        end_ly3 = shift_year(end_obj, -3)
 
         start_d, end_d = start_obj.date(), end_obj.date()
         start_ly_d, end_ly_d = start_ly.date(), end_ly.date()
@@ -246,31 +319,33 @@ class QveAnalysisService:
         # -------------------------
         # 1) Load stats sheet (Qve/MNH)
         # -------------------------
-        spreadsheet = self.mgr.get_write_spreadsheet(GS_CONFIG.stats_export_spreadsheet_id_songhinh)
-        if not spreadsheet:
-            return (
-                "### Lỗi kết nối Google Sheets\n\n"
-                "Không thể kết nối Google Sheets thống kê (Phân tích Qve dùng Sheet ID đã cấu hình)."
-            )
-
-        worksheets = spreadsheet.worksheets()
-        stats_ws = None
-        for ws in worksheets:
-            if "Thống kê" in ws.title:
-                stats_ws = ws
-                break
-        stats_ws = stats_ws or (worksheets[0] if worksheets else None)
-        if not stats_ws:
-            return "### Lỗi\n\nKhông tìm thấy worksheet thống kê trong Google Sheets."
-
-        all_data = self.mgr.get_all_values_cached(stats_ws, cache_key="qve_analysis_stats_values")
-        if not all_data or len(all_data) < 2:
-            return "Không có dữ liệu trong Google Sheets thống kê."
-
-        data_start = find_data_start_row(all_data)
-        data_rows = all_data[data_start:] if data_start < len(all_data) else []
+        data_rows = load_songhinh_stats_rows_from_db(start_ly3_d, end_d)
         if not data_rows:
-            return "Không có dữ liệu sau dòng tiêu đề trong Google Sheets thống kê."
+            spreadsheet = self.mgr.get_write_spreadsheet(GS_CONFIG.stats_export_spreadsheet_id_songhinh)
+            if not spreadsheet:
+                return (
+                    "### Lỗi kết nối dữ liệu\n\n"
+                    "Không thể kết nối nguồn dữ liệu thống kê."
+                )
+
+            worksheets = spreadsheet.worksheets()
+            stats_ws = None
+            for ws in worksheets:
+                if "Thống kê" in ws.title:
+                    stats_ws = ws
+                    break
+            stats_ws = stats_ws or (worksheets[0] if worksheets else None)
+            if not stats_ws:
+                return "### Lỗi\n\nKhông tìm thấy bảng dữ liệu thống kê."
+
+            all_data = self.mgr.get_all_values_cached(stats_ws, cache_key="qve_analysis_stats_values")
+            if not all_data or len(all_data) < 2:
+                return "Không có dữ liệu thống kê."
+
+            data_start = find_data_start_row(all_data)
+            data_rows = all_data[data_start:] if data_start < len(all_data) else []
+        if not data_rows:
+            return "Không có dữ liệu sau khi lọc nguồn dữ liệu thống kê."
 
         cur_rows = filter_stats_rows_by_period(data_rows, start_d, end_d)
         ly_rows = filter_stats_rows_by_period(data_rows, start_ly_d, end_ly_d)
@@ -298,7 +373,7 @@ class QveAnalysisService:
         qve_up = qve_cur.avg > qve_ly.avg
 
         # -------------------------
-        # 2) Rainfall from Supabase
+        # 2) Rainfall from internal hydrological data
         # -------------------------
         rain_cur = 0.0
         rain_ly = 0.0
@@ -334,7 +409,12 @@ class QveAnalysisService:
         operational_latest_date_str = ""
         out_cur_date_str = out_ly_date_str = ""
 
-        if "commercial_output" in parameters:
+        cur_period: List[Tuple[date, List]] = []
+        ly_period: List[Tuple[date, List]] = []
+        ly2_period: List[Tuple[date, List]] = []
+        ly3_period: List[Tuple[date, List]] = []
+
+        if "commercial_output" in parameters or "water_level" in parameters:
             ws_op, _ = self.mgr.get_read_worksheets()
             if ws_op:
                 op_data = self.mgr.get_all_values_cached(ws_op, cache_key="operational_all_values") or []
@@ -343,10 +423,6 @@ class QveAnalysisService:
 
                     all_dates: List[date] = []
                     # collect rows in periods for all 4 years
-                    cur_period: List[Tuple[date, List]] = []
-                    ly_period: List[Tuple[date, List]] = []
-                    ly2_period: List[Tuple[date, List]] = []
-                    ly3_period: List[Tuple[date, List]] = []
 
                     for row in op_rows:
                         if len(row) < 2:
@@ -602,84 +678,105 @@ class QveAnalysisService:
                 buf.append(f"| {name} | {' | '.join(formatted_values)} |")
             buf.append("")
 
-        buf.extend(["", "---", "", "#### Phân tích nguyên nhân", ""])
-
-        if "qve" in parameters:
-            if qve_ly.avg <= 0:
-                buf.append("- **Qve:** Không đủ dữ liệu cùng kỳ để so sánh.")
-            else:
-                delta = qve_cur.avg - qve_ly.avg
-                pct = safe_pct(delta, qve_ly.avg)
-                buf.append(
-                    f"- **Qve:** TB {cur_year} **{qve_cur.avg:.2f} m³/s** (min {qve_cur.min:.2f}, max {qve_cur.max:.2f}), "
-                    f"{ly_year} **{qve_ly.avg:.2f} m³/s** (min {qve_ly.min:.2f}, max {qve_ly.max:.2f}) → "
-                    f"{'cao hơn' if qve_up else 'thấp hơn'} {abs(delta):.2f} m³/s ({pct:+.1f}%)."
-                )
-
-        if has_rain:
-            buf.append(
-                f"- **Lượng mưa:** {cur_year} **{rain_cur:.1f} mm**, {ly_year} **{rain_ly:.1f} mm** → "
-                f"{'cao hơn' if rain_up else 'thấp hơn'} {abs(rain_cur - rain_ly):.1f} mm."
-            )
-
-        # Thêm phân tích MNH khi có water_level trong parameters
-        if "water_level" in parameters:
-            if wl_ly.avg <= 0:
-                buf.append("- **Mực nước hồ (MNH):** Không có dữ liệu cùng kỳ để so sánh.")
-            else:
-                wl_delta = wl_cur.avg - wl_ly.avg
-                wl_pct = safe_pct(wl_delta, wl_ly.avg)
-                wl_up = wl_cur.avg > wl_ly.avg
-                buf.append(
-                    f"- **Mực nước hồ (MNH):** TB {cur_year} **{wl_cur.avg:.2f} m** (min {wl_cur.min:.2f}, max {wl_cur.max:.2f}), "
-                    f"{ly_year} **{wl_ly.avg:.2f} m** (min {wl_ly.min:.2f}, max {wl_ly.max:.2f}) → "
-                    f"{'cao hơn' if wl_up else 'thấp hơn'} {abs(wl_delta):.2f} m ({wl_pct:+.1f}%)."
-                )
-
-        if "commercial_output" in parameters:
-            if has_any_output:
-                buf.append(
-                    f"- **Sản lượng:** Đầu cực {cur_year} **{out_cur_output / _TR:.2f} tr kWh**, TP **{out_cur_sum / _TR:.2f} tr kWh**; "
-                    f"Đầu cực {ly_year} **{out_ly_output / _TR:.2f} tr kWh**, TP **{out_ly_sum / _TR:.2f} tr kWh**. "
-                    f"Tự dùng: {self_use_cur / _TR:.2f} / {self_use_ly / _TR:.2f} tr kWh. "
-                    f"Tổn hao: {loss_pct_cur:.2f}% / {loss_pct_ly:.2f}%."
-                )
-            else:
-                tail = f" Dữ liệu trong sheet hiện có đến ngày {operational_latest_date_str}." if operational_latest_date_str else ""
-                buf.append(f"- **Sản lượng:** Không tìm thấy dữ liệu trong khoảng {start_date}–{end_date} trong sheet vận hành.{tail}")
-
+        # 4) Phân tích chiều sâu nguyên nhân Qve và mực nước hồ
+        buf.append("---")
+        buf.append("")
+        buf.append("#### Phân tích nguyên nhân & Cân bằng nước chuyên sâu")
         buf.append("")
 
-        if analysis_focus == "commercial_output" and has_any_output:
-            wl_up = wl_cur.avg > wl_ly.avg
-            buf.append("**Phân tích nguyên nhân Sản lượng:** Sản lượng tăng/giảm phụ thuộc vào Qve, mưa và MNH.")
-            buf.append("- **Qve:** Nước về nhiều → có thể phát nhiều hơn; Qve thấp → sản lượng có xu hướng giảm.")
-            buf.append("- **Mưa:** Mưa nhiều → tăng nước về lưu vực → Qve tăng; mưa ít → ngược lại.")
-            buf.append("- **MNH:** MNH cao → trữ nước tốt, vận hành ổn định; MNH thấp → hạn chế phát.")
-            if qve_ly.avg > 0:
-                buf.append(
-                    f" Trong kỳ này: Qve {cur_year} {'cao hơn' if qve_up else 'thấp hơn'} {ly_year}, "
-                    f"mưa {'cao hơn' if rain_up else 'thấp hơn'}, MNH {'cao hơn' if wl_up else 'thấp hơn'} "
-                    "→ sản lượng biến động phù hợp với nguồn nước về hồ."
-                )
-        elif qve_ly.avg > 0 and ("qve" in parameters or analysis_focus == "qve"):
-            buf.append("**Phân tích nguyên nhân Qve:** Qve tăng/giảm chủ yếu do **lượng mưa** và diễn biến dòng chảy lưu vực.")
-            if qve_up and rain_up:
-                buf.append(f"**Kết luận:** Qve {cur_year} cao hơn {ly_year}, nguyên nhân chính do lượng mưa cao hơn → nước về hồ tăng.")
-            elif qve_up and not rain_up:
-                buf.append("**Kết luận:** Qve cao hơn dù mưa thấp hơn; có thể do điều tiết/trữ nước từ trước hoặc độ phủ trạm mưa khác lưu vực.")
-            elif (not qve_up) and rain_up:
-                buf.append("**Kết luận:** Mưa cao hơn nhưng Qve thấp hơn; có thể do tăng tích nước, tăng xả/tiêu thoát, hoặc độ trễ mưa–dòng chảy.")
-            else:
-                buf.append(f"**Kết luận:** Qve {cur_year} thấp hơn {ly_year}, phù hợp với lượng mưa thấp hơn → nước về hồ giảm.")
+        # Tính toán Qcm, Qxl và Yield Index
+        qcm_cur = qxl_cur = qcm_ly = qxl_ly = 0.0
+        if cur_period:
+            qcm_cur, qxl_cur = get_discharge_stats(cur_period, self.cols.COL_TURBINE, self.cols.COL_SPILLWAY)
+        if ly_period:
+            qcm_ly, qxl_ly = get_discharge_stats(ly_period, self.cols.COL_TURBINE, self.cols.COL_SPILLWAY)
 
-        # Thêm kết luận MNH khi có water_level trong parameters
-        if "water_level" in parameters and wl_ly.avg > 0:
-            wl_up = wl_cur.avg > wl_ly.avg
-            if wl_up:
-                buf.append(f"**Kết luận MNH:** Mực nước hồ {cur_year} cao hơn {ly_year}, cho thấy lượng nước tích tụ trong hồ nhiều hơn.")
+        # Tính Yield Index
+        yield_cur = calc_yield_index(qve_cur.avg, n_cur, rain_cur) if has_rain else 0.0
+        yield_ly = calc_yield_index(qve_ly.avg, n_ly, rain_ly) if has_rain else 0.0
+
+        # Phân tích Qve & lượng mưa (Yield Index)
+        if "qve" in parameters:
+            buf.append("**1. Phân tích tương quan Mưa - Dòng chảy (Rainfall-Runoff Relation):**")
+            if has_rain and rain_cur > 0 and rain_ly > 0:
+                V_cur = qve_cur.avg * 86400 * n_cur / 1e6
+                V_ly = qve_ly.avg * 86400 * n_ly / 1e6
+                buf.append(
+                    f"- Tổng thể tích nước về hồ năm {cur_year} ước tính đạt **{V_cur:.2f} triệu m³** "
+                    f"với lượng mưa lũy kế **{rain_cur:.1f} mm** → Chỉ số sinh dòng chảy tương đối $R_{{yield}}$ "
+                    f"đạt **{yield_cur:.3f} triệu m³/mm**."
+                )
+                buf.append(
+                    f"- Cùng kỳ năm trước ({ly_year}), tổng thể tích nước về hồ đạt **{V_ly:.2f} triệu m³** "
+                    f"với lượng mưa **{rain_ly:.1f} mm** → Chỉ số sinh dòng chảy tương đối $R_{{yield}}$ "
+                    f"đạt **{yield_ly:.3f} triệu m³/mm**."
+                )
+                
+                if yield_cur > yield_ly * 1.05:
+                    buf.append(
+                        f"- **Nhận xét**: Chỉ số sinh dòng chảy năm {cur_year} cao hơn cùng kỳ **{safe_pct(yield_cur - yield_ly, yield_ly):+.1f}%**. "
+                        "Điều này cho thấy hiệu suất sinh dòng chảy của lưu vực tăng cao, có thể do lưu vực đã đạt trạng thái bão hòa nước từ trước "
+                        "(độ ẩm đất cao, tổn thất thấm giảm) hoặc có sự bổ cập dòng chảy ngầm tốt hơn."
+                    )
+                elif yield_cur < yield_ly * 0.95:
+                    buf.append(
+                        f"- **Nhận xét**: Chỉ số sinh dòng chảy năm {cur_year} thấp hơn cùng kỳ **{safe_pct(yield_cur - yield_ly, yield_ly):.1f}%**. "
+                        "Cho thấy tổn thất lưu vực năm nay lớn hơn (thấm, bốc hơi mạnh hoặc lượng mưa rơi xuống bị hấp thụ để bù đắp "
+                        "cho độ ẩm đất bị khô hạn kéo dài trước đó), làm giảm hiệu quả sinh dòng chảy bề mặt."
+                    )
+                else:
+                    buf.append("- **Nhận xét**: Hiệu suất sinh dòng chảy giữa hai năm tương đương nhau, dòng chảy về hồ biến động tuyến tính theo lượng mưa.")
             else:
-                buf.append(f"**Kết luận MNH:** Mực nước hồ {cur_year} thấp hơn {ly_year}, cần theo dõi và điều tiết phù hợp.")
+                buf.append("- Không đủ số liệu lượng mưa đo trạm để tính toán hiệu suất sinh dòng chảy lưu vực.")
+            buf.append("")
+
+        # Phân tích mực nước hồ và cân bằng nước vật lý
+        if "water_level" in parameters:
+            buf.append("**2. Phân tích Cân bằng nước vật lý (Physical Water Balance):**")
+            wl_delta = wl_cur.avg - wl_ly.avg
+            wl_trend = "tăng" if wl_delta > 0 else "giảm"
+            
+            buf.append(
+                f"- Mực nước hồ trung bình năm {cur_year} (**{wl_cur.avg:.2f} m**) đang {'cao hơn' if wl_delta > 0 else 'thấp hơn'} "
+                f"so với cùng kỳ năm {ly_year} (**{wl_ly.avg:.2f} m**) là **{abs(wl_delta):.2f} m**."
+            )
+            
+            if cur_period:
+                buf.append(
+                    f"- **Cân bằng lưu lượng năm {cur_year}**: Qve trung bình **{qve_cur.avg:.2f} m³/s** đối trọng với tổng lưu lượng xả "
+                    f"**{(qcm_cur + qxl_cur):.2f} m³/s** (phát điện Qcm: **{qcm_cur:.2f} m³/s**, xả tràn Qxl: **{qxl_cur:.2f} m³/s**)."
+                )
+                buf.append(
+                    f"- **Cân bằng lưu lượng năm {ly_year}**: Qve trung bình **{qve_ly.avg:.2f} m³/s** đối trọng với tổng lưu lượng xả "
+                    f"**{(qcm_ly + qxl_ly):.2f} m³/s** (phát điện Qcm: **{qcm_ly:.2f} m³/s**, xả tràn Qxl: **{qxl_ly:.2f} m³/s**)."
+                )
+                
+                # Giải thích mối tương quan
+                if wl_delta > 0 and qve_cur.avg < qve_ly.avg:
+                    buf.append(
+                        f"- **Giải thích hiện tượng**: Mặc dù lưu lượng nước về hồ (Qve) năm nay thấp hơn cùng kỳ, nhưng MNH vẫn cao hơn "
+                        f"là do nhà máy đã chủ động điều tiết giảm lưu lượng phát điện (Qcm giảm **{abs(qcm_cur - qcm_ly):.2f} m³/s**)."
+                        " Đây là chiến lược trữ nước hợp lý để bảo dưỡng cột nước vận hành tối ưu."
+                    )
+                elif wl_delta < 0 and qve_cur.avg > qve_ly.avg:
+                    buf.append(
+                        f"- **Giải thích hiện tượng**: Mặc dù Qve năm nay cao hơn cùng kỳ, nhưng MNH lại thấp hơn "
+                        f"là do nhà máy tăng cường phát điện (Qcm tăng **{abs(qcm_cur - qcm_ly):.2f} m³/s**) "
+                        "hoặc phát sinh xả tràn để đáp ứng phương thức huy động của hệ thống."
+                    )
+                elif wl_delta > 0:
+                    buf.append(
+                        "- **Giải thích hiện tượng**: Mực nước hồ tăng cao phù hợp với nguồn nước về hồ dồi dào, lượng nước về lớn hơn "
+                        "lượng nước xả phát điện giúp hồ chủ động tích nước lên mực nước cao."
+                    )
+                else:
+                    buf.append(
+                        "- **Giải thích hiện tượng**: Mực nước hồ giảm do lưu lượng nước về không đủ bù đắp lượng nước phát điện phục vụ "
+                        "phụ tải hệ thống."
+                    )
+            else:
+                buf.append("- Thiếu dữ liệu lưu lượng xả qua máy (Qcm) để lập bảng cân bằng nước chi tiết.")
+            buf.append("")
 
         # Tự động vẽ đồ thị phân tích 4 năm
         chart_sections = []
@@ -692,13 +789,16 @@ class QveAnalysisService:
             {"Nam": str(years_list[0]), "Qve_TB": round(qve_cur.avg, 2), "LuongMua": round(rain_cur, 1)},
         ]
         chart_qve_json = {
-            "type": "bar",
+            "type": "composed",
             "title": "So sánh Qve TB (m³/s) & Lượng mưa lưu vực (mm) qua 4 năm",
             "data": chart_data_qve,
             "xKey": "Nam",
-            "yKeys": ["Qve_TB", "LuongMua"],
-            "colors": ["#3b82f6", "#10b981"],
-            "unit": ""
+            "barKeys": ["LuongMua"],
+            "lineKeys": ["Qve_TB"],
+            "barColors": ["#3b82f6"],
+            "lineColors": ["#10b981"],
+            "barUnit": " mm",
+            "lineUnit": " m³/s"
         }
         import json
         chart_sections.append(f"\n\n```chart\n{json.dumps(chart_qve_json, ensure_ascii=False, indent=2)}\n```\n")
@@ -741,5 +841,63 @@ class QveAnalysisService:
             chart_sections.append(f"\n\n```chart\n{json.dumps(chart_out_json, ensure_ascii=False, indent=2)}\n```\n")
 
         buf.extend(chart_sections)
+
+        excel_summary_rows = [
+            ["Chi so", "Don vi", str(years_list[0]), str(years_list[1]), str(years_list[2]), str(years_list[3])]
+        ]
+        for name, values, units in rows_qve_4yr + rows_wl_4yr + rows_md_4yr:
+            unit = units[0] if units else ""
+            precision = 1 if unit == "mm" else 2
+            excel_summary_rows.append([
+                name.replace("**", ""),
+                unit,
+                *[round(float(value), precision) for value in values],
+            ])
+
+        excel_chart_rows = [["Nam", "Qve TB (m3/s)", "Luong mua (mm)", "MNH TB (m)", "San luong thuong pham (tr kWh)"]]
+        qve_by_year = {
+            years_list[3]: qve_ly3.avg,
+            years_list[2]: qve_ly2.avg,
+            years_list[1]: qve_ly.avg,
+            years_list[0]: qve_cur.avg,
+        }
+        rain_by_year = {
+            years_list[3]: rain_ly3,
+            years_list[2]: rain_ly2,
+            years_list[1]: rain_ly,
+            years_list[0]: rain_cur,
+        }
+        wl_by_year = {
+            years_list[3]: wl_ly3.avg,
+            years_list[2]: wl_ly2.avg,
+            years_list[1]: wl_ly.avg,
+            years_list[0]: wl_cur.avg,
+        }
+        output_by_year = {
+            years_list[3]: out_ly3_sum / _TR if has_any_output else None,
+            years_list[2]: out_ly2_sum / _TR if has_any_output else None,
+            years_list[1]: out_ly_sum / _TR if has_any_output else None,
+            years_list[0]: out_cur_sum / _TR if has_any_output else None,
+        }
+        for year in [years_list[3], years_list[2], years_list[1], years_list[0]]:
+            output_value = output_by_year[year]
+            excel_chart_rows.append([
+                str(year),
+                round(qve_by_year[year], 2),
+                round(rain_by_year[year], 1),
+                round(wl_by_year[year], 2),
+                round(output_value, 2) if output_value is not None else None,
+            ])
+
+        excel_report_json = {
+            "title": f"Bao cao phan tich Qve Song Hinh {start_obj.strftime('%d%m%Y')}-{end_obj.strftime('%d%m%Y')}",
+            "fileName": f"bao-cao-phan-tich-qve-song-hinh-{start_obj.strftime('%Y%m%d')}-{end_obj.strftime('%Y%m%d')}.xlsx",
+            "prompt": "Bạn có cần xuất file Excel để báo cáo không?",
+            "sheets": [
+                {"name": "Tong hop", "rows": excel_summary_rows},
+                {"name": "Du lieu bieu do", "rows": excel_chart_rows},
+            ],
+        }
+        buf.append(f"\n\n```excel\n{json.dumps(excel_report_json, ensure_ascii=False, indent=2)}\n```\n")
 
         return "\n".join(buf).strip()

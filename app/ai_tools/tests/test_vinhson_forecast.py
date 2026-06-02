@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 
 from ai_tools.data_sources.db_stats import DbBackedSpreadsheet, DbBackedWorksheet
 from ai_tools.vinhson_tools.services.forecast_service import (
-    ForecastService,
+    ForecastServiceVS,
     get_daily_data_for_month_vinhson,
 )
 
@@ -71,7 +71,7 @@ class VinhsonForecastTests(SimpleTestCase):
     @patch("ai_tools.vinhson_tools.services.forecast_service.GS_CONFIG", FAKE_CONFIG)
     @patch("ai_tools.vinhson_tools.services.forecast_service.get_stats_export_client", side_effect=_fake_stats_client)
     def test_year_forecast_includes_output(self, _mock_client):
-        result = ForecastService().forecast_year(2026)
+        result = ForecastServiceVS().forecast_year(2026)
 
         self.assertIn("SanLuong", result)
         self.assertIn("600", result)
@@ -93,7 +93,7 @@ class VinhsonForecastTests(SimpleTestCase):
             "ai_tools.water_tools.weather_service.get_reservoir_max_useful_capacity",
             return_value=999.0,
         ):
-            result = ForecastService().forecast_month(4, 2026)
+            result = ForecastServiceVS().forecast_month(4, 2026)
 
         self.assertIn("```chart", result)
         self.assertIn('"type": "composed"', result)

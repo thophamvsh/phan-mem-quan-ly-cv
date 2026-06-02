@@ -1,4 +1,4 @@
-from supabase_client import (
+from hydro_data_repository import (
     get_table_name,
     get_volume_for_water_level,
     interpolate_water_volume,

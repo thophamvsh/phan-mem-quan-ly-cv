@@ -254,76 +254,6 @@ def get_daily_data_for_month_vinhson(year: int, month: int) -> Tuple[Dict[int, D
                     continue
                 cell_str = _cell(row, COL_DATE)
                 dt = normalize_date(cell_str)
-    """Lấy dữ liệu Qve cho từng hồ A, B, C và Sản lượng ngày.
-    - Qve: từ stats_export_spreadsheet_id (sheet TV VS) - cột E, F, G (ngày ở cột A)
-    - Sản lượng: từ spreadsheet_id (sheet Sản lượng) - cột M (ngày ở cột B)
-
-    Trả về: (dict of {day: {res_label: qve}}, dict of {day: commercial_output})
-    """
-    # Lấy Qve từ stats_export_spreadsheet_id (sheet TV VS)
-    _, spreadsheet_qve = get_stats_export_client(GS_CONFIG.stats_export_spreadsheet_id)
-
-    qve_by_day: Dict[int, Dict[str, float]] = {}
-
-    if spreadsheet_qve:
-        worksheets = spreadsheet_qve.worksheets()
-        # Tìm sheet TV VS (thường có tên chứa "TV" hoặc "VS" hoặc là sheet đầu tiên)
-        stats_ws = None
-        for ws in worksheets:
-            title = ws.title.upper()
-            if "TV" in title or "THỐNG KÊ" in title or "VS" in title or "202" in title:
-                stats_ws = ws
-                break
-        stats_ws = stats_ws or (worksheets[0] if worksheets else None)
-        if stats_ws:
-            all_data = stats_ws.get_all_values()
-            data_start = find_data_start_row(all_data)
-            data_rows = all_data[data_start:] if data_start < len(all_data) else []
-
-            for row in data_rows:
-                # Sheet TV VS: ngày ở cột A (index 0)
-                if len(row) <= 0:
-                    continue
-                cell_str = _cell(row, 0)
-                dt = normalize_date(cell_str)
-                if not dt or dt.year != year or dt.month != month:
-                    continue
-
-                day = dt.day
-
-                if day not in qve_by_day:
-                    qve_by_day[day] = {}
-
-                # Lấy Qve của từng hồ A, B, C từ cột E, F, G (index 4, 5, 6)
-                for res_label, col_qve in [("Hồ A", COL_QVE_A), ("Hồ B", COL_QVE_B), ("Hồ C", COL_QVE_C)]:
-                    if len(row) > col_qve:
-                        val = parse_number_for_qve(_cell(row, col_qve))
-                        if val is not None:
-                            qve_by_day[day][res_label] = val
-
-    # Lấy Sản lượng từ spreadsheet_id (sheet Sản lượng)
-    _, spreadsheet_output = get_stats_export_client(GS_CONFIG.spreadsheet_id)
-    commercial_by_day: Dict[int, float] = {}
-
-    if spreadsheet_output:
-        worksheets = spreadsheet_output.worksheets()
-        op_ws = None
-        for ws in worksheets:
-            if "Sản lượng" in ws.title:
-                op_ws = ws
-                break
-        op_ws = op_ws or (worksheets[0] if worksheets else None)
-        if op_ws:
-            all_data = op_ws.get_all_values()
-            data_start = find_data_start_row(all_data)
-            data_rows = all_data[data_start:] if data_start < len(all_data) else []
-
-            for row in data_rows:
-                # Sheet Sản lượng: ngày ở cột B (COL_DATE = 1)
-                if len(row) <= COL_DATE:
-                    continue
-                cell_str = _cell(row, COL_DATE)
-                dt = normalize_date(cell_str)
                 if not dt or dt.year != year or dt.month != month:
                     continue
 
@@ -338,7 +268,7 @@ def get_daily_data_for_month_vinhson(year: int, month: int) -> Tuple[Dict[int, D
     return qve_by_day, commercial_by_day
 
 
-class ForecastService:
+class ForecastServiceVS:
     """Service dự báo Qve và Sản lượng cho Vĩnh Sơn với 3 hồ A, B, C."""
 
     def __init__(self):

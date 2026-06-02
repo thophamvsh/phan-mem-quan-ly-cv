@@ -1,4 +1,4 @@
-"""
+﻿"""
 Operational service - Get operational data for Sông Hinh
 """
 
@@ -19,14 +19,14 @@ class OperationalService:
 
     @staticmethod
     def connection_error_markdown() -> str:
-        return """### Lỗi kết nối Google Sheets
+        return """### Lỗi kết nối CSDL thongsothuyvan
 
-Không thể kết nối Google Sheets. Vui lòng kiểm tra:
+Không thể kết nối CSDL thongsothuyvan. Vui lòng kiểm tra:
 
-1. **Service Account File**: Kiểm tra file `ai-project-484022-8239457b26bb.json` có tồn tại
-2. **Google Sheets API**: Đảm bảo đã enable Google Sheets API trong Google Cloud Console
-3. **Spreadsheet Sharing**: Kiểm tra spreadsheet đã được share với service account email
-4. **Worksheet Name**: Kiểm tra tên sheet là "Sản lượng"
+1. **Kết nối CSDL**: Kiểm tra PostgreSQL/Django database đang hoạt động
+2. **Dữ liệu thủy văn**: Kiểm tra bảng app/thongsothuyvan đã có dữ liệu tương ứng
+3. **Migration/model**: Kiểm tra migration và model thongsothuyvan
+4. **Bộ lọc nhà máy**: Kiểm tra nha_may trong dữ liệu là đúng
 
 Xem console log để biết chi tiết lỗi.
 """
@@ -58,7 +58,7 @@ Xem console log để biết chi tiết lỗi.
 
         all_data = self.mgr.get_all_values_cached(ws_operational, cache_key="operational_all_values")
         if len(all_data) < 3:
-            return "Không có dữ liệu trong Google Sheets"
+            return "Không có dữ liệu trong CSDL thongsothuyvan"
 
         data_rows = all_data[2:]
 
@@ -183,7 +183,7 @@ Xem console log để biết chi tiết lỗi.
                     import json
                     result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-                result += "\n---\n\n**Nguồn:** Google Sheets - Thủy điện Sông Hinh"
+                result += "\n---\n\n**Nguồn:** CSDL thongsothuyvan - Thủy điện Sông Hinh"
                 return result.strip()
 
             except ValueError:
@@ -313,7 +313,7 @@ Xem console log để biết chi tiết lỗi.
             return f"""
 ### Dữ liệu vận hành Thủy điện Sông Hinh
 
-**Nguồn:** Google Sheets (Dữ liệu thực tế)
+**Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
 **So sánh:** {date_current} vs. {date_last_year}
 
 ---
@@ -344,7 +344,7 @@ Xem console log để biết chi tiết lỗi.
 
 ---
 
-**Nguồn:** Google Sheets - Thủy điện Sông Hinh
+**Nguồn:** CSDL thongsothuyvan - Thủy điện Sông Hinh
 """.strip()
 
         else:
@@ -364,7 +364,7 @@ Xem console log để biết chi tiết lỗi.
             result = f"""
 ### Dữ liệu vận hành Thủy điện Sông Hinh
 
-**Nguồn:** Google Sheets (Dữ liệu thực tế)
+**Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
 **Số bản ghi:** {len(filtered)} ngày
 
 ---
@@ -464,5 +464,5 @@ Xem console log để biết chi tiết lỗi.
                 import json
                 result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-            result += "\n---\n\n**Nguồn:** Google Sheets - Thủy điện Sông Hinh"
+            result += "\n---\n\n**Nguồn:** CSDL thongsothuyvan - Thủy điện Sông Hinh"
             return result.strip()

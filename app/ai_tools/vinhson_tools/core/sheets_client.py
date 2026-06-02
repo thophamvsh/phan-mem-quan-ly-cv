@@ -3,6 +3,7 @@ Google Sheets client singleton for Vĩnh Sơn with DB interception for Operation
 """
 
 import os
+import time
 import gspread
 from google.oauth2.service_account import Credentials
 from django.utils import timezone
@@ -13,6 +14,13 @@ from .retry import retry_with_backoff
 _gs_client: Optional[gspread.Client] = None
 _gs_worksheet = None
 _gs_worksheet_hours = None
+
+# Cache for local DB queries
+_cached_operational = None
+_cached_operational_time = 0.0
+_cached_hours = None
+_cached_hours_time = 0.0
+CACHE_TTL = 30.0  # 30 seconds
 
 class WorksheetWrapper:
     def __init__(self, real_ws, ws_type):
@@ -31,6 +39,9 @@ class WorksheetWrapper:
             return self.real_ws.get_all_values()
 
 def _fetch_vinhson_operational() -> List[List[str]]:
+    global _cached_operational, _cached_operational_time
+    if _cached_operational is not None and (time.time() - _cached_operational_time) < CACHE_TTL:
+        return _cached_operational
     from thongsothuyvan.models import ThongsoSanxuat, Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc
     from ..config.columns import (
         COL_DATE, COL_RESERVOIR, COL_WATER_LEVEL, COL_VOLUME, COL_INFLOW, 
@@ -91,9 +102,14 @@ def _fetch_vinhson_operational() -> List[List[str]]:
             data.append(row)
     except Exception as e:
         print(f"[ERROR] Failed to fetch ThongsoSanxuat for Vĩnh Sơn: {e}")
+    _cached_operational = data
+    _cached_operational_time = time.time()
     return data
 
 def _fetch_vinhson_hours() -> List[List[str]]:
+    global _cached_hours, _cached_hours_time
+    if _cached_hours is not None and (time.time() - _cached_hours_time) < CACHE_TTL:
+        return _cached_hours
     from thongsothuyvan.models import ThongsoGioPhat
     from ..config.columns import COL_HOURS_DATE, COL_HOURS_UNIT, COL_HOURS_OPERATING, COL_HOURS_STOPPED
     
@@ -111,6 +127,8 @@ def _fetch_vinhson_hours() -> List[List[str]]:
             data.append(row)
     except Exception as e:
         print(f"[ERROR] Failed to fetch ThongsoGioPhat for Vĩnh Sơn: {e}")
+    _cached_hours = data
+    _cached_hours_time = time.time()
     return data
 
 class SheetsClient:
@@ -141,8 +159,10 @@ class SheetsClient:
 
 
 def reset_google_sheets_client():
-    global _gs_client, _gs_worksheet, _gs_worksheet_hours
+    global _gs_client, _gs_worksheet, _gs_worksheet_hours, _cached_operational, _cached_hours
     print(f"[INFO] Resetting Google Sheets client cache...", flush=True)
     _gs_client = None
     _gs_worksheet = None
     _gs_worksheet_hours = None
+    _cached_operational = None
+    _cached_hours = None

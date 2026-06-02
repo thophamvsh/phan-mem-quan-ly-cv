@@ -210,6 +210,8 @@ hierarchical_statistics_function = {
     "name": "get_songhinh_hierarchical_statistics",
     "description": """Thống kê phân cấp Qve và Mực nước hồ theo năm/tháng/tuần cho Sông Hinh.
 
+TUYỆT ĐỐI KHÔNG DÙNG TOOL NÀY CHO MƯA HOẶC LƯỢNG MƯA. Nếu câu hỏi có từ "mưa" hoặc "lượng mưa", PHẢI dùng tool get_songhinh_rainfall_statistics.
+
 QUY TẮC CHỌN THEO TÊN HỒ - BẮT BUỘC:
 - **CHỈ DÙNG** khi user nói "Sông Hinh", "Song Hinh", "SH" (ví dụ: "thống kê MNH Sông Hinh", "so sánh Qve hồ Sông Hinh năm 2025").
 - **CẤM DÙNG** khi user nói "Vĩnh Sơn", "Vinh Son", "hồ Vĩnh Sơn" → khi đó PHẢI dùng get_vinhson_hierarchical_statistics, KHÔNG dùng tool này.
@@ -228,7 +230,7 @@ QUAN TRỌNG - ĐÂY LÀ TOOL CHO QVE VÀ MỰC NƯỚC:
 - Ví dụ: "Thống kê lưu lượng về Sông Hinh từ 1/1/2026 đến 13/1/2026" → DÙNG TOOL NÀY với start_date="1/1/2026", end_date="13/1/2026" (trả về thống kê theo ngày cho toàn bộ khoảng thời gian)
 - Ví dụ: "Thống kê Qve Sông Hinh từ ngày X đến ngày Y" → DÙNG TOOL NÀY với start_date và end_date
 
-SO SÁNH THEO NĂM (giống lượng mưa - nhiều cột trong 1 bảng). Áp dụng cho CẢ Qve VÀ MNH (mực nước):
+SO SÁNH THEO NĂM. Áp dụng cho CẢ Qve VÀ MNH (mực nước):
 - **Qve:** "Thống kê Qve hồ Sông Hinh năm 2026 với 2 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=2, parameters=["qve"]. Bảng 3 cột: 2026 | 2025 | 2024.
 - **Qve:** "Thống kê Qve ... năm 2026 với 3 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=3, parameters=["qve"]. Bảng 4 cột.
 - **MNH (mực nước):** "Thống kê MNH / mực nước hồ Sông Hinh năm 2026 với 2 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=2, parameters=["water_level"]. Bảng 3 cột.

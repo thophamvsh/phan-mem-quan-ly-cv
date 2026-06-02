@@ -5,7 +5,8 @@ Hierarchical statistics service - Get hierarchical statistics for Vĩnh Sơn
 _NBSP = "\u00a0"
 
 from datetime import datetime, timedelta
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Tuple
+import json
 from ..config.settings import GS_CONFIG
 from ..core.stats_export_client import get_stats_export_client
 from ..core.retry import retry_with_backoff
@@ -28,73 +29,150 @@ class HierarchicalStatisticsService:
         compare_years: int = 1,
         compare_with_period_value: Optional[str] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        _is_subcall: bool = False,
+        _accumulators: Optional[dict] = None
     ) -> str:
         """
         Thống kê phân cấp Qve và Mực nước hồ theo năm/tháng/tuần cho Vĩnh Sơn.
-        Hỗ trợ date range: nếu có start_date và end_date, trả về thống kê theo ngày.
-
-        Chỉ hiển thị đúng tham số trong parameters:
-        - Hỏi Qve → parameters=["qve"] → chỉ bảng Qve
-        - Hỏi MNH/mực nước → parameters=["water_level"] → chỉ bảng MNH
+        Hỗ trợ date range: nếu có start_date va end_date, trả về thống kê theo ngày.
         """
-        print(f"[INFO] VINH SON TOOL: Hierarchical statistics - {period_type} {period_value}, reservoir={reservoir}, parameters={parameters}, compare={compare}, compare_years={compare_years}, compare_with_period_value={compare_with_period_value}, start_date={start_date}, end_date={end_date}", flush=True)
+        # Khởi tạo accumulator ở root call
+        if _accumulators is None:
+            _accumulators = {"charts": [], "excel_sheets": [], "conclusions": []}
+            is_root_call = True
+        else:
+            is_root_call = False
+            _accumulators.setdefault("conclusions", [])
 
-        # Chỉ hiển thị đúng tham số được hỏi (Qve hoặc MNH). Mặc định cả hai nếu không truyền.
+        result_text = self._get_hierarchical_statistics_impl(
+            period_type=period_type,
+            period_value=period_value,
+            reservoir=reservoir,
+            parameters=parameters,
+            compare=compare,
+            compare_years=compare_years,
+            compare_with_period_value=compare_with_period_value,
+            start_date=start_date,
+            end_date=end_date,
+            _is_subcall=_is_subcall,
+            _accumulators=_accumulators
+        )
+
+        if is_root_call:
+            charts = _accumulators.get("charts", [])
+            excel_sheets = _accumulators.get("excel_sheets", [])
+            conclusions = _accumulators.get("conclusions", [])
+
+            # Format phần kết luận
+            conclusion_block = ""
+            if conclusions:
+                conclusion_block = "\n\n### 📌 Kết luận Phân tích So sánh\n\n" + "\n\n".join(conclusions) + "\n\n"
+
+            chart_blocks = []
+            for chart_json in charts:
+                chart_blocks.append(f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n")
+            chart_text = "".join(chart_blocks)
+
+            excel_block = ""
+            if excel_sheets:
+                filename = "bao-cao-thong-ke-vinh-son.xlsx"
+                title = "Báo cáo thống kê Vĩnh Sơn"
+                if period_type == "year":
+                    y_val = period_value or datetime.now().year
+                    filename = f"bao-cao-thong-ke-nam-vinh-son-{y_val}.xlsx"
+                    title = f"Báo cáo thống kê năm {y_val} - Vĩnh Sơn"
+                elif period_type == "month":
+                    m_val = (period_value or f"{datetime.now().month}/{datetime.now().year}").replace("/", "-")
+                    filename = f"bao-cao-thong-ke-thang-vinh-son-{m_val}.xlsx"
+                    title = f"Báo cáo thống kê tháng {m_val} - Vĩnh Sơn"
+                elif period_type == "week":
+                    w_val = (period_value or f"{(datetime.now().day - 1) // 7 + 1}/{datetime.now().month}/{datetime.now().year}").replace("/", "-")
+                    filename = f"bao-cao-thong-ke-tuan-vinh-son-{w_val}.xlsx"
+                    title = f"Báo cáo thống kê tuần {w_val} - Vĩnh Sơn"
+                elif start_date and end_date:
+                    sd_fn = start_date.replace("/", "-")
+                    ed_fn = end_date.replace("/", "-")
+                    filename = f"bao-cao-thong-ke-ngay-vinh-son-{sd_fn}-den-{ed_fn}.xlsx"
+                    title = f"Báo cáo thống kê từ {start_date} đến {end_date} - Vĩnh Sơn"
+
+                excel_json = {
+                    "title": title,
+                    "fileName": filename,
+                    "prompt": "Bạn có cần xuất file Excel thống kê này không?",
+                    "sheets": excel_sheets
+                }
+                excel_block = f"\n\n```excel\n{json.dumps(excel_json, ensure_ascii=False, indent=2)}\n```\n"
+
+            return result_text + conclusion_block + chart_text + excel_block
+        else:
+            return result_text
+
+    def _get_hierarchical_statistics_impl(
+        self,
+        period_type: str,
+        period_value: Optional[str] = None,
+        reservoir: str = "All",
+        parameters: Optional[List[str]] = None,
+        compare: bool = False,
+        compare_years: int = 1,
+        compare_with_period_value: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        _is_subcall: bool = False,
+        _accumulators: Optional[dict] = None
+    ) -> str:
+        print(f"[INFO] VINH SON TOOL: Hierarchical statistics impl - {period_type} {period_value}, reservoir={reservoir}, parameters={parameters}, compare={compare}, compare_years={compare_years}, compare_with_period_value={compare_with_period_value}, start_date={start_date}, end_date={end_date}", flush=True)
+
         if not parameters:
             parameters = ["qve", "water_level"]
 
-        # Xử lý date range: nếu có start_date và end_date
+        # Xử lý date range
         if start_date and end_date:
             if reservoir == "All" or reservoir is None:
-                # Với reservoir="All", gộp chung 1 bảng với cột Hồ A, Hồ B, Hồ C
                 return self._get_date_range_statistics_combined(
-                    start_date, end_date, parameters
+                    start_date, end_date, parameters, _accumulators
                 )
             else:
-                # Với hồ cụ thể
                 return self._get_date_range_statistics(
-                    start_date, end_date, reservoir, parameters
+                    start_date, end_date, reservoir, parameters, _accumulators
                 )
 
         # Xử lý đặc biệt cho reservoir="All"
         if reservoir == "All" or reservoir is None:
             if period_type == "year":
-                # Hỏi năm: chỉ trả 1 khối (3 bảng Hồ A, B, C), không tách thành 2/4, 3/4, 4/4
                 if compare:
                     results = []
                     for res in ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C"]:
                         res_result = self.get_hierarchical_statistics(
                             period_type, period_value, res, parameters, compare, compare_years,
-                            compare_with_period_value=None, start_date=start_date, end_date=end_date
+                            compare_with_period_value=compare_with_period_value, start_date=start_date, end_date=end_date,
+                            _is_subcall=True, _accumulators=_accumulators
                         )
                         results.append(res_result)
-                    # Gộp 3 bảng trong 1 khối, dùng \n\n để UI không tách thành nhiều phần (2/4, 3/4, 4/4)
                     return "\n\n".join(results)
                 else:
-                    return self._get_all_reservoirs_year_stats(period_value, parameters, compare, compare_years)
+                    return self._get_all_reservoirs_year_stats(period_value, parameters, compare, compare_years, _accumulators)
             elif period_type == "month":
-                # Thống kê tháng cho tất cả 3 hồ
-                if compare and compare_years >= 2:
-                    # So sánh tháng với nhiều năm -> hiển thị 3 bảng riêng cho từng hồ (giống year)
+                if compare or compare_with_period_value:
                     results = []
                     for res in ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C"]:
                         res_result = self.get_hierarchical_statistics(
                             period_type, period_value, res, parameters, compare, compare_years,
-                            compare_with_period_value=None, start_date=start_date, end_date=end_date
+                            compare_with_period_value=compare_with_period_value, start_date=start_date, end_date=end_date,
+                            _is_subcall=True, _accumulators=_accumulators
                         )
                         results.append(res_result)
-                    # Gộp 3 bảng trong 1 khối
                     return "\n\n".join(results)
                 else:
-                    return self._get_month_all_reservoirs(period_value, parameters)
+                    return self._get_month_all_reservoirs(period_value, parameters, _accumulators)
             elif period_type == "week":
-                # Với "week": gọi đệ quy cho từng hồ riêng lẻ
                 results = []
                 for res in ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C"]:
                     res_result = self.get_hierarchical_statistics(
                         period_type, period_value, res, parameters, compare, compare_years,
-                        compare_with_period_value=None, start_date=start_date, end_date=end_date
+                        compare_with_period_value=compare_with_period_value, start_date=start_date, end_date=end_date,
+                        _is_subcall=True, _accumulators=_accumulators
                     )
                     results.append(res_result)
                 return "\n\n" + "="*80 + "\n\n".join(results)
@@ -125,7 +203,6 @@ class HierarchicalStatisticsService:
             if len(all_data) < 8:
                 return "Không có dữ liệu trong Google Sheets thống kê"
 
-            # Tìm dòng bắt đầu dữ liệu
             data_start_row = 0
             for i, row in enumerate(all_data):
                 if len(row) > 0:
@@ -140,7 +217,6 @@ class HierarchicalStatisticsService:
 
             data_rows = all_data[data_start_row:] if len(all_data) > data_start_row else []
 
-            # Column mapping cho từng hồ
             col_date = 0
             if reservoir == "Vinh Son -A":
                 col_qve = 4
@@ -155,7 +231,6 @@ class HierarchicalStatisticsService:
                 col_qve = 4
                 col_water_level = 1
 
-            # Column mapping cho tất cả các hồ (dùng khi so sánh nhiều năm với reservoir="All")
             col_qve_a, col_qve_b, col_qve_c = 4, 5, 6
             col_water_a, col_water_b, col_water_c = 1, 2, 3
 
@@ -192,10 +267,17 @@ class HierarchicalStatisticsService:
             current_month = now.month
             current_week = (now.day - 1) // 7 + 1
 
+            excel_sheets = _accumulators.get("excel_sheets", []) if _accumulators is not None else []
+            charts = _accumulators.get("charts", []) if _accumulators is not None else []
+            conclusions = _accumulators.get("conclusions", []) if _accumulators is not None else []
+
+            sheet_title = reservoir.replace("Vinh Son -", "Ho ")
+            excel_rows = []
+
             if period_type == "year":
                 year = int(period_value) if period_value else current_year
                 if compare:
-                    n_compare = min(max(compare_years, 1), 5)  # 2 → 3 cột, 3 → 4 cột
+                    n_compare = min(max(compare_years, 1), 5)
                     years_to_compare = [year]
                     for i in range(1, n_compare + 1):
                         years_to_compare.append(year - i)
@@ -220,37 +302,31 @@ class HierarchicalStatisticsService:
                     param_name = "Lưu lượng về Qve (m³/s)" if param == "qve" else "Mực nước hồ (m)"
                     result += f"\n#### {param_name}\n\n"
 
+                    excel_rows.append([f"THỐNG KÊ {param_name.upper()} - {reservoir.upper()}"])
+                    excel_rows.append([])
+
                     if param == "qve":
                         col_a, col_b, col_c = col_qve_a, col_qve_b, col_qve_c
                     else:
                         col_a, col_b, col_c = col_water_a, col_water_b, col_water_c
 
                     if compare and len(years_to_compare) > 1:
-                        # Xác định column index cho từng hồ dựa trên param
                         if param == "qve":
                             col_a, col_b, col_c = col_qve_a, col_qve_b, col_qve_c
                         else:
                             col_a, col_b, col_c = col_water_a, col_water_b, col_water_c
 
-                        # Xác định hồ nào cần hiển thị dựa trên reservoir
-                        # Nếu reservoir cụ thể (A, B, C) -> chỉ hiển thị hồ đó
-                        # Nếu reservoir="All" -> hiển thị cả 3 hồ
                         current_res = reservoir if reservoir else "All"
 
                         if current_res == "All" or current_res is None:
-                            # Hiển thị cả 3 hồ A, B, C
                             header_cols = ["Tháng"]
                             for res in ["A", "B", "C"]:
                                 for yr in years_to_compare:
                                     header_cols.append(f"{res} - {yr} (Min/Max/Avg)")
                             result += f"| {' | '.join(header_cols)} |\n"
                             result += "|" + "|".join([":---:"] * len(header_cols)) + "|\n"
-
-                            # Dữ liệu cho 3 hồ
                             cols_to_show = [col_a, col_b, col_c]
                         else:
-                            # Chỉ hiển thị hồ được chọn
-                            # Map reservoir name -> (label, column index)
                             res_mapping = {
                                 "Vinh Son -A": ("Hồ A", col_a),
                                 "Vinh Son -B": ("Hồ B", col_b),
@@ -263,25 +339,29 @@ class HierarchicalStatisticsService:
                                 header_cols.append(f"{res_label}-{yr}")
                             result += f"| {' | '.join(header_cols)} |\n"
                             result += "|" + "|".join([":---:"] * len(header_cols)) + "|\n"
-
-                            # Chỉ 1 hồ
                             cols_to_show = [res_col]
                     else:
+                        header_cols = ["Tháng", f"Hồ A - {year}", f"Hồ B - {year}", f"Hồ C - {year}"]
                         result += f"| Tháng | Hồ A - {year} | Hồ B - {year} | Hồ C - {year} |\n"
                         result += "|:---:|:---:|:---:|:---:|\n"
                         cols_to_show = None
 
+                    excel_rows.append(header_cols)
+
+                    chart_data = []
+
                     for month in range(1, 13):
                         row_data = [f"**Tháng {month}**"]
+                        chart_item = {"Thang": f"Tháng {month}"}
                         if compare and len(years_to_compare) > 1:
-                            for col_idx in cols_to_show:
+                            for col_idx_show in cols_to_show:
                                 for yr in years_to_compare:
                                     month_values = []
                                     for row in data_rows:
-                                        if len(row) > col_idx:
+                                        if len(row) > col_idx_show:
                                             date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
                                             if date and date.year == yr and date.month == month:
-                                                val = extract_value(row, col_idx)
+                                                val = extract_value(row, col_idx_show)
                                                 if val is not None:
                                                     month_values.append(val)
                                     if month_values:
@@ -289,16 +369,18 @@ class HierarchicalStatisticsService:
                                         max_val = max(month_values)
                                         avg_val = sum(month_values) / len(month_values)
                                         row_data.append(f"{min_val:.2f}{_NBSP}/{_NBSP}{max_val:.2f}{_NBSP}/{_NBSP}{avg_val:.2f}")
+                                        chart_item[str(yr)] = round(avg_val, 2)
                                     else:
                                         row_data.append("-")
+                                        chart_item[str(yr)] = 0.0
                         else:
-                            for col_idx in [col_a, col_b, col_c]:
+                            for col_idx_show in [col_a, col_b, col_c]:
                                 month_values = []
                                 for row in data_rows:
-                                    if len(row) > col_idx:
+                                    if len(row) > col_idx_show:
                                         date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
                                         if date and date.year == year and date.month == month:
-                                            val = extract_value(row, col_idx)
+                                            val = extract_value(row, col_idx_show)
                                             if val is not None:
                                                 month_values.append(val)
                                 if month_values:
@@ -309,35 +391,39 @@ class HierarchicalStatisticsService:
                                 else:
                                     row_data.append("-")
                         result += f"| {' | '.join(row_data)} |\n"
+                        excel_rows.append([cell.replace("**", "") for cell in row_data])
+                        chart_data.append(chart_item)
 
                     # Thêm hàng trung bình cả năm
                     avg_row = ["**Trung bình**"]
+                    year_avgs = {}
                     if compare and len(years_to_compare) > 1:
-                        for col_idx in cols_to_show:
+                        for col_idx_show in cols_to_show:
                             for yr in years_to_compare:
                                 year_values = []
                                 for m in range(1, 13):
                                     for row in data_rows:
-                                        if len(row) > col_idx:
+                                        if len(row) > col_idx_show:
                                             date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
                                             if date and date.year == yr and date.month == m:
-                                                val = extract_value(row, col_idx)
+                                                val = extract_value(row, col_idx_show)
                                                 if val is not None:
                                                     year_values.append(val)
                                 if year_values:
                                     avg_val = sum(year_values) / len(year_values)
                                     avg_row.append(f"{avg_val:.2f}")
+                                    year_avgs[yr] = avg_val
                                 else:
                                     avg_row.append("-")
                     else:
-                        for col_idx in [col_a, col_b, col_c]:
+                        for col_idx_show in [col_a, col_b, col_c]:
                             year_values = []
                             for m in range(1, 13):
                                 for row in data_rows:
-                                    if len(row) > col_idx:
+                                    if len(row) > col_idx_show:
                                         date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
                                         if date and date.year == year and date.month == m:
-                                            val = extract_value(row, col_idx)
+                                            val = extract_value(row, col_idx_show)
                                             if val is not None:
                                                 year_values.append(val)
                             if year_values:
@@ -346,13 +432,47 @@ class HierarchicalStatisticsService:
                             else:
                                 avg_row.append("-")
                     result += f"| {' | '.join(avg_row)} |\n"
+                    excel_rows.append([cell.replace("**", "") for cell in avg_row])
+                    excel_rows.append([])
+
+                    # Sinh kết luận tự động so sánh năm
+                    if compare and len(years_to_compare) > 1 and year in year_avgs:
+                        cur_avg = year_avgs[year]
+                        param_conclusions = []
+                        for yr in years_to_compare:
+                            if yr == year or yr not in year_avgs:
+                                continue
+                            prev_avg = year_avgs[yr]
+                            avg_change = cur_avg - prev_avg
+                            avg_pct = (avg_change / prev_avg * 100) if prev_avg > 0 else 0
+                            direction = "tăng" if avg_change > 0 else "giảm"
+                            param_conclusions.append(f"  - **So với năm {yr}**: {direction} `{abs(avg_change):.2f}` ({avg_pct:+.1f}%) (trung bình `{prev_avg:.2f}`).")
+                        
+                        if param_conclusions:
+                            lbl_map = {"Vinh Son -A": "Hồ A", "Vinh Son -B": "Hồ B", "Vinh Son -C": "Hồ C"}
+                            res_label = lbl_map.get(reservoir, reservoir)
+                            conclusions.append(f"**{res_label} - {param_name.split(' (')[0]} năm {year} (trung bình `{cur_avg:.2f}`):**\n" + "\n".join(param_conclusions))
+
+                    # Thêm Chart JSON
+                    chart_json = {
+                        "type": "line" if param == "water_level" else "bar",
+                        "title": f"Biểu đồ {param_name.split(' (')[0]} - {reservoir} qua các năm",
+                        "data": chart_data,
+                        "xKey": "Thang",
+                        "yKeys": [str(yr) for yr in years_to_compare],
+                        "colors": ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#06b6d4"],
+                        "unit": " m" if param == "water_level" else " m³/s"
+                    }
+                    charts.append(chart_json)
+
                     result += "\n---\n"
 
-                # result += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+                if _accumulators is not None:
+                    _merge_sheet(excel_sheets, sheet_title, excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - {reservoir.upper()}")
+
                 return result.strip()
 
             elif period_type == "month":
-                # Thống kê cả tháng (từ ngày 1 đến ngày cuối tháng)
                 if period_value and "/" in period_value:
                     m_s, y_s = period_value.split("/")
                     month, year = int(m_s), int(y_s)
@@ -362,13 +482,21 @@ class HierarchicalStatisticsService:
                 import calendar
                 last_day = calendar.monthrange(year, month)[1]
 
-                # Xác định các năm cần so sánh
-                if compare and compare_years >= 2:
-                    n_compare = min(max(compare_years, 1), 5)
-                    years_to_compare = [year]
-                    for i in range(1, n_compare + 1):
-                        years_to_compare.append(year - i)
-                    years_to_compare.sort(reverse=True)
+                if compare or compare_with_period_value:
+                    if compare_with_period_value and "/" in str(compare_with_period_value):
+                        try:
+                            _, y2_s = compare_with_period_value.strip().split("/")
+                            year2 = int(y2_s)
+                            years_to_compare = [year, year2]
+                            years_to_compare = sorted(list(set(years_to_compare)), reverse=True)
+                        except ValueError:
+                            years_to_compare = [year]
+                    else:
+                        n_compare = min(max(compare_years, 1), 5)
+                        years_to_compare = [year]
+                        for i in range(1, n_compare + 1):
+                            years_to_compare.append(year - i)
+                        years_to_compare.sort(reverse=True)
                 else:
                     years_to_compare = [year]
 
@@ -389,8 +517,12 @@ class HierarchicalStatisticsService:
                     param_name = "Lưu lượng về Qve (m³/s)" if param == "qve" else "Mực nước hồ (m)"
                     result += f"\n#### {param_name}\n\n"
 
+                    excel_rows.append([f"THỐNG KÊ {param_name.upper()} THÁNG {month}/{year} - {reservoir.upper()}"])
+                    excel_rows.append([])
+
+                    chart_data = []
+
                     if compare and len(years_to_compare) > 1:
-                        # Xác định tên hồ để hiển thị trong tiêu đề
                         res_label = "Hồ"
                         if reservoir == "Vinh Son -A":
                             res_label = "Hồ A"
@@ -399,15 +531,16 @@ class HierarchicalStatisticsService:
                         elif reservoir == "Vinh Son -C":
                             res_label = "Hồ C"
 
-                        # Hiển thị từng ngày với các năm so sánh (chỉ 1 giá trị trung bình)
                         header_cols = ["Ngày"]
                         for yr in years_to_compare:
                             header_cols.append(f"{res_label}-{yr}")
                         result += f"| {' | '.join(header_cols)} |\n"
                         result += "|" + "|".join([":---:"] * len(header_cols)) + "|\n"
+                        excel_rows.append(header_cols)
 
                         for day in range(1, last_day + 1):
                             row_data = [f"**{day}**"]
+                            chart_item = {"Ngay": str(day)}
                             for yr in years_to_compare:
                                 day_values = []
                                 for row in data_rows:
@@ -420,12 +553,17 @@ class HierarchicalStatisticsService:
                                 if day_values:
                                     avg_val = sum(day_values) / len(day_values)
                                     row_data.append(f"{avg_val:.2f}")
+                                    chart_item[str(yr)] = round(avg_val, 2)
                                 else:
                                     row_data.append("-")
+                                    chart_item[str(yr)] = 0.0
                             result += f"| {' | '.join(row_data)} |\n"
+                            excel_rows.append([cell.replace("**", "") for cell in row_data])
+                            chart_data.append(chart_item)
 
-                        # Thêm hàng trung bình tháng
+                        # Hàng trung bình tháng
                         avg_row = ["**Trung bình**"]
+                        month_avgs = {}
                         for yr in years_to_compare:
                             month_values = []
                             for d in range(1, last_day + 1):
@@ -439,15 +577,49 @@ class HierarchicalStatisticsService:
                             if month_values:
                                 avg_val = sum(month_values) / len(month_values)
                                 avg_row.append(f"{avg_val:.2f}")
+                                month_avgs[yr] = avg_val
                             else:
                                 avg_row.append("-")
                         result += f"| {' | '.join(avg_row)} |\n"
+                        excel_rows.append([cell.replace("**", "") for cell in avg_row])
+                        excel_rows.append([])
+
+                        # Sinh kết luận tự động so sánh tháng
+                        if compare and len(years_to_compare) > 1 and year in month_avgs:
+                            cur_avg = month_avgs[year]
+                            param_conclusions = []
+                            for yr in years_to_compare:
+                                if yr == year or yr not in month_avgs:
+                                    continue
+                                prev_avg = month_avgs[yr]
+                                avg_change = cur_avg - prev_avg
+                                avg_pct = (avg_change / prev_avg * 100) if prev_avg > 0 else 0
+                                direction = "tăng" if avg_change > 0 else "giảm"
+                                param_conclusions.append(f"  - **So với tháng {month}/{yr}**: {direction} `{abs(avg_change):.2f}` ({avg_pct:+.1f}%) (trung bình `{prev_avg:.2f}`).")
+                            
+                            if param_conclusions:
+                                lbl_map = {"Vinh Son -A": "Hồ A", "Vinh Son -B": "Hồ B", "Vinh Son -C": "Hồ C"}
+                                res_label = lbl_map.get(reservoir, reservoir)
+                                conclusions.append(f"**{res_label} - {param_name.split(' (')[0]} tháng {month}/{year} (trung bình `{cur_avg:.2f}`):**\n" + "\n".join(param_conclusions))
+
+                        # Chart so sánh tháng
+                        chart_json = {
+                            "type": "line",
+                            "title": f"So sánh {param_name.split(' (')[0]} - {reservoir} tháng {month} qua các năm",
+                            "data": chart_data,
+                            "xKey": "Ngay",
+                            "yKeys": [str(yr) for yr in years_to_compare],
+                            "colors": ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#06b6d4"],
+                            "unit": " m" if param == "water_level" else " m³/s"
+                        }
+                        charts.append(chart_json)
                     else:
-                        # Không so sánh - hiển thị tổng hợp cả tháng
                         result += f"| Tháng {month}/{year} (Min/Max/Avg) |\n"
                         result += "|:---:|\n"
+                        excel_rows.append([f"Tháng {month}/{year} (Min/Max/Avg)"])
 
                         vals = []
+                        day_vals = []
                         for row in data_rows:
                             if len(row) > col_idx:
                                 date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
@@ -455,17 +627,40 @@ class HierarchicalStatisticsService:
                                     val = extract_value(row, col_idx)
                                     if val is not None:
                                         vals.append(val)
+                                        day_vals.append((date.day, val))
                         if vals:
-                            result += f"| {min(vals):.2f}{_NBSP}/{_NBSP}{max(vals):.2f}{_NBSP}/{_NBSP}{sum(vals)/len(vals):.2f} |\n"
+                            avg_val = sum(vals)/len(vals)
+                            min_val = min(vals)
+                            max_val = max(vals)
+                            result += f"| {min_val:.2f}{_NBSP}/{_NBSP}{max_val:.2f}{_NBSP}/{_NBSP}{avg_val:.2f} |\n"
+                            excel_rows.append([f"{min_val:.2f}/{max_val:.2f}/{avg_val:.2f}"])
                         else:
                             result += "| -\n"
+                            excel_rows.append(["-"])
+                        excel_rows.append([])
+
+                        day_vals.sort()
+                        chart_data = [{"Ngay": str(d), "GiaTri": round(v, 2)} for d, v in day_vals]
+                        if chart_data:
+                            chart_json = {
+                                "type": "line",
+                                "title": f"Biểu đồ diễn biến {param_name.split(' (')[0]} hàng ngày tháng {month}/{year} - {reservoir}",
+                                "data": chart_data,
+                                "xKey": "Ngay",
+                                "yKeys": ["GiaTri"],
+                                "colors": ["#3b82f6"],
+                                "unit": " m" if param == "water_level" else " m³/s"
+                            }
+                            charts.append(chart_json)
+
                     result += "\n---\n"
 
-                # result += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+                if _accumulators is not None:
+                    _merge_sheet(excel_sheets, sheet_title, excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - {reservoir.upper()}")
+
                 return result.strip()
 
             elif period_type == "week":
-                # Thống kê theo ngày trong tuần (1 hồ)
                 if period_value and period_value.count("/") == 2:
                     w_s, m_s, y_s = period_value.split("/")
                     week_num, month, year = int(w_s), int(m_s), int(y_s)
@@ -487,14 +682,21 @@ class HierarchicalStatisticsService:
                     if col_idx is None:
                         continue
                     param_name = "Lưu lượng về Qve (m³/s)" if param == "qve" else "Mực nước hồ (m)"
-                    # Hiển thị đúng đơn vị cho từng tham số
                     unit = "m³/s" if param == "qve" else "m"
                     result += f"\n#### {param_name}\n\n"
                     result += f"| Ngày | Giá trị ({unit}) |\n"
                     result += "|---|---:|\n"
 
+                    excel_rows.append([f"THỐNG KÊ {param_name.upper()} TUẦN {week_num} THÁNG {month}/{year} - {reservoir.upper()}"])
+                    excel_rows.append([])
+                    excel_rows.append(["Ngày", f"Giá trị ({unit})"])
+
+                    chart_data = []
+                    week_values = []
+
                     for d in range(sd, min(ed + 1, 32)):
                         value_str = "-"
+                        val = None
                         for row in data_rows:
                             if len(row) > col_idx:
                                 date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
@@ -502,11 +704,37 @@ class HierarchicalStatisticsService:
                                     val = extract_value(row, col_idx)
                                     if val is not None:
                                         value_str = f"{val:.2f}"
+                                        week_values.append(val)
                                     break
                         result += f"| **{d}/{month}** | {value_str} |\n"
+                        excel_rows.append([f"{d}/{month}", val if val is not None else "-"])
+                        chart_data.append({
+                            "Ngay": f"{d}/{month}",
+                            "GiaTri": val if val is not None else 0.0
+                        })
+
+                    avg_val = sum(week_values) / len(week_values) if week_values else None
+                    avg_str = f"{avg_val:.2f}" if avg_val is not None else "-"
+                    result += f"| **Trung bình** | {avg_str} |\n"
+                    excel_rows.append(["Trung bình", avg_val if avg_val is not None else "-"])
+                    excel_rows.append([])
+
+                    chart_json = {
+                        "type": "bar" if param == "qve" else "line",
+                        "title": f"Biểu đồ {param_name.split(' (')[0]} tuần {week_num} tháng {month}/{year} - {reservoir}",
+                        "data": chart_data,
+                        "xKey": "Ngay",
+                        "yKeys": ["GiaTri"],
+                        "colors": ["#3b82f6"],
+                        "unit": f" {unit}"
+                    }
+                    charts.append(chart_json)
+
                     result += "\n---\n"
 
-                result += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+                if _accumulators is not None:
+                    _merge_sheet(excel_sheets, sheet_title, excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - {reservoir.upper()}")
+
                 return result.strip()
 
             else:
@@ -526,11 +754,9 @@ class HierarchicalStatisticsService:
         parameters: List[str],
         compare_years: int = 1
     ) -> str:
-        """So sánh tháng: 2 tháng hoặc 3 năm cùng kỳ. Trả về 3 bảng (mỗi hồ 1 bảng)."""
         try:
             m1_s, y1_s = period_value.strip().split("/")
             month1, year1 = int(m1_s), int(y1_s)
-            # N năm cùng kỳ (compare_years=2 → 3 cột, compare_years=3 → 4 cột): year1, year1-1, ..., year1-N
             if compare_years >= 2:
                 periods_to_show = [(month1, year1 - i) for i in range(compare_years + 1)]
             elif compare_with_period_value and "/" in str(compare_with_period_value):
@@ -611,15 +837,12 @@ class HierarchicalStatisticsService:
 
             for res_name, col_qve, col_water in reservoirs:
                 period_labels = ", ".join([f"Tháng {m}/{y}" for (m, y) in periods_to_show])
-                # Tên hồ hiển thị (A, B, C)
                 res_label = res_name.replace("Vinh Son -", "Hồ ")
                 block = f"### 📊 So sánh theo Ngày - Thủy điện Vĩnh Sơn\n**Hồ:** {res_name}\n**So sánh:** {period_labels} (từ ngày 1 đến ngày {max_day})\n\n---\n\n"
                 for param in parameters or ["qve", "water_level"]:
                     col_idx = col_qve if param == "qve" else col_water
                     param_name = "Lưu lượng về Qve (m³/s)" if param == "qve" else "Mực nước hồ (m)"
-                    # Thêm tên hồ vào tiêu đề bảng
                     block += f"\n#### {param_name} - {res_label}\n\n"
-                    # Header với tên hồ
                     header_cols = [f"{res_label} - Tháng {m}/{y}" for (m, y) in periods_to_show]
                     header_row = "| Ngày | " + " | ".join(header_cols) + " |"
                     sep_row = "|:---:|" + "|".join([":---:"] * len(periods_to_show)) + "|"
@@ -641,7 +864,6 @@ class HierarchicalStatisticsService:
                             cells.append(f"{sum(vals)/len(vals):.2f}" if vals else "-")
                         block += "| " + " | ".join(cells) + " |\n"
 
-                    # Thêm hàng trung bình
                     avg_cells = ["**Trung bình**"]
                     for (m, y) in periods_to_show:
                         all_vals = []
@@ -663,18 +885,15 @@ class HierarchicalStatisticsService:
 
             return (("="*80) + "\n\n").join(parts_out)
         except Exception as e:
-            error_msg = f"Lỗi khi so sánh tháng: {str(e)}"
-            print(f"[ERROR] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
-            return error_msg
+            return f"Lỗi: {e}"
 
     def _get_all_reservoirs_year_stats(
         self,
         period_value: Optional[str],
         parameters: List[str],
         compare: bool,
-        compare_years: int
+        compare_years: int,
+        _accumulators: Optional[dict] = None
     ) -> str:
         """Thống kê năm cho tất cả 3 hồ (1 bảng với các cột cho 3 hồ)"""
         try:
@@ -755,6 +974,11 @@ class HierarchicalStatisticsService:
 **Năm:** {year}"""
             result += "\n\n---\n\n"
 
+            excel_sheets = _accumulators.get("excel_sheets", []) if _accumulators is not None else []
+            charts = _accumulators.get("charts", []) if _accumulators is not None else []
+
+            excel_rows = []
+
             for param in parameters:
                 if param == "qve":
                     param_name = "Lưu lượng về Qve (m³/s)"
@@ -767,13 +991,22 @@ class HierarchicalStatisticsService:
 
                 result += f"\n#### {param_name}\n\n"
 
-                # Header với tên hồ
+                excel_rows.append([f"THỐNG KÊ NĂM {year} - {param_name.upper()} - TẤT CẢ CÁC HỒ"])
+                excel_rows.append([])
+
+                header_row = ["Tháng", f"Hồ A - {year}", f"Hồ B - {year}", f"Hồ C - {year}"]
                 result += f"| Tháng | Hồ A - {year} | Hồ B - {year} | Hồ C - {year} |\n"
                 result += "|:---:|:---:|:---:|:---:|\n"
+                excel_rows.append(header_row)
+
+                chart_data = []
 
                 for month in range(1, 13):
                     row_data = [f"**Tháng {month}**"]
-                    for col_idx in [col_a, col_b, col_c]:
+                    excel_row = [f"Tháng {month}"]
+                    chart_item = {"Thang": f"Tháng {month}"}
+
+                    for res_label, col_idx in [("Hồ A", col_a), ("Hồ B", col_b), ("Hồ C", col_c)]:
                         month_values = []
                         for row in data_rows:
                             if len(row) > col_idx:
@@ -787,25 +1020,43 @@ class HierarchicalStatisticsService:
                             max_val = max(month_values)
                             avg_val = sum(month_values) / len(month_values)
                             row_data.append(f"{min_val:.2f}{_NBSP}/{_NBSP}{max_val:.2f}{_NBSP}/{_NBSP}{avg_val:.2f}")
+                            excel_row.append(f"{min_val:.2f}/{max_val:.2f}/{avg_val:.2f}")
+                            chart_item[res_label] = round(avg_val, 2)
                         else:
                             row_data.append("-")
+                            excel_row.append("-")
+                            chart_item[res_label] = 0.0
                     result += f"| {' | '.join(row_data)} |\n"
+                    excel_rows.append(excel_row)
+                    chart_data.append(chart_item)
+
+                excel_rows.append([])
+                chart_json = {
+                    "type": "line" if param == "water_level" else "bar",
+                    "title": f"Biểu đồ {param_name.split(' (')[0]} các hồ năm {year}",
+                    "data": chart_data,
+                    "xKey": "Thang",
+                    "yKeys": ["Hồ A", "Hồ B", "Hồ C"],
+                    "colors": ["#3b82f6", "#10b981", "#ef4444"],
+                    "unit": " m" if param == "water_level" else " m³/s"
+                }
+                charts.append(chart_json)
+
                 result += "\n---\n"
 
-            # result += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+            if _accumulators is not None:
+                _merge_sheet(excel_sheets, "Vinh Son", excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - TỔNG HỢP")
+
             return result.strip()
 
         except Exception as e:
-            error_msg = f"Lỗi khi thống kê phân cấp: {str(e)}"
-            print(f"[ERROR] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
-            return error_msg
+            return f"Lỗi thống kê: {e}"
 
     def _get_month_all_reservoirs(
         self,
         period_value: str,
-        parameters: List[str]
+        parameters: List[str],
+        _accumulators: Optional[dict] = None
     ) -> str:
         """Thống kê tháng cho tất cả 3 hồ (1 bảng gộp - Hồ A, B, C trong 3 hàng)"""
         try:
@@ -890,6 +1141,11 @@ class HierarchicalStatisticsService:
 ---
 
 """
+            excel_sheets = _accumulators.get("excel_sheets", []) if _accumulators is not None else []
+            charts = _accumulators.get("charts", []) if _accumulators is not None else []
+
+            excel_rows = []
+
             for param in parameters:
                 if param == "qve":
                     param_name = "Lưu lượng về Qve (m³/s)"
@@ -901,7 +1157,10 @@ class HierarchicalStatisticsService:
                     continue
 
                 result += f"\n#### {param_name}\n\n"
-                # Header: 1 hàng tiêu đề + 3 hàng dữ liệu (Hồ A, B, C)
+                excel_rows.append([f"THỐNG KÊ THÁNG {month}/{year} - {param_name.upper()} - TẤT CẢ CÁC HỒ"])
+                excel_rows.append([])
+                excel_rows.append(["Hồ", f"Tháng {month}/{year} (Min/Max/Avg)"])
+
                 result += f"| Hồ | {month}/{year} (Min/Max/Avg) |\n"
                 result += "|:---:|:---:|\n"
 
@@ -919,30 +1178,59 @@ class HierarchicalStatisticsService:
                         max_val = max(month_values)
                         avg_val = sum(month_values) / len(month_values)
                         result += f"| **{res_name}** | {min_val:.2f}{_NBSP}/{_NBSP}{max_val:.2f}{_NBSP}/{_NBSP}{avg_val:.2f} |\n"
+                        excel_rows.append([res_name, f"{min_val:.2f}/{max_val:.2f}/{avg_val:.2f}"])
                     else:
                         result += f"| **{res_name}** | - |\n"
+                        excel_rows.append([res_name, "-"])
+                excel_rows.append([])
+
+                chart_data = []
+                for day in range(1, last_day + 1):
+                    chart_item = {"Ngay": str(day)}
+                    for res_name, col_idx in [("Hồ A", col_a), ("Hồ B", col_b), ("Hồ C", col_c)]:
+                        day_values = []
+                        for row in data_rows:
+                            if len(row) > col_idx:
+                                date = normalize_date(row[col_date] if col_date is not None and len(row) > col_date else None)
+                                if date and date.year == year and date.month == month and date.day == day:
+                                    val = extract_value(row, col_idx)
+                                    if val is not None:
+                                        day_values.append(val)
+                        if day_values:
+                            chart_item[res_name] = round(sum(day_values)/len(day_values), 2)
+                        else:
+                            chart_item[res_name] = 0.0
+                    chart_data.append(chart_item)
+
+                chart_json = {
+                    "type": "line",
+                    "title": f"Biểu đồ diễn biến {param_name.split(' (')[0]} tháng {month}/{year}",
+                    "data": chart_data,
+                    "xKey": "Ngay",
+                    "yKeys": ["Hồ A", "Hồ B", "Hồ C"],
+                    "colors": ["#3b82f6", "#10b981", "#ef4444"],
+                    "unit": " m" if param == "water_level" else " m³/s"
+                }
+                charts.append(chart_json)
+
                 result += "\n---\n"
 
-            # result += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+            if _accumulators is not None:
+                _merge_sheet(excel_sheets, "Vinh Son", excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - TỔNG HỢP")
+
             return result.strip()
 
         except Exception as e:
-            error_msg = f"Lỗi khi thống kê tháng cho tất cả hồ: {str(e)}"
-            print(f"[ERROR] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
-            return error_msg
+            return f"Lỗi thống kê: {e}"
 
     def _get_date_range_statistics(
         self,
         start_date: str,
         end_date: str,
         reservoir: str,
-        parameters: List[str]
+        parameters: List[str],
+        _accumulators: Optional[dict] = None
     ) -> str:
-        """
-        Thống kê theo ngày cho khoảng thời gian từ start_date đến end_date cho một hồ cụ thể
-        """
         try:
             client, spreadsheet = get_stats_export_client(GS_CONFIG.stats_export_spreadsheet_id)
             if not spreadsheet:
@@ -966,7 +1254,6 @@ class HierarchicalStatisticsService:
             if len(all_data) < 8:
                 return "Không có dữ liệu trong Google Sheets thống kê"
 
-            # Tìm dòng bắt đầu dữ liệu
             data_start_row = 0
             for i, row in enumerate(all_data):
                 if len(row) > 0:
@@ -981,7 +1268,6 @@ class HierarchicalStatisticsService:
 
             data_rows = all_data[data_start_row:] if len(all_data) > data_start_row else []
 
-            # Column mapping cho từng hồ
             col_date = 0
             if reservoir == "Vinh Son -A":
                 col_qve = 4
@@ -997,7 +1283,6 @@ class HierarchicalStatisticsService:
                 col_water_level = 1
 
             def parse_date_str(date_str: str) -> Optional[datetime]:
-                """Parse date string in format DD/MM/YYYY"""
                 try:
                     parts = date_str.strip().split("/")
                     if len(parts) == 3:
@@ -1051,61 +1336,88 @@ class HierarchicalStatisticsService:
 """
             out += "\n---\n"
 
+            excel_sheets = _accumulators.get("excel_sheets", []) if _accumulators is not None else []
+            charts = _accumulators.get("charts", []) if _accumulators is not None else []
+
+            excel_rows = []
+
             for param in parameters:
                 col_idx = col_qve if param == "qve" else col_water_level
                 if col_idx is None:
                     continue
                 param_name = "Lưu lượng về Qve (m³/s)" if param == "qve" else "Mực nước hồ (m)"
-                # Hiển thị đúng đơn vị cho từng tham số
                 unit = "m³/s" if param == "qve" else "m"
                 out += f"\n#### {param_name}\n\n"
                 out += f"| Ngày | Giá trị ({unit}) |\n"
                 out += "|---|---:|\n"
 
+                excel_rows.append([f"THỐNG KÊ {param_name.upper()} - {reservoir.upper()}"])
+                excel_rows.append([f"Từ {start_date} đến {end_date}"])
+                excel_rows.append([])
+                excel_rows.append(["Ngày", f"Giá trị ({unit})"])
+
                 values_in_range: List[float] = []
+                chart_data = []
                 current_dt = start_dt
                 while current_dt <= end_dt:
                     day_str = f"**{current_dt.day}/{current_dt.month}/{current_dt.year}**"
-
+                    excel_day_str = f"{current_dt.day}/{current_dt.month}/{current_dt.year}"
                     value_str = "-"
+                    val = None
                     for r in data_rows:
                         if len(r) > col_idx:
                             dt = normalize_date(r[col_date] if col_date is not None and len(r) > col_date else None)
                             if dt and dt.year == current_dt.year and dt.month == current_dt.month and dt.day == current_dt.day:
-                                v = extract_value(r, col_idx)
-                                if v is not None:
-                                    value_str = f"{v:.2f}"
-                                    values_in_range.append(v)
+                                val = extract_value(r, col_idx)
+                                if val is not None:
+                                    value_str = f"{val:.2f}"
+                                    values_in_range.append(val)
                                 break
 
                     out += f"| {day_str} | {value_str} |\n"
+                    excel_rows.append([excel_day_str, val if val is not None else "-"])
+                    chart_data.append({
+                        "Ngay": f"{current_dt.day}/{current_dt.month}",
+                        "GiaTri": val if val is not None else 0.0
+                    })
                     current_dt += timedelta(days=1)
 
-                avg_str = f"{sum(values_in_range) / len(values_in_range):.2f}" if values_in_range else "-"
+                avg_val = sum(values_in_range) / len(values_in_range) if values_in_range else None
+                avg_str = f"{avg_val:.2f}" if avg_val is not None else "-"
                 out += f"| **Trung bình** | {avg_str} |\n"
+                excel_rows.append(["Trung bình", avg_val if avg_val is not None else "-"])
+                excel_rows.append([])
+
+                if chart_data:
+                    chart_json = {
+                        "type": "bar" if param == "qve" else "line",
+                        "title": f"Biểu đồ biến động {param_name.split(' (')[0]} - {reservoir}",
+                        "data": chart_data,
+                        "xKey": "Ngay",
+                        "yKeys": ["GiaTri"],
+                        "colors": ["#3b82f6"],
+                        "unit": f" {unit}"
+                    }
+                    charts.append(chart_json)
+
                 out += "\n---\n"
 
-            # out += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+            if _accumulators is not None:
+                sheet_title = reservoir.replace("Vinh Son -", "Ho ")
+                _merge_sheet(excel_sheets, sheet_title, excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - {reservoir.upper()}")
+
             return out.strip()
 
         except Exception as e:
-            error_msg = f"Lỗi khi thống kê phân cấp: {str(e)}"
-            print(f"[ERROR] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
-            return error_msg
+            return f"Lỗi: {e}"
 
     def _get_date_range_statistics_combined(
         self,
         start_date: str,
         end_date: str,
-        parameters: List[str]
+        parameters: List[str],
+        _accumulators: Optional[dict] = None
     ) -> str:
-        """
-        Thống kê theo ngày cho khoảng thời gian từ start_date đến end_date,
-        gộp chung 3 hồ A, B, C vào 1 bảng (cột Hồ A | Hồ B | Hồ C).
-        Chỉ xuất bảng tương ứng parameters: ["qve"] → chỉ Qve; ["water_level"] → chỉ MNH.
-        """
         try:
             client, spreadsheet = get_stats_export_client(GS_CONFIG.stats_export_spreadsheet_id)
             if not spreadsheet:
@@ -1201,6 +1513,11 @@ class HierarchicalStatisticsService:
 """
             out += "\n---\n"
 
+            excel_sheets = _accumulators.get("excel_sheets", []) if _accumulators is not None else []
+            charts = _accumulators.get("charts", []) if _accumulators is not None else []
+
+            excel_rows = []
+
             for param in parameters:
                 if param == "qve":
                     param_name = "Lưu lượng về Qve (m³/s)"
@@ -1215,15 +1532,22 @@ class HierarchicalStatisticsService:
                 out += "| Ngày | Hồ A | Hồ B | Hồ C |\n"
                 out += "|:------:|------:|------:|------:|\n"
 
+                excel_rows.append([f"THỐNG KÊ CHI TIẾT TỔNG HỢP - {param_name.upper()}"])
+                excel_rows.append([f"Từ {start_date} đến {end_date}"])
+                excel_rows.append([])
+                excel_rows.append(["Ngày", "Hồ A", "Hồ B", "Hồ C"])
+
                 vals_a: List[float] = []
                 vals_b: List[float] = []
                 vals_c: List[float] = []
+                chart_data = []
 
                 current_dt = start_dt
                 while current_dt <= end_dt:
                     day_str = f"**{current_dt.day}/{current_dt.month}/{current_dt.year}**"
+                    excel_day_str = f"{current_dt.day}/{current_dt.month}/{current_dt.year}"
 
-                    def day_val(col_idx, acc: List[float]):
+                    def day_val(col_idx, acc: List[float]) -> Tuple[str, Optional[float]]:
                         for r in data_rows:
                             if len(r) > col_idx:
                                 dt = normalize_date(r[col_date] if col_date is not None and len(r) > col_date else None)
@@ -1231,27 +1555,71 @@ class HierarchicalStatisticsService:
                                     v = extract_value(r, col_idx)
                                     if v is not None:
                                         acc.append(v)
-                                        return f"{v:.2f}"
-                        return "-"
+                                        return f"{v:.2f}", v
+                        return "-", None
 
-                    va = day_val(col_a, vals_a)
-                    vb = day_val(col_b, vals_b)
-                    vc = day_val(col_c, vals_c)
-                    out += f"| {day_str} | {va} | {vb} | {vc} |\n"
+                    va_str, va_num = day_val(col_a, vals_a)
+                    vb_str, vb_num = day_val(col_b, vals_b)
+                    vc_str, vc_num = day_val(col_c, vals_c)
+
+                    out += f"| {day_str} | {va_str} | {vb_str} | {vc_str} |\n"
+                    excel_rows.append([excel_day_str, va_num if va_num is not None else "-", vb_num if vb_num is not None else "-", vc_num if vc_num is not None else "-"])
+                    chart_data.append({
+                        "Ngay": f"{current_dt.day}/{current_dt.month}",
+                        "Hồ A": va_num if va_num is not None else 0.0,
+                        "Hồ B": vb_num if vb_num is not None else 0.0,
+                        "Hồ C": vc_num if vc_num is not None else 0.0
+                    })
                     current_dt += timedelta(days=1)
 
-                avg_a = f"{sum(vals_a) / len(vals_a):.2f}" if vals_a else "-"
-                avg_b = f"{sum(vals_b) / len(vals_b):.2f}" if vals_b else "-"
-                avg_c = f"{sum(vals_c) / len(vals_c):.2f}" if vals_c else "-"
-                out += f"| **Trung bình** | {avg_a} | {avg_b} | {avg_c} |\n"
+                avg_a = sum(vals_a) / len(vals_a) if vals_a else None
+                avg_b = sum(vals_b) / len(vals_b) if vals_b else None
+                avg_c = sum(vals_c) / len(vals_c) if vals_c else None
+
+                avg_a_str = f"{avg_a:.2f}" if avg_a is not None else "-"
+                avg_b_str = f"{avg_b:.2f}" if avg_b is not None else "-"
+                avg_c_str = f"{avg_c:.2f}" if avg_c is not None else "-"
+
+                out += f"| **Trung bình** | {avg_a_str} | {avg_b_str} | {avg_c_str} |\n"
+                excel_rows.append(["Trung bình", avg_a if avg_a is not None else "-", avg_b if avg_b is not None else "-", avg_c if avg_c is not None else "-"])
+                excel_rows.append([])
+
+                if chart_data:
+                    chart_json = {
+                        "type": "line",
+                        "title": f"Biểu đồ diễn biến {param_name} các hồ",
+                        "data": chart_data,
+                        "xKey": "Ngay",
+                        "yKeys": ["Hồ A", "Hồ B", "Hồ C"],
+                        "colors": ["#3b82f6", "#10b981", "#ef4444"],
+                        "unit": " m" if param == "water_level" else " m³/s"
+                    }
+                    charts.append(chart_json)
+
                 out += "\n---\n"
 
-            # out += "\n**Nguồn:** Google Sheets thống kê - Thủy điện Vĩnh Sơn"
+            if _accumulators is not None:
+                _merge_sheet(excel_sheets, "Vinh Son", excel_rows, f"BẢO CÁO THỐNG KÊ CHI TIẾT - TỔNG HỢP")
+
             return out.strip()
 
         except Exception as e:
-            error_msg = f"Lỗi khi thống kê phân cấp: {str(e)}"
-            print(f"[ERROR] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
-            return error_msg
+            return f"Lỗi: {e}"
+
+
+def _merge_sheet(excel_sheets: list, name: str, rows: list, title: str):
+    """
+    Trợ giúp để gộp các dòng vào worksheet có tên chỉ định.
+    Nếu worksheet chưa tồn tại, tạo mới với title hàng đầu.
+    """
+    for sheet in excel_sheets:
+        if sheet["name"] == name:
+            sheet["rows"].extend(rows)
+            return
+    excel_sheets.append({
+        "name": name,
+        "rows": [
+            [title],
+            [],
+        ] + rows
+    })

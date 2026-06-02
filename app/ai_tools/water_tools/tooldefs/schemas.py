@@ -11,11 +11,11 @@ QUAN TRỌNG - RESERVOIR SELECTION:
 - KHÔNG tự động truy vấn tất cả các hồ A, B, C nếu user không yêu cầu.
 
 RESERVOIRS:
-- "Sông Hinh" or "Song Hinh": MNC = 196m, MNDBT = 209m, Range: 196-213m
+- "Sông Hinh" or "Song Hinh": mực nước chết = 196m, mực nước dâng bình thường = 209m, Range: 196-213m
 - "TKT" or "Thượng Kon Tum" or "Thượng Kontum": Water level range 1135-1165m
-- "Vĩnh Sơn A" or "Vinh Son A": MNC = 765m, MNDBT = 775m, Range: 765-780m
-- "Vĩnh Sơn B" or "Vinh Son B": MNC = 813.6m, MNDBT = 826m, Range: 813-832m
-- "Vĩnh Sơn C" or "Vinh Son C": MNC = 971.3m, MNDBT = 981m, Range: 971-988m
+- "Vĩnh Sơn A" or "Vinh Son A": mực nước chết = 765m, mực nước dâng bình thường = 775m, Range: 765-780m
+- "Vĩnh Sơn B" or "Vinh Son B": mực nước chết = 813.6m, mực nước dâng bình thường = 826m, Range: 813-832m
+- "Vĩnh Sơn C" or "Vinh Son C": mực nước chết = 971.3m, mực nước dâng bình thường = 981m, Range: 971-988m
 
 Extract reservoir name from user query. If not specified, default to "Sông Hinh".
 
@@ -40,20 +40,20 @@ You MUST use this function whenever the user asks about water level or volume. D
 
 useful_volume_function = {
     "name": "get_useful_volume",
-    "description": """REQUIRED: Calculate total useful volume of a reservoir (between MNC and MNDBT).
+    "description": """REQUIRED: Calculate total useful volume of a reservoir (between mực nước chết and mực nước dâng bình thường).
 
 WHEN TO USE:
 - User asks "tổng dung tích hữu ích của hồ X"
 - User asks "dung tich hữu ích Vĩnh Sơn"
 - User asks "tổng dung tích Sông Hinh"
 
-Công thức: Dung tích hữu ích = V(MNDBT) - V(MNC)
+Công thức: Dung tích hữu ích = V(mực nước dâng bình thường) - V(mực nước chết)
 
 RESERVOIRS:
-- "Sông Hinh": MNC = 196m, MNDBT = 209m
-- "Vĩnh Sơn A": MNC = 765m, MNDBT = 775m
-- "Vĩnh Sơn B": MNC = 813.6m, MNDBT = 826m
-- "Vĩnh Sơn C": MNC = 971.3m, MNDBT = 981m
+- "Sông Hinh": mực nước chết = 196m, mực nước dâng bình thường = 209m
+- "Vĩnh Sơn A": mực nước chết = 765m, mực nước dâng bình thường = 775m
+- "Vĩnh Sơn B": mực nước chết = 813.6m, mực nước dâng bình thường = 826m
+- "Vĩnh Sơn C": mực nước chết = 971.3m, mực nước dâng bình thường = 981m
 
 EXAMPLES:
 - "Tổng dung tích hữu ích hồ Sông Hinh" → reservoir="Sông Hinh"
@@ -123,12 +123,12 @@ WHEN TO USE:
 - Query structure: "level A → level B in X time"
 
 RESERVOIRS AND WATER LEVELS:
-- "Sông Hinh": MNC = 196m (Mực nước chết), MNDBT = 209m (Mực nước dâng bình thường), Range: 196-213m
-- "Vĩnh Sơn A": MNC = 765m, MNDBT = 775m, Range: 765-780m
-- "Vĩnh Sơn B": MNC = 813.6m, MNDBT = 826m, Range: 813-832m
-- "Vĩnh Sơn C": MNC = 971.3m, MNDBT = 981m, Range: 971-988m
+- "Sông Hinh": mực nước chết = 196m, mực nước dâng bình thường = 209m, Range: 196-213m
+- "Vĩnh Sơn A": mực nước chết = 765m, mực nước dâng bình thường = 775m, Range: 765-780m
+- "Vĩnh Sơn B": mực nước chết = 813.6m, mực nước dâng bình thường = 826m, Range: 813-832m
+- "Vĩnh Sơn C": mực nước chết = 971.3m, mực nước dâng bình thường = 981m, Range: 971-988m
 - "TKT" or "Thượng Kon Tum": Range: 1135-1165m
-- "Vĩnh Sơn A" or "Vinh Son A": MNC = 765m, MNDBT = 775m, Range: 765-780m
+- "Vĩnh Sơn A" or "Vinh Son A": mực nước chết = 765m, mực nước dâng bình thường = 775m, Range: 765-780m
 
 QUAN TRỌNG: Khi user hỏi về một hồ cụ thể, CHỈ truy vấn hồ đó.
 
@@ -707,4 +707,3 @@ TOOLS = [
     {"type": "function", "function": practical_ramping_function},
     {"type": "function", "function": time_calculation_function}
 ]
-

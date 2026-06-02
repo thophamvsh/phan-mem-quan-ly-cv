@@ -114,11 +114,12 @@ def _apply_fallback(resp: Dict[str, Any]) -> None:
     table_lines: list = []
     notes_lines: list = []
     in_table = False
-    seen_hr = False
     in_chart = False
     chart_buf: list = []
     in_excel = False
     excel_buf: list = []
+    pending_lines: list = []
+
     for i, line in enumerate(lines):
         s = line.strip()
         
@@ -131,7 +132,12 @@ def _apply_fallback(resp: Dict[str, Any]) -> None:
             chart_buf.append(line)
             if s.startswith("```"):
                 in_chart = False
-                resp["chart"] = "\n".join(chart_buf)
+                chart_block = "\n".join(chart_buf)
+                resp["chart"] = (
+                    f"{resp['chart']}\n\n{chart_block}".strip()
+                    if resp.get("chart")
+                    else chart_block
+                )
                 chart_buf = []
             continue
         if s.startswith("```excel") or s.startswith("```excel-report"):
@@ -147,7 +153,7 @@ def _apply_fallback(resp: Dict[str, Any]) -> None:
             continue
 
         # First ### or ## as title
-        if not resp.get("title") and (s.startswith("### ") or s.startswith("## ")):
+        if not resp.get("title") and not title_lines and (s.startswith("### ") or s.startswith("## ")):
             title_lines.append(s)
             continue
         # **X:** lines near start as title/summary; near end as notes
@@ -158,26 +164,47 @@ def _apply_fallback(resp: Dict[str, Any]) -> None:
                 else:
                     summary_lines.append(s)
             else:
-                notes_lines.append(s)
+                notes_lines.append(line)
             continue
         # Markdown table
-        if "|" in line and ("---" in line or (table_lines and "|" in line)):
-            in_table = True
+        if "|" in line:
+            if not in_table:
+                # Transitioning to in_table. Check pending_lines for a heading.
+                heading_line = None
+                for idx in range(len(pending_lines) - 1, -1, -1):
+                    p_line = pending_lines[idx]
+                    ps = p_line.strip()
+                    if not ps:
+                        continue
+                    if ps.startswith("###") or ps.startswith("##") or (ps.startswith("**") and ps.endswith("**")):
+                        heading_line = pending_lines.pop(idx)
+                    break
+                
+                in_table = True
+                if heading_line is not None:
+                    table_lines.append(heading_line)
             table_lines.append(line)
             continue
-        if in_table and "|" in line:
-            table_lines.append(line)
-            continue
-        if in_table and "|" not in line:
+        
+        if in_table:
             in_table = False
+
         if "---" in line:
-            seen_hr = True
             continue
-        if seen_hr or (table_lines and not in_table):
-            if s and (s.startswith("**") or "Nguồn" in s or "Lưu ý" in s):
-                notes_lines.append(s)
-        elif not table_lines and s and not title_lines and i < 3:
+
+        if s:
+            pending_lines.append(line)
+
+    # Distribute remaining pending lines
+    for line in pending_lines:
+        s = line.strip()
+        if not s:
+            continue
+        if not table_lines:
             summary_lines.append(s)
+        else:
+            notes_lines.append(line)
+
     if title_lines and not resp.get("title"):
         resp["title"] = "\n".join(title_lines)
     if summary_lines and not resp.get("summary"):
@@ -256,6 +283,7 @@ def parse_markdown_blocks(raw: str) -> Dict[str, Any]:
     chart_buf: List[str] = []
     in_excel = False
     excel_buf: List[str] = []
+    pending_lines: List[str] = []
 
     for i, line in enumerate(lines):
         s = line.strip()
@@ -269,7 +297,12 @@ def parse_markdown_blocks(raw: str) -> Dict[str, Any]:
             chart_buf.append(line)
             if s.startswith("```"):
                 in_chart = False
-                out["chart"] = "\n".join(chart_buf)
+                chart_block = "\n".join(chart_buf)
+                out["chart"] = (
+                    f"{out['chart']}\n\n{chart_block}".strip()
+                    if out.get("chart")
+                    else chart_block
+                )
                 chart_buf = []
             continue
         if s.startswith("```excel") or s.startswith("```excel-report"):
@@ -291,34 +324,55 @@ def parse_markdown_blocks(raw: str) -> Dict[str, Any]:
             continue
         # Table: lines with |
         if "|" in line:
-            if in_table:
-                table_buf.append(line)
-            else:
-                if table_buf:
-                    out["tables"].append("\n".join(table_buf))
-                    table_buf = []
+            if not in_table:
+                # Transitioning to in_table. Check pending_lines for a heading.
+                heading_line = None
+                for idx in range(len(pending_lines) - 1, -1, -1):
+                    p_line = pending_lines[idx]
+                    ps = p_line.strip()
+                    if not ps:
+                        continue
+                    if ps.startswith("###") or ps.startswith("##") or (ps.startswith("**") and ps.endswith("**")):
+                        heading_line = pending_lines.pop(idx)
+                    break
+                
                 in_table = True
-                table_buf.append(line)
+                if heading_line is not None:
+                    table_buf.append(heading_line)
+            table_buf.append(line)
             continue
+        
         if in_table:
             in_table = False
             if table_buf:
                 out["tables"].append("\n".join(table_buf))
-            table_buf = []
+                table_buf = []
         # **X:** before any table = summary; after tables = notes
         if s.startswith("**") and ":**" in s:
             if not out["tables"]:
                 summary_lines.append(s)
             else:
-                notes_lines.append(s)
+                notes_lines.append(line)
             continue
         if "---" in line:
             continue
-        if out["tables"] and s and (s.startswith("**") or "Nguồn" in s or "Lưu ý" in s):
-            notes_lines.append(s)
+        if s:
+            pending_lines.append(line)
 
-    if table_buf:
+    if in_table and table_buf:
         out["tables"].append("\n".join(table_buf))
+        table_buf = []
+
+    # Distribute remaining pending lines
+    for line in pending_lines:
+        s = line.strip()
+        if not s:
+            continue
+        if not out["tables"]:
+            summary_lines.append(s)
+        else:
+            notes_lines.append(line)
+
     if summary_lines:
         out["summary"] = "\n".join(summary_lines)
     if notes_lines:

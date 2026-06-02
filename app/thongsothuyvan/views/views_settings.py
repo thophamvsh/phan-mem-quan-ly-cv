@@ -10,19 +10,12 @@ from ..plants import HYDROLOGY_PLANTS, get_hydrology_plants, normalize_plant_cod
 
 
 def get_year_weeks(year):
-    current = date(year, 1, 1)
-    end_of_year = date(year, 12, 31)
+    last_iso_week = date(year, 12, 28).isocalendar().week
     weeks = []
-    week_number = 1
 
-    while current <= end_of_year:
-        if week_number == 1:
-            week_start = current
-        else:
-            week_start = current + timedelta(days=(7 - current.weekday()) % 7)
-        if week_start > end_of_year:
-            break
-        week_end = min(week_start + timedelta(days=6), end_of_year)
+    for week_number in range(1, last_iso_week + 1):
+        week_start = date.fromisocalendar(year, week_number, 1)
+        week_end = week_start + timedelta(days=6)
         weeks.append(
             {
                 "week": week_number,
@@ -30,9 +23,6 @@ def get_year_weeks(year):
                 "end_date": week_end,
             }
         )
-        current = week_end + timedelta(days=1)
-        week_number += 1
-
     return weeks
 
 
@@ -257,6 +247,7 @@ class HydrologySettingsAPIView(APIView):
         annual = request.data.get("annual") or {}
         monthly = request.data.get("monthly") or {}
         weekly = request.data.get("weekly") or []
+        valid_week_numbers = {week["week"] for week in get_year_weeks(year)}
         changed = 0
 
         try:
@@ -305,13 +296,18 @@ class HydrologySettingsAPIView(APIView):
 
             for row in weekly:
                 try:
+                    week_number = int(row.get("week") or 0)
                     target_date = datetime.strptime(
                         row.get("start_date"),
                         "%Y-%m-%d",
                     ).date()
+                    end_date = datetime.strptime(
+                        row.get("end_date"),
+                        "%Y-%m-%d",
+                    ).date()
                 except (TypeError, ValueError):
                     continue
-                if target_date.year != year:
+                if week_number not in valid_week_numbers:
                     continue
 
                 weekly_fields = {
@@ -339,7 +335,6 @@ class HydrologySettingsAPIView(APIView):
                         continue
                     if not user_can_access_plant(request.user, nhamay):
                         continue
-                    week_number = row.get("week") or 0
                     obj, _created = upsert_hydrology_setting(
                         request.user,
                         nhamay,
@@ -348,12 +343,9 @@ class HydrologySettingsAPIView(APIView):
                         {
                             **values,
                             "tuan_bat_dau": target_date,
-                            "tuan_ket_thuc": datetime.strptime(
-                                row.get("end_date"),
-                                "%Y-%m-%d",
-                            ).date(),
+                            "tuan_ket_thuc": end_date,
                         },
-                        tuan=int(week_number),
+                        tuan=week_number,
                     )
                     if obj:
                         changed += 1

@@ -15,7 +15,7 @@ from ..services.comparative_service import ComparativeAnalysisService
 from ..services.qve_analysis_service import QveAnalysisService
 from ..services.hierarchical_service import HierarchicalStatisticsService
 from ..services.rainfall_service import RainfallService
-from ..services.forecast_service import ForecastService
+from ..services.forecast_service import ForecastServiceVS
 from .tool_definitions import (
     operational_data_function,
     comparative_analysis_function,
@@ -33,7 +33,7 @@ _comparative_service = ComparativeAnalysisService()
 _qve_analysis_service = QveAnalysisService()
 _hierarchical_service = HierarchicalStatisticsService()
 _rainfall_service = RainfallService()
-_forecast_service = ForecastService()
+_forecast_service = ForecastServiceVS()
 
 # Export tools list
 VINHSON_TOOLS = [
@@ -62,7 +62,7 @@ def handle_vinhson_tool_calls(tool_call):
     if tool_name == "get_vinhson_operational_data":
         date = arguments.get('date')
         num_days = arguments.get('num_days', 7)
-        reservoir = arguments.get('reservoir', 'Vinh Son -A')
+        reservoir = arguments.get('reservoir', 'All')
         start_date = arguments.get('start_date')
         end_date = arguments.get('end_date')
         result = _operational_service.get_operational_data(date, num_days, reservoir, start_date, end_date)
@@ -70,7 +70,7 @@ def handle_vinhson_tool_calls(tool_call):
     elif tool_name == "get_vinhson_comparative_analysis":
         start_date = arguments.get('start_date')
         end_date = arguments.get('end_date')
-        reservoir = arguments.get('reservoir', 'Vinh Son -A')
+        reservoir = arguments.get('reservoir', 'All')
         parameters = arguments.get('parameters', None)
         result = _comparative_service.get_comparative_analysis(start_date, end_date, reservoir, parameters)
 

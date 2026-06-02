@@ -89,8 +89,10 @@ def _select_single_songhinh_rainfall_call(user_text, tool_calls):
         for tool_call in tool_calls
         if _tool_name(tool_call).startswith("get_songhinh_rainfall_")
     ]
-    if len(rainfall_calls) <= 1:
+    if not rainfall_calls:
         return None
+    if len(rainfall_calls) == 1:
+        return rainfall_calls[0]
 
     def score(tool_call):
         name = _tool_name(tool_call)
@@ -117,24 +119,89 @@ def _select_single_songhinh_rainfall_call(user_text, tool_calls):
     return max(rainfall_calls, key=score)
 
 
+def _select_single_vinhson_rainfall_call(user_text, tool_calls):
+    normalized = _normalize_text(user_text)
+    if "vinh son" not in normalized and "vinhson" not in normalized and "vs" not in normalized:
+        return None
+    if "mua" not in normalized and "rain" not in normalized:
+        return None
+
+    rainfall_calls = [
+        tool_call
+        for tool_call in tool_calls
+        if _tool_name(tool_call).startswith("get_vinhson_rainfall_")
+    ]
+    if not rainfall_calls:
+        return None
+    if len(rainfall_calls) == 1:
+        return rainfall_calls[0]
+
+    def score(tool_call):
+        name = _tool_name(tool_call)
+        args = _tool_arguments(tool_call)
+        if name == "get_vinhson_rainfall_statistics":
+            period_type = args.get("period_type")
+            if period_type == "year" and ("nam" in normalized or "year" in normalized):
+                return 100
+            if period_type == "month" and "thang" in normalized:
+                return 95
+            if period_type == "week" and "tuan" in normalized:
+                return 90
+            return 80
+        if name == "get_vinhson_rainfall_daily_statistics":
+            if "tu ngay" in normalized or "den ngay" in normalized:
+                return 75
+            return 30
+        if name == "get_vinhson_rainfall_range_statistics":
+            if "tu thang" in normalized or "den thang" in normalized:
+                return 70
+            return 25
+        return 0
+
+    return max(rainfall_calls, key=score)
+
+
 def _filter_tool_calls(user_text, tool_calls):
     calls = _dedupe_tool_calls(list(tool_calls or []))
-    selected_rainfall = _select_single_songhinh_rainfall_call(user_text, calls)
-    if selected_rainfall:
-        normalized = _normalize_text(user_text)
-        needs_non_rainfall_data = any(
-            keyword in normalized
-            for keyword in ("qve", "luu luong", "muc nuoc", "mnh", "san luong")
-        )
-        if needs_non_rainfall_data:
-            non_rainfall_calls = [
-                tool_call
-                for tool_call in calls
-                if not _tool_name(tool_call).startswith("get_songhinh_rainfall_")
-            ]
-            return [selected_rainfall] + non_rainfall_calls
-        return [selected_rainfall]
-    return calls
+    selected_sh_rainfall = _select_single_songhinh_rainfall_call(user_text, calls)
+    selected_vs_rainfall = _select_single_vinhson_rainfall_call(user_text, calls)
+
+    normalized = _normalize_text(user_text)
+    needs_non_rainfall_data = any(
+        keyword in normalized
+        for keyword in ("qve", "luu luong", "muc nuoc", "mnh", "san luong")
+    )
+
+    filtered = []
+    for call in calls:
+        name = _tool_name(call)
+        if name.startswith("get_songhinh_rainfall_"):
+            if selected_sh_rainfall:
+                if call == selected_sh_rainfall:
+                    filtered.append(call)
+            else:
+                filtered.append(call)
+        elif name.startswith("get_vinhson_rainfall_"):
+            if selected_vs_rainfall:
+                if call == selected_vs_rainfall:
+                    filtered.append(call)
+            else:
+                filtered.append(call)
+        else:
+            # Non-rainfall call
+            is_sh_call = "songhinh" in name or "songinh" in name
+            is_vs_call = "vinhson" in name or "vinh_son" in name
+
+            if needs_non_rainfall_data:
+                filtered.append(call)
+            else:
+                if is_sh_call and selected_sh_rainfall:
+                    continue
+                if is_vs_call and selected_vs_rainfall:
+                    continue
+                filtered.append(call)
+
+    return filtered
 
 
 def _lazy_import_tools():
@@ -142,8 +209,19 @@ def _lazy_import_tools():
     from ai_tools.water_tools.runtime.handler import handle_water_tool_call, handle_tool_calls
     from ai_tools.songhinh_tools import SONGHINH_TOOLS, handle_songhinh_tool_calls
     from ai_tools.vinhson_tools import VINHSON_TOOLS, handle_vinhson_tool_calls
+    from ai_tools.analysis_tools import ANALYSIS_TOOLS, handle_analysis_tool_call
 
-    return TOOLS, handle_water_tool_call, handle_tool_calls, SONGHINH_TOOLS, handle_songhinh_tool_calls, VINHSON_TOOLS, handle_vinhson_tool_calls
+    return (
+        TOOLS,
+        handle_water_tool_call,
+        handle_tool_calls,
+        SONGHINH_TOOLS,
+        handle_songhinh_tool_calls,
+        VINHSON_TOOLS,
+        handle_vinhson_tool_calls,
+        ANALYSIS_TOOLS,
+        handle_analysis_tool_call,
+    )
 
 
 def _resolve_model(provider, model):
@@ -216,8 +294,10 @@ def _get_tools_and_handlers(user=None):
         handle_songhinh_tool_calls,
         VINHSON_TOOLS,
         handle_vinhson_tool_calls,
+        ANALYSIS_TOOLS,
+        handle_analysis_tool_call,
     ) = _lazy_import_tools()
-    all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS
+    all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS + ANALYSIS_TOOLS
     if user is not None:
         all_tools = filter_ai_tools_for_user(user, all_tools)
     return (
@@ -226,6 +306,7 @@ def _get_tools_and_handlers(user=None):
         handle_water_tool_calls,
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
+        handle_analysis_tool_call,
     )
 
 
@@ -234,13 +315,15 @@ def _ensure_tool_allowed(user, tool_name):
         raise AiToolsError("Ban khong co quyen su dung du lieu nha may nay.")
 
 
-def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls):
+def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls, handle_analysis_tool_call):
     tool_name = tool_call.function.name
     _ensure_tool_allowed(user, tool_name)
     if "songhinh" in tool_name.lower() or "songinh" in tool_name.lower():
         return handle_songhinh_tool_calls(tool_call)
     if "vinhson" in tool_name.lower():
         return handle_vinhson_tool_calls(tool_call)
+    if tool_name.lower() in {"analyze_hydro_data", "compare_hydro_periods"}:
+        return handle_analysis_tool_call(tool_call)
     return handle_water_tool_call(tool_call)
 
 
@@ -260,6 +343,7 @@ def _run_openai_chat(*, user, content, session_id, model):
         handle_water_tool_calls,
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
+        handle_analysis_tool_call,
     ) = _get_tools_and_handlers(user)
 
     client = OpenAI(api_key=api_key)
@@ -293,6 +377,8 @@ def _run_openai_chat(*, user, content, session_id, model):
                     tool_results.append(handle_songhinh_tool_calls(tool_call))
                 elif "vinhson" in tool_call.function.name.lower():
                     tool_results.append(handle_vinhson_tool_calls(tool_call))
+                elif tool_call.function.name.lower() in {"analyze_hydro_data", "compare_hydro_periods"}:
+                    tool_results.append(handle_analysis_tool_call(tool_call))
                 else:
                     tool_results.append(handle_water_tool_call(tool_call))
             except Exception as exc:
@@ -364,6 +450,7 @@ def _run_anthropic_chat(*, user, content, session_id, model):
         _handle_water_tool_calls,
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
+        handle_analysis_tool_call,
     ) = _get_tools_and_handlers(user)
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -405,6 +492,7 @@ def _run_anthropic_chat(*, user, content, session_id, model):
                 handle_water_tool_call,
                 handle_songhinh_tool_calls,
                 handle_vinhson_tool_calls,
+                handle_analysis_tool_call,
             )
             tool_results.append(result)
             tool_result_by_id[tool_call.id] = result["content"] if isinstance(result, dict) else str(result)

@@ -225,7 +225,7 @@ core/sheets_client.py (Google Sheets API)
 - **Mục đích**: Thống kê lượng mưa
 - **Class**: `RainfallService`
 - **Dependencies**:
-  - `supabase_client` (external) - Query rainfall data từ Supabase
+  - `hydro_data_repository` / `thuyvan_data_client` - Query rainfall data từ Django models trong app `thongsothuyvan`
   - `parse_date` (utils)
 - **Methods**:
   - `get_rainfall_statistics()` - Thống kê theo year/month/week
@@ -266,7 +266,7 @@ core/sheets_client.py (Google Sheets API)
 │                    External Dependencies                     │
 │  - gspread (Google Sheets API)                              │
 │  - google.oauth2.service_account                            │
-│  - supabase_client (for rainfall)                           │
+│  - hydro_data_repository / thuyvan_data_client (rainfall)   │
 └─────────────────────────────────────────────────────────────┘
                             ↑
                             │

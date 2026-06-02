@@ -119,6 +119,31 @@ $$
 **✅ Kết luận:** Để mực nước {direction} từ {start_level}m đến {end_level}m trong {time_days} ngày, với Qve = {inflow_rate:.2f} m³/s và Qcm = {turbine_discharge:.2f} m³/s, cần xả qua đập **Qxa = {spillway_discharge:.2f} m³/s**
 """.strip()
 
+        import json
+        chart_json = {
+            "type": "bar",
+            "title": f"Cân bằng lưu lượng dự kiến (m³/s) - Hồ {reservoir}",
+            "data": [
+                {
+                    "ThongSo": "Lưu lượng về (Qve)",
+                    "LuuLuong": round(inflow_rate, 1)
+                },
+                {
+                    "ThongSo": "Lưu lượng chạy máy (Qcm)",
+                    "LuuLuong": round(turbine_discharge, 1)
+                },
+                {
+                    "ThongSo": "Lưu lượng xả đập (Qxa)",
+                    "LuuLuong": round(spillway_discharge, 1)
+                }
+            ],
+            "xKey": "ThongSo",
+            "yKeys": ["LuuLuong"],
+            "colors": ["#3b82f6"],
+            "unit": " m³/s"
+        }
+        result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
         return result
 
     except Exception as e:
@@ -472,6 +497,26 @@ def calculate_spillway_ramping(start_level, end_level, time_days, inflow_rate, t
 - Kiểm chứng toán học
 """.strip()
 
+        import json
+        chart_data = []
+        for idx, strat in enumerate(final_strategies, 1):
+            chart_data.append({
+                "PhuongAn": f"Phương án {idx}",
+                "Qxa bắt đầu": round(strat['start'], 1),
+                "Qxa kết thúc": round(strat['end'], 1),
+                "Qxa trung bình": round(strat['avg'], 1)
+            })
+        chart_json = {
+            "type": "bar",
+            "title": "So sánh lưu lượng xả giữa các phương án đề xuất (m³/s)",
+            "data": chart_data,
+            "xKey": "PhuongAn",
+            "yKeys": ["Qxa bắt đầu", "Qxa kết thúc", "Qxa trung bình"],
+            "colors": ["#10b981", "#ef4444", "#3b82f6"],
+            "unit": " m³/s"
+        }
+        result += f"\n\n```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```\n"
+
         return result
 
     except Exception as e:
@@ -532,7 +577,7 @@ def create_detailed_spillway_schedule(start_discharge, end_discharge, time_days,
 
                 # Calculate how many steps to ramp up
                 num_total_steps = int(time_days * 24 / cycle_hours)
-                num_ramp_steps = int((end_discharge - start_discharge) / step_size) + 1
+                num_ramp_steps = int(abs(end_discharge - start_discharge) / step_size) + 1
                 num_stay_steps = max(0, num_total_steps - num_ramp_steps)
 
                 print(f"[INFO] Steps: {num_total_steps} total ({num_ramp_steps} ramp, {num_stay_steps} stay at max)", flush=True)
@@ -652,7 +697,10 @@ def create_detailed_spillway_schedule(start_discharge, end_discharge, time_days,
                 print(f"[DEBUG] Updated for next step: H={current_water_level:.2f}m, V={current_volume:.3f} tr.m³", flush=True)
 
             time_elapsed += cycle_hours
-            current_qxa = min(current_qxa + step_size, end_discharge)
+            if end_discharge >= start_discharge:
+                current_qxa = min(current_qxa + step_size, end_discharge)
+            else:
+                current_qxa = max(current_qxa - step_size, end_discharge)
 
         # Calculate actual average
         total_qxa_hours = sum(s['qxa'] * (s['time_end'] - s['time_start']) for s in schedule)
@@ -771,8 +819,51 @@ $$
 ---
 
 ✅ **Kết luận:** Lịch vận hành trên đảm bảo an toàn, khả thi, và dễ thực hiện.
-
 """.strip()
+
+        import json
+        # 1. Biểu đồ lưu lượng
+        flow_chart_data = []
+        for idx, step in enumerate(schedule, 1):
+            time_label = f"{int(step['time_start'])}-{int(step['time_end'])}h"
+            flow_chart_data.append({
+                "Buoc": f"B{idx} ({time_label})",
+                "Qxa (Xả đập)": round(step['qxa'], 1),
+                "Qcm (Chạy máy)": round(step['qcm'], 1),
+                "Qve (Lưu lượng về)": round(step['qve'], 1)
+            })
+            
+        flow_chart_json = {
+            "type": "line",
+            "title": f"Biểu đồ tiến trình lưu lượng vận hành qua các bước (m³/s) - Hồ {reservoir}",
+            "data": flow_chart_data,
+            "xKey": "Buoc",
+            "yKeys": ["Qxa (Xả đập)", "Qcm (Chạy máy)", "Qve (Lưu lượng về)"],
+            "colors": ["#ef4444", "#f59e0b", "#3b82f6"],
+            "unit": " m³/s"
+        }
+        result += f"\n\n```chart\n{json.dumps(flow_chart_json, ensure_ascii=False, indent=2)}\n```\n"
+        
+        # 2. Biểu đồ mực nước hồ (nếu có)
+        if has_water_level:
+            wl_chart_data = []
+            for idx, step in enumerate(schedule, 1):
+                time_label = f"{int(step['time_start'])}-{int(step['time_end'])}h"
+                wl_val = step.get('water_level_end')
+                wl_chart_data.append({
+                    "Buoc": f"B{idx} ({time_label})",
+                    "MNH (Mực nước hồ)": round(wl_val, 2) if wl_val is not None else None
+                })
+            wl_chart_json = {
+                "type": "line",
+                "title": f"Biểu đồ tiến trình mực nước hồ dự kiến qua các bước (m) - Hồ {reservoir}",
+                "data": wl_chart_data,
+                "xKey": "Buoc",
+                "yKeys": ["MNH (Mực nước hồ)"],
+                "colors": ["#10b981"],
+                "unit": " m"
+            }
+            result += f"\n\n```chart\n{json.dumps(wl_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
         return result
 

@@ -315,6 +315,10 @@ def calculate_flow_rate(start_level, end_level, time_days, discharge_rate=None, 
         flow_per_day = flow_per_day_net + discharge_per_day
         flow_m3_per_second = flow_per_second_net + discharge_rate
 
+        if discharge_rate > 0 and flow_m3_per_second < 0:
+            action_name = "giảm" if volume_diff < 0 else "tăng"
+            return f"⚠️ **Không khả thi:** Để {action_name} mực nước về {end_level}m trong {time_days} ngày, lưu lượng xả hiện tại ({discharge_rate:.2f} m³/s) là quá nhỏ so với tốc độ thay đổi mực nước yêu cầu. Cần lưu lượng xả tối thiểu là {abs(flow_per_second_net):.2f} m³/s khi lưu lượng về bằng 0. Vui lòng tăng lưu lượng xả hoặc kéo dài thời gian."
+
         print(f"✓ Calculation: {end_volume} - {start_volume} = {volume_diff} triệu m³", flush=True)
         if discharge_rate > 0:
             print(f"✓ Net flow: {flow_per_second_net:.2f} m³/s + Discharge: {discharge_rate:.2f} m³/s", flush=True)

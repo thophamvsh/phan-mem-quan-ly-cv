@@ -18,7 +18,7 @@ from .hours_service import HoursService
 
 
 class OperationalService:
-    """Service for retrieving operational data from Google Sheets"""
+    """Service for retrieving operational data from CSDL thongsothuyvan"""
 
     def __init__(self):
         self.sheets_client = SheetsClient()
@@ -28,12 +28,12 @@ class OperationalService:
         self,
         date: Optional[str] = None,
         num_days: int = 7,
-        reservoir: str = "Vinh Son -A",
+        reservoir: str = "All",
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> str:
         """
-        Lấy dữ liệu vận hành từ Google Sheets cho Vĩnh Sơn.
+        Lấy dữ liệu vận hành từ CSDL thongsothuyvan cho Vĩnh Sơn.
 
         Kết quả gồm hai bảng:
         - Bảng 1 - Thông số thủy văn: Ngày, (Hồ nếu All), Mực nước, Dung tích, Qve, Qcm, Qxl
@@ -54,14 +54,14 @@ class OperationalService:
             client, worksheet, worksheet_hours = self.sheets_client.get_client()
 
             if not worksheet:
-                return """### Lỗi kết nối Google Sheets
+                return """### Lỗi kết nối CSDL thongsothuyvan
 
-Không thể kết nối Google Sheets. Vui lòng kiểm tra:
+Không thể kết nối CSDL thongsothuyvan. Vui lòng kiểm tra:
 
-1. **Service Account File**: Kiểm tra file vinhson-account-key.json có tồn tại
-2. **Google Sheets API**: Đảm bảo đã enable Google Sheets API trong Google Cloud Console
-3. **Spreadsheet Sharing**: Kiểm tra spreadsheet đã được share với service account email
-4. **Worksheet Name**: Kiểm tra tên sheet là "VinhSon"
+1. **Kết nối CSDL**: Kiểm tra PostgreSQL/Django database đang hoạt động
+2. **Dữ liệu thủy văn**: Kiểm tra bảng app/thongsothuyvan đã có dữ liệu tương ứng
+3. **Migration/model**: Kiểm tra migration và model thongsothuyvan
+4. **Bộ lọc nhà máy/hồ**: Kiểm tra nha_may và hồ trong dữ liệu là đúng
 
 Xem console log để biết chi tiết lỗi."""
 
@@ -72,7 +72,7 @@ Xem console log để biết chi tiết lỗi."""
             all_data = retry_with_backoff(fetch_operational_data, max_retries=3, initial_delay=1)
 
             if len(all_data) < 3:
-                return "Không có dữ liệu trong Google Sheets"
+                return "Không có dữ liệu trong CSDL thongsothuyvan"
 
             headers = all_data[1]
             data_rows = all_data[2:]
@@ -198,7 +198,7 @@ Xem console log để biết chi tiết lỗi."""
                     # Hai bảng: 1) Thông số thủy văn (mực nước, dung tích, Qve, Qcm, Qxl); 2) Sản lượng điện
                     output = f"""### Dữ liệu vận hành Thủy điện Vĩnh Sơn
 
-**Nguồn:** Google Sheets (Dữ liệu thực tế)
+**Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
 **Khoảng thời gian:** {start_date} đến {end_date}
 **Số bản ghi:** {len(filtered_data)} ngày
 
@@ -293,7 +293,7 @@ Xem console log để biết chi tiết lỗi."""
 
 ---
 
-**Nguồn:** Google Sheets - Thủy điện Vĩnh Sơn
+**Nguồn:** CSDL thongsothuyvan - Thủy điện Vĩnh Sơn
 """
                     return output.strip()
 
@@ -301,7 +301,7 @@ Xem console log để biết chi tiết lỗi."""
                     # Hai bảng: 1) Thông số thủy văn; 2) Sản lượng điện (một hồ)
                     output = f"""### Dữ liệu vận hành Thủy điện Vĩnh Sơn - {reservoir}
 
-**Nguồn:** Google Sheets (Dữ liệu thực tế)
+**Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
 **Khoảng thời gian:** {start_date} đến {end_date}
 **Số bản ghi:** {len(filtered_data)} ngày
 
@@ -393,7 +393,7 @@ Xem console log để biết chi tiết lỗi."""
 
 ---
 
-**Nguồn:** Google Sheets - Thủy điện Vĩnh Sơn
+**Nguồn:** CSDL thongsothuyvan - Thủy điện Vĩnh Sơn
 """
                 return output.strip()
 
@@ -558,7 +558,7 @@ Xem console log để biết chi tiết lỗi."""
                     result = f"""
 ### Dữ liệu vận hành Thủy điện Vĩnh Sơn - {reservoir_name}
 
-**Nguồn:** Google Sheets (Dữ liệu thực tế)
+**Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
 **So sánh:** {date_current} vs. {date_last_year}
 
 ---
@@ -589,7 +589,7 @@ Xem console log để biết chi tiết lỗi."""
 
 ---
 
-**Nguồn:** Google Sheets - Thủy điện Vĩnh Sơn
+**Nguồn:** CSDL thongsothuyvan - Thủy điện Vĩnh Sơn
 
 **Lưu ý:** Hiện tại chỉ có dữ liệu mực nước cho Hồ A (Vinh Son -A). Hồ B và C đã ngừng cập nhật từ năm 2021.
 """
@@ -602,7 +602,7 @@ Xem console log để biết chi tiết lỗi."""
                 result = f"""
 ### Dữ liệu vận hành Thủy điện Vĩnh Sơn - {reservoir}
 
-**Nguồn:** Google Sheets (Dữ liệu thực tế)
+**Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
 **Số bản ghi:** {len(filtered_data)} ngày
 
 ---
@@ -687,11 +687,11 @@ Xem console log để biết chi tiết lỗi."""
 
 ---
 
-**Nguồn:** Google Sheets - Thủy điện Vĩnh Sơn
+**Nguồn:** CSDL thongsothuyvan - Thủy điện Vĩnh Sơn
 """
                 return result.strip()
 
         except Exception as e:
-            error_msg = f"Lỗi khi lấy dữ liệu từ Google Sheets: {str(e)}"
+            error_msg = f"Lỗi khi lấy dữ liệu từ CSDL thongsothuyvan: {str(e)}"
             print(f"[ERROR] {error_msg}", flush=True)
             return error_msg

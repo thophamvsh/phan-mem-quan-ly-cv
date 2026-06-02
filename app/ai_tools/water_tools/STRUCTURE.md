@@ -49,9 +49,9 @@ Re-export tất cả hàm từ các module con trong `core/`.
 
 | Hàm | Mô tả |
 |-----|--------|
-| `interpolate_water_level_from_volume(target_volume, reservoir, hint_level)` | Nội suy tuyến tính ngược: từ dung tích (triệu m³) → mực nước (m). Dùng `query_nearby_water_levels()` từ Supabase để lấy bảng quan hệ H~V, sau đó nội suy giữa 2 điểm gần nhất. Fallback: ước lượng tuyến tính ~23 triệu m³/m (Sông Hinh). |
+| `interpolate_water_level_from_volume(target_volume, reservoir, hint_level)` | Nội suy tuyến tính ngược: từ dung tích (triệu m³) → mực nước (m). Dùng `query_nearby_water_levels()` từ `hydro_data_repository` để lấy bảng quan hệ H~V trong app `thongsothuyvan`, sau đó nội suy giữa 2 điểm gần nhất. Fallback: ước lượng tuyến tính ~23 triệu m³/m (Sông Hinh). |
 
-Phụ thuộc: `supabase_client.interpolate_water_volume`, `supabase_client.query_nearby_water_levels`
+Phụ thuộc: `hydro_data_repository.interpolate_water_volume`, `hydro_data_repository.query_nearby_water_levels`
 
 ---
 
@@ -62,7 +62,7 @@ Phụ thuộc: `supabase_client.interpolate_water_volume`, `supabase_client.quer
 | `get_water_volume(water_level, reservoir)` | Tra cứu dung tích hồ tại một mực nước. Trả về kết quả nội suy tuyến tính (chuẩn thủy văn) với công thức LaTeX chi tiết. Hỗ trợ 3 phương pháp: `exact` (trùng khớp), `interpolated` (nội suy), `nearest` (gần nhất). |
 | `calculate_volume_difference(start_level, end_level, reservoir)` | Tính chênh lệch dung tích ΔV giữa 2 mực nước. Công thức: `ΔV = V(end) - V(start)`. Trả về bảng so sánh và kết luận cần thêm/xả bao nhiêu nước. |
 
-Phụ thuộc: `supabase_client.interpolate_water_volume`
+Phụ thuộc: `hydro_data_repository.interpolate_water_volume`
 
 ---
 
@@ -74,7 +74,7 @@ Phụ thuộc: `supabase_client.interpolate_water_volume`
 | `calculate_time_needed(start_level, end_level, inflow_rate, discharge_rate, reservoir)` | Tính thời gian cần thiết để thay đổi mực nước với lưu lượng cho trước. Công thức: `t = |ΔV| / |Q_thuần|` với `Q_thuần = Q_vào - Q_xả`. |
 | `calculate_level_change(qve, qcm, time_days, start_level, reservoir)` | Tính mực nước cuối sau khoảng thời gian với Qve và Qcm cho trước. Công thức: `ΔV = Q_thuần × t`, sau đó nội suy ngược V → H. Trả về mực nước cuối, độ thay đổi (m), tốc độ (cm/ngày, cm/giờ). |
 
-Phụ thuộc: `supabase_client.interpolate_water_volume`, `core.interpolation.interpolate_water_level_from_volume`
+Phụ thuộc: `hydro_data_repository.interpolate_water_volume`, `core.interpolation.interpolate_water_level_from_volume`
 
 ---
 
@@ -98,7 +98,7 @@ Không phụ thuộc module ngoài (tính toán thuần túy).
 | `calculate_spillway_ramping(start_level, end_level, time_days, inflow_rate, turbine_discharge, max_discharge, start_discharge, reservoir)` | Tính lịch xả tràn tăng dần (tool phức tạp nhất). Tự động tính Qxa_avg từ cân bằng nước, sau đó thử nhiều tổ hợp (cycle × step × start) để tìm 3-4 phương án tối ưu. Sắp xếp theo độ chính xác Qxa_avg và độ lệch thời gian. |
 | `create_detailed_spillway_schedule(start_discharge, end_discharge, time_days, cycle_hours, step_size, inflow_rate, turbine_discharge, start_level, end_level, reservoir)` | Tạo lịch vận hành chi tiết theo giờ (Step 2 - sau khi user chọn phương án). Tính mực nước hồ thay đổi từng bước dùng hệ số dV/dH. Bao gồm: bảng giờ-by-giờ với cột MNH, kiểm chứng toán học, hướng dẫn vận hành. |
 
-Phụ thuộc: `supabase_client.interpolate_water_volume`, `core.interpolation.interpolate_water_level_from_volume`
+Phụ thuộc: `hydro_data_repository.interpolate_water_volume`, `core.interpolation.interpolate_water_level_from_volume`
 
 ---
 
@@ -170,7 +170,7 @@ handle_tool_calls(message)
     ↓
 TOOL_REGISTRY[tool_name] → core function
     ↓
-core function gọi Supabase (bảng H~V)
+core function gọi `hydro_data_repository` (Django models trong app `thongsothuyvan`, bảng H~V)
     ↓
 Trả kết quả markdown → OpenAI → User
 ```

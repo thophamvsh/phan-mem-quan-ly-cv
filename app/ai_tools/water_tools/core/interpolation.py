@@ -46,11 +46,22 @@ def interpolate_water_level_from_volume(target_volume, reservoir="Sông Hinh", h
             else:
                 ref_record = closest
 
-            # Estimate: ΔH ≈ ΔV / 23 (for Sông Hinh)
-            volume_diff = target_volume - ref_record['Dungtich']
-            estimated_h = ref_record['Mucnuoc'] + (volume_diff / 23)
+            # Calculate dynamic slope (dV/dH) from candidates if possible
+            if len(candidates) >= 2:
+                # Sort candidates by volume distance to target_volume to find nearest slope
+                sorted_candidates = sorted(candidates, key=lambda c: abs(c['Dungtich'] - target_volume))
+                c1 = sorted_candidates[0]
+                c2 = sorted_candidates[1]
+                dh = abs(c1['Mucnuoc'] - c2['Mucnuoc'])
+                dv = abs(c1['Dungtich'] - c2['Dungtich'])
+                slope = dv / dh if dh > 0 else (23.0 if "song hinh" in reservoir.lower() else 2.5)
+            else:
+                slope = 23.0 if "song hinh" in reservoir.lower() else 2.5
 
-            print(f"[ESTIMATE] V={target_volume:.3f} - Using linear estimation from V={ref_record['Dungtich']:.3f}(H={ref_record['Mucnuoc']:.2f}m) → H≈{estimated_h:.2f}m", flush=True)
+            volume_diff = target_volume - ref_record['Dungtich']
+            estimated_h = ref_record['Mucnuoc'] + (volume_diff / slope)
+
+            print(f"[ESTIMATE] V={target_volume:.3f} - Using linear estimation from V={ref_record['Dungtich']:.3f}(H={ref_record['Mucnuoc']:.2f}m) with slope={slope:.3f} → H≈{estimated_h:.2f}m", flush=True)
             return estimated_h
 
         # Get closest points

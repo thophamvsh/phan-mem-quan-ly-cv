@@ -74,6 +74,8 @@ def get_ai_tool_scopes_for_user(user):
 
 def get_ai_tool_scope(tool_name):
     normalized = _normalize_factory_text(tool_name)
+    if normalized in {"analyze_hydro_data", "compare_hydro_periods"}:
+        return AI_TOOL_SCOPE_WATER
     if "songhinh" in normalized or "songinh" in normalized:
         return AI_TOOL_SCOPE_SONGHINH
     if "vinhson" in normalized:

@@ -108,7 +108,7 @@ def get_flood_control_volume(water_level, reservoir="Sông Hinh"):
 
 def get_useful_volume(reservoir="Sông Hinh"):
     """
-    Calculate total useful volume of a reservoir (between MNC and MNDBT)
+    Calculate total useful volume of a reservoir (between dead water level and normal water level)
 
     When user asks:
     - "tổng dung tích hữu ích của hồ Sông Hinh"
@@ -141,7 +141,7 @@ def get_useful_volume(reservoir="Sông Hinh"):
     MNC = spec["MNC"]
     MNDBT = spec["MNDBT"]
 
-    # Get volume at MNC and MNDBT
+    # Dead/normal water levels are water levels (m). Their interpolated values are volumes (million m³).
     mnc_result = interpolate_water_volume(MNC, reservoir)
     mndbt_result = interpolate_water_volume(MNDBT, reservoir)
 
@@ -155,33 +155,34 @@ def get_useful_volume(reservoir="Sông Hinh"):
     V_mndbt = mndbt_result['V']
     useful_volume = V_mndbt - V_mnc
 
-    print(f"✓ V(MNC={MNC}m) = {V_mnc:.3f} triệu m³, V(MNDBT={MNDBT}m) = {V_mndbt:.3f} triệu m³", flush=True)
+    print(f"✓ V(dead level={MNC} m) = {V_mnc:.3f} triệu m³, V(normal level={MNDBT} m) = {V_mndbt:.3f} triệu m³", flush=True)
     print(f"✓ Dung tích hữu ích = {useful_volume:.3f} triệu m³", flush=True)
 
     response = f"""
 ### Tổng dung tích hữu ích hồ {reservoir}
 
 #### Thông số mực nước:
-| Thông số | Giá trị |
-|----------|---------|
-| **Mực nước chết (MNC)** | {MNC}m |
-| **Mực nước dâng bình thường (MNDBT)** | {MNDBT}m |
-| **Chênh lệch mực nước** | {MNDBT - MNC:.1f}m |
+
+- **Mực nước chết: {MNC} m**
+- **Mực nước dâng bình thường: {MNDBT} m**
+- **Chênh lệch mực nước: {MNDBT - MNC:.1f} m**
+
+**Lưu ý:** Mực nước chết là **mực nước/cao trình**, đơn vị là **m**. Dung tích tại mực nước chết có đơn vị **triệu m³**.
 
 ---
 
-#### Tra cứu dung tích:
+#### Tra cứu dung tích tại các mực nước:
 
 | Mực nước | Dung tích |
 |-----------|----------|
-| MNC ({MNC}m) | **{V_mnc:.3f} triệu m³** |
-| MNDBT ({MNDBT}m) | **{V_mndbt:.3f} triệu m³** |
+| Mực nước chết ({MNC} m) | **{V_mnc:.3f} triệu m³** |
+| Mực nước dâng bình thường ({MNDBT} m) | **{V_mndbt:.3f} triệu m³** |
 
 ---
 
 #### 📌 Kết quả: Dung tích hữu ích
 
-**Dung tích hữu ích = V(MNDBT) - V(MNC)**
+**Dung tích hữu ích = V(mực nước dâng bình thường) - V(mực nước chết)**
 **= {V_mndbt:.3f} - {V_mnc:.3f} = {useful_volume:.3f} triệu m³**
 
 ---
@@ -195,7 +196,7 @@ def get_useful_volume(reservoir="Sông Hinh"):
 
 def get_water_volume(water_level, reservoir="Sông Hinh"):
     """
-    Query Supabase to get volume based on water level using linear interpolation
+    Query internal hydrological data to get volume based on water level using linear interpolation
     (Hydrological Standard Method)
 
     Args:

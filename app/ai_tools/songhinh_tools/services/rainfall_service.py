@@ -34,6 +34,48 @@ class RainfallService:
     def __init__(self):
         pass
 
+    def _append_excel_block(
+        self,
+        out: str,
+        period_type: str,
+        period_value: Optional[str],
+        start_date: Optional[str],
+        end_date: Optional[str],
+        excel_sheets: list
+    ) -> str:
+        if not excel_sheets:
+            return out
+
+        import json
+        filename = "bao-cao-luong-mua-song-hinh.xlsx"
+        title = "Báo cáo thống kê lượng mưa Sông Hinh"
+        if period_type == "year":
+            y_val = period_value or datetime.now().year
+            filename = f"bao-cao-luong-mua-song-hinh-nam-{y_val}.xlsx"
+            title = f"Báo cáo thống kê lượng mưa năm {y_val} - Sông Hinh"
+        elif period_type == "month":
+            m_val = str(period_value or f"{datetime.now().month}/{datetime.now().year}").replace("/", "-")
+            filename = f"bao-cao-luong-mua-song-hinh-thang-{m_val}.xlsx"
+            title = f"Báo cáo thống kê lượng mưa tháng {m_val} - Sông Hinh"
+        elif period_type == "week":
+            w_val = str(period_value or f"{(datetime.now().day - 1) // 7 + 1}/{datetime.now().month}/{datetime.now().year}").replace("/", "-")
+            filename = f"bao-cao-luong-mua-song-hinh-tuan-{w_val}.xlsx"
+            title = f"Báo cáo thống kê lượng mưa tuần {w_val} - Sông Hinh"
+        elif start_date and end_date:
+            sd_fn = start_date.replace("/", "-")
+            ed_fn = end_date.replace("/", "-")
+            filename = f"bao-cao-luong-mua-song-hinh-ngay-{sd_fn}-den-{ed_fn}.xlsx"
+            title = f"Báo cáo thống kê lượng mưa từ {start_date} đến {end_date} - Sông Hinh"
+
+        excel_json = {
+            "title": title,
+            "fileName": filename,
+            "prompt": "Bạn có muốn xuất kết quả thống kê lượng mưa ra file Excel không?",
+            "sheets": excel_sheets
+        }
+        excel_block = f"\n\n```excel\n{json.dumps(excel_json, ensure_ascii=False, indent=2)}\n```\n"
+        return out + excel_block
+
     def get_rainfall_statistics(
         self,
         period_type: str,
@@ -206,7 +248,34 @@ class RainfallService:
                     }
                     result += f"\n\n```chart\n{json.dumps(comp_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-                result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
+                # Sinh Excel rows cho Year
+                excel_sheets = []
+                excel_rows = []
+                excel_rows.append([f"BÁO CÁO CHI TIẾT LƯỢNG MƯA NĂM {year} - SÔNG HINH"])
+                excel_rows.append([])
+                excel_rows.append(["Tháng"] + station_headers)
+                for m in range(1, 13):
+                    row = [f"Tháng {m}"]
+                    per = monthly_station.get(m, {})
+                    for c in station_columns:
+                        row.append(round(per.get(c, 0.0), 1) if m in monthly_station and per else "-")
+                    excel_rows.append(row)
+                
+                excel_rows.append([])
+                excel_rows.append([f"BÁO CÁO SO SÁNH TỔNG LƯỢNG MƯA HẰNG THÁNG QUA CÁC NĂM"])
+                excel_rows.append([])
+                excel_rows.append(["Tháng"] + [f"{y} (mm)" for y in years])
+                for m in range(1, 13):
+                    row_vals = [monthly_total_by_year.get((m, y), 0.0) for y in years]
+                    excel_rows.append([f"Tháng {m}"] + [round(v, 1) for v in row_vals])
+                
+                excel_sheets.append({
+                    "name": f"Nam {year}",
+                    "rows": excel_rows
+                })
+
+                result += "\n**Nguồn:** CSDL thongsothuyvan - TramDoMuaVrain"
+                result = self._append_excel_block(result, "year", period_value, None, None, excel_sheets)
                 return result.strip()
 
             elif period_type == "month":
@@ -293,7 +362,7 @@ class RainfallService:
                 year_cols = " | ".join([f"{y} (mm)" for y in years])
                 result += f"""
 ---
-### Bảng 2 – Tổng lượng mưa năm {year} và 3 năm liền kề
+### Bảng so sánh các năm cùng kỳ
 | Tháng | {year_cols} |
 |-------|{"|".join(["-------------"] * 4)}|
 """
@@ -337,7 +406,35 @@ class RainfallService:
                 }
                 result += f"\n\n```chart\n{json.dumps(comp_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-                result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
+                # Sinh Excel rows cho Month
+                excel_sheets = []
+                excel_rows = []
+                excel_rows.append([f"BÁO CÁO LƯỢNG MƯA HÀNG NGÀY THÁNG {month}/{year} - SÔNG HINH"])
+                excel_rows.append([])
+                excel_rows.append(["Ngày"] + station_headers + ["Tổng (mm)"])
+                for day in range(1, 32):
+                    row = [str(day)]
+                    day_total = 0.0
+                    for col in station_columns:
+                        v = daily_data_by_station[col][day - 1]
+                        row.append(round(v, 1))
+                        day_total += v
+                    row.append(round(day_total, 1))
+                    excel_rows.append(row)
+                
+                excel_rows.append([])
+                excel_rows.append([f"BÁO CÁO SO SÁNH TỔNG LƯỢNG MƯA THÁNG {month} QUA CÁC NĂM CÙNG KỲ"])
+                excel_rows.append([])
+                excel_rows.append(["Tháng"] + [f"{y} (mm)" for y in years])
+                excel_rows.append([f"Tháng {month}"] + [round(monthly_total_by_year.get((month, y), 0.0), 1) for y in years])
+                
+                excel_sheets.append({
+                    "name": f"Thang {month}-{year}",
+                    "rows": excel_rows
+                })
+
+                result += "\n**Nguồn:** CSDL thongsothuyvan - TramDoMuaVrain"
+                result = self._append_excel_block(result, "month", period_value, None, None, excel_sheets)
                 return result.strip()
 
             elif period_type == "week":
@@ -430,7 +527,42 @@ class RainfallService:
                 import json
                 result += f"\n\n```chart\n{json.dumps(week_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
-                result += "\n**Nguồn:** Supabase - Bảng Do_Mua_VSH"
+                # Sinh Excel rows cho Week
+                excel_sheets = []
+                excel_rows = []
+                excel_rows.append([f"BÁO CÁO SO SÁNH LƯỢNG MƯA TUẦN {week_num} THÁNG {month} QUA 3 NĂM - SÔNG HINH"])
+                excel_rows.append([])
+                excel_rows.append(["Ngày", f"{year} (mm)", f"{year-1} (mm)", f"{year-2} (mm)"])
+                for d in range(sd, min(ed + 1, 32)):
+                    row = [f"{d}/{month}"]
+                    for y in [year, year - 1, year - 2]:
+                        total = 0.0
+                        has = False
+                        for rec in all_records:
+                            ds = rec.get("Thoi_gian", "")
+                            if not ds:
+                                continue
+                            try:
+                                dt = datetime.strptime(ds, "%Y-%m-%d")
+                            except Exception:
+                                continue
+                            if dt.year == y and dt.month == month and dt.day == d:
+                                for c in station_columns:
+                                    v = parse_float_loose(rec.get(c))
+                                    if v is not None:
+                                        total += v
+                                        has = True
+                                break
+                        row.append(round(total, 1) if has else "-")
+                    excel_rows.append(row)
+                
+                excel_sheets.append({
+                    "name": f"Tuan {week_num}-{month}-{year}",
+                    "rows": excel_rows
+                })
+
+                result += "\n**Nguồn:** CSDL thongsothuyvan - TramDoMuaVrain"
+                result = self._append_excel_block(result, "week", period_value, None, None, excel_sheets)
                 return result.strip()
 
             else:
@@ -579,13 +711,41 @@ class RainfallService:
             import json
             result += f"\n\n```chart\n{json.dumps(range_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
+            # Sinh Excel rows cho Range
+            excel_sheets = []
+            excel_rows = []
+            excel_rows.append([f"BÁO CÁO TỔNG LƯỢNG MƯA THEO THÁNG - SÔNG HINH"])
+            excel_rows.append([f"Từ tháng {start_month}/{start_year} đến tháng {end_month}/{end_year}"])
+            excel_rows.append([])
+            excel_rows.append(["Tháng/Năm", "Tổng Lượng Mưa (mm)"])
+            for (m, y) in months:
+                val = monthly_totals[(m, y)]
+                excel_rows.append([f"{m}/{y}", round(val, 1) if val is not None else "-"])
+            
+            excel_rows.append([])
+            excel_rows.append([f"BÁO CÁO CHI TIẾT LƯỢNG MƯA THEO TRẠM - SÔNG HINH"])
+            excel_rows.append([])
+            excel_rows.append(["Tháng/Năm"] + station_headers)
+            for (m, y) in months:
+                per = monthly_station.get((m, y), {})
+                row = [f"{m}/{y}"]
+                for c in station_columns:
+                    row.append(round(per.get(c, 0.0), 1) if per else "-")
+                excel_rows.append(row)
+            
+            excel_sheets.append({
+                "name": "Khoang thoi gian",
+                "rows": excel_rows
+            })
+
             result += f"""
 
 ---
 
 **Tổng lượng mưa trong khoảng thời gian:** {range_total:.1f} mm
-**Nguồn:** Supabase - Bảng Do_Mua_VSH
+**Nguồn:** CSDL thongsothuyvan - TramDoMuaVrain
 """
+            result = self._append_excel_block(result, "range", None, f"01/{start_month}/{start_year}", f"01/{end_month}/{end_year}", excel_sheets)
             return result.strip()
 
         except Exception as e:
@@ -714,13 +874,42 @@ class RainfallService:
             import json
             result += f"\n\n```chart\n{json.dumps(daily_chart_json, ensure_ascii=False, indent=2)}\n```\n"
 
+            # Sinh Excel rows cho Daily
+            excel_sheets = []
+            excel_rows = []
+            excel_rows.append([f"BÁO CÁO LƯỢNG MƯA CHI TIẾT THEO NGÀY - SÔNG HINH"])
+            excel_rows.append([f"Từ {start_date} đến {end_date}"])
+            excel_rows.append([])
+            excel_rows.append(["Ngày"] + station_headers + ["Tổng (mm)"])
+            for date_key in sorted_dates:
+                row_data = [date_key]
+                day_total = 0.0
+                for col in station_columns:
+                    val = daily_data[date_key].get(col, 0.0)
+                    if col in daily_data[date_key]:
+                        row_data.append(round(val, 1))
+                    else:
+                        row_data.append("-")
+                    day_total += val
+                row_data.append(round(day_total, 1))
+                excel_rows.append(row_data)
+            
+            excel_rows.append([])
+            excel_rows.append(["Tổng lượng mưa trong khoảng thời gian", round(total_range, 1)])
+            
+            excel_sheets.append({
+                "name": "Chi tiet ngay",
+                "rows": excel_rows
+            })
+
             result += f"""
 ---
 
 **Tổng lượng mưa trong khoảng thời gian:** {total_range:.1f} mm
 **Số ngày có dữ liệu:** {len(sorted_dates)} ngày
-**Nguồn:** Supabase - Bảng Do_Mua_VSH
+**Nguồn:** CSDL thongsothuyvan - TramDoMuaVrain
 """
+            result = self._append_excel_block(result, "daily", None, start_date, end_date, excel_sheets)
             return result.strip()
 
         except Exception as e:

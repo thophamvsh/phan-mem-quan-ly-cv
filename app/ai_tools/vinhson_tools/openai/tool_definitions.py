@@ -66,7 +66,7 @@ SOURCE: Google Sheets - Vinh Son hydropower plant (3 reservoirs: A, B, C)
             "num_days": {"type": "number", "description": "Number of recent days to retrieve. Default: 7. Ignored if 'date' or start_date/end_date is specified."},
             "start_date": {"type": "string", "description": "Optional: Start date in format 'DD/MM/YYYY' (e.g., '1/1/2026'). Use with end_date to get data for a date range. Use this when user asks 'báo cáo từ X đến Y' or 'dữ liệu từ X đến Y'."},
             "end_date": {"type": "string", "description": "Optional: End date in format 'DD/MM/YYYY' (e.g., '26/1/2026'). Must be provided if start_date is specified."},
-            "reservoir": {"type": "string", "enum": ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C", "All"], "description": "Optional: Specific reservoir. Default: 'Vinh Son -A'. Use 'All' to get data for all 3 reservoirs."}
+            "reservoir": {"type": "string", "enum": ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C", "All"], "default": "All", "description": "Optional: Specific reservoir. Default: 'All'. Use 'All' to get data for all 3 reservoirs."}
         },
         "required": [],
         "additionalProperties": False
@@ -97,7 +97,7 @@ KHÔNG DÙNG KHI:
         "properties": {
             "start_date": {"type": "string", "description": "Start date in format 'DD/MM/YYYY'"},
             "end_date": {"type": "string", "description": "End date in format 'DD/MM/YYYY'"},
-            "reservoir": {"type": "string", "enum": ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C", "All"], "description": "Optional: Specific reservoir. Default: 'Vinh Son -A'. Use 'All' to get data for all 3 reservoirs (A, B, C)."},
+            "reservoir": {"type": "string", "enum": ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C", "All"], "default": "All", "description": "Optional: Specific reservoir. Default: 'All'. Use 'All' to get data for all 3 reservoirs (A, B, C)."},
             "parameters": {"type": "array", "items": {"type": "string", "enum": ["water_level", "inflow", "turbine", "spillway"]}, "description": "Optional: List of parameters to analyze. If not specified, analyzes all parameters."}
         },
         "required": ["start_date", "end_date"],
@@ -137,7 +137,7 @@ OUTPUT: Bảng phân tích + dự báo Qve và lượng mưa
         "properties": {
             "target_month": {"type": "integer", "description": "Tháng cần dự báo (1-12). Ví dụ: 4 cho tháng 4."},
             "target_year": {"type": "integer", "description": "Năm cần dự báo. Ví dụ: 2026."},
-            "reservoir": {"type": "string", "enum": ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C", "All"], "description": "Optional: Hồ cụ thể hoặc All. Default: 'Vinh Son -A'."}
+            "reservoir": {"type": "string", "enum": ["Vinh Son -A", "Vinh Son -B", "Vinh Son -C", "All"], "default": "All", "description": "Optional: Hồ cụ thể hoặc All. Default: 'All'."}
         },
         "required": ["target_year"],
         "additionalProperties": False
@@ -193,6 +193,8 @@ hierarchical_statistics_function = {
     "name": "get_vinhson_hierarchical_statistics",
     "description": """Thống kê phân cấp Qve (lưu lượng về) và Mực nước hồ theo năm/tháng/tuần cho Vĩnh Sơn.
 
+TUYỆT ĐỐI KHÔNG DÙNG TOOL NÀY CHO MƯA HOẶC LƯỢNG MƯA. Nếu câu hỏi có từ "mưa" hoặc "lượng mưa", PHẢI dùng tool get_vinhson_rainfall_statistics.
+
 QUY TẮC CHỌN THEO TÊN HỒ - BẮT BUỘC:
 - **CHỈ DÙNG** khi user nói "Vĩnh Sơn", "Vinh Son", "hồ Vĩnh Sơn" (ví dụ: "so sánh MNH hồ Vĩnh Sơn năm 2025 với 3 năm cùng kỳ", "thống kê Qve Vĩnh Sơn năm 2026").
 - **CẤM DÙNG** khi user chỉ nói "Sông Hinh" / "Song Hinh" → khi đó dùng get_songhinh_hierarchical_statistics. Khi user hỏi "Vĩnh Sơn" PHẢI dùng tool NÀY (get_vinhson_hierarchical_statistics).
@@ -202,16 +204,16 @@ QUY TẮC BẮT BUỘC - SO SÁNH 2 THÁNG (vd "tháng 1/2026 với tháng 1/202
 - **CẤM** gọi 2 lần (một lần cho 1/2026, một lần cho 1/2025). Nếu gọi 2 lần sẽ ra 6 bảng riêng lẻ, sai yêu cầu. Chỉ được 1 lần gọi với compare_with_period_value.
 
 QUY TẮC ĐẦU TIÊN - PHÂN BIỆT QVE VỚI MƯA:
-- **Nếu câu hỏi có từ "Qve" hoặc "lưu lượng về"** → LUÔN dùng tool NÀY (get_vinhson_hierarchical_statistics). KHÔNG BAO GIỜ gọi get_vinhson_rainfall_statistics (tool đó chỉ cho MƯA).
+- **Nếu câu hỏi có từ "Qve" hoặc "lưu lượng về"** → LUÔN dùng tool NÀY (get_vinhson_hierarchical_statistics).
 - **Qve:** "So sánh Qve ... năm 2025 với 2 năm cùng kỳ" → period_type="year", period_value="2025", compare=True, compare_years=2, parameters=["qve"]. Bảng 3 cột.
 - **Qve:** "Thống kê Qve hồ Vĩnh Sơn năm 2026 với 3 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=3, parameters=["qve"]. Bảng 4 cột.
 - **MNH (mực nước):** "Thống kê MNH / mực nước hồ Vĩnh Sơn năm 2026 với 2 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=2, parameters=["water_level"]. Bảng 3 cột.
-- **MNH:** "Thống kê mực nước ... năm 2026 với 3 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=3, parameters=["water_level"]. Bảng 4 cột. Giống Qve và lượng mưa khi hỏi năm.
-- Qve = lưu lượng về (m³/s). MNH = mực nước hồ (m). Mưa = rainfall (mm).
+- **MNH:** "Thống kê mực nước ... năm 2026 với 3 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=3, parameters=["water_level"]. Bảng 4 cột.
+- Qve = lưu lượng về (m³/s). MNH = mực nước hồ (m).
 
 QUAN TRỌNG - ĐÂY LÀ TOOL CHO QVE VÀ MỰC NƯỚC:
-- **KHI USER HỎI VỀ QVE** (hoặc "lưu lượng về", "so sánh Qve") → PHẢI DÙNG TOOL NÀY (KHÔNG dùng rainfall_statistics)
-- **KHI USER HỎI VỀ MỰC NƯỚC** → PHẢI DÙNG TOOL NÀY (KHÔNG dùng rainfall_statistics)
+- **KHI USER HỎI VỀ QVE** (hoặc "lưu lượng về", "so sánh Qve") → PHẢI DÙNG TOOL NÀY
+- **KHI USER HỎI VỀ MỰC NƯỚC** → PHẢI DÙNG TOOL NÀY
 - **KHI USER HỎI "THỐNG KÊ"** với date range → PHẢI DÙNG TOOL NÀY (KHÔNG dùng operational_data)
 - Ví dụ: "Thống kê Qve Vinh Son tháng 12/2025" → DÙNG TOOL NÀY
 - Ví dụ: "Thống kê Qve năm 2025 Vinh Son" → DÙNG TOOL NÀY
@@ -255,7 +257,7 @@ QUAN TRỌNG - SO SÁNH THÁNG: CHỈ 1 LẦN GỌI. Áp dụng cho CẢ Qve VÀ
 - **3 năm cùng kỳ (MNH):** "Thống kê MNH tháng 1/2026 với 3 năm cùng kỳ" → period_type="month", period_value="1/2026", compare=True, compare_years=3, parameters=["water_level"]. Trả về 3 bảng (Hồ A,B,C), mỗi bảng 4 cột.
 - CẤM gọi 2 hoặc 3 lần. Luôn 1 lần gọi.
 
-QUAN TRỌNG - SO SÁNH THEO NĂM (giống lượng mưa). Áp dụng cho CẢ Qve VÀ MNH (mực nước):
+QUAN TRỌNG - SO SÁNH THEO NĂM. Áp dụng cho CẢ Qve VÀ MNH (mực nước):
 - **Qve:** "Thống kê Qve ... năm X với 2 năm cùng kỳ" → period_type="year", period_value="X", compare=True, compare_years=2, parameters=["qve"]. Bảng 3 cột.
 - **Qve:** "Thống kê Qve ... năm 2026 với 3 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=3, parameters=["qve"]. Bảng 4 cột.
 - **MNH:** "Thống kê MNH / mực nước ... năm 2026 với 2 năm cùng kỳ" → period_type="year", period_value="2026", compare=True, compare_years=2, parameters=["water_level"]. Bảng 3 cột.

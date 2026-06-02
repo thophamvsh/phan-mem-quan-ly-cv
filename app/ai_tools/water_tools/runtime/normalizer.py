@@ -9,6 +9,8 @@ from ai_tools.tool_format import parse_markdown_blocks
 
 # Tool names (must match tooldefs/schemas.py)
 WATER_VOLUME = "get_water_volume"
+USEFUL_VOLUME = "get_useful_volume"
+FLOOD_CONTROL_VOLUME = "get_flood_control_volume"
 VOLUME_DIFF = "calculate_volume_difference"
 LEVEL_CHANGE = "calculate_level_change"
 FLOW_RATE = "calculate_flow_rate"
@@ -28,7 +30,7 @@ def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, An
         "title": (blocks.get("title") or "").strip(),
         "summary": (blocks.get("summary") or "").strip(),
         "table": "\n\n".join(tables).strip() if tables else "",
-        "chart": "",
+        "chart": (blocks.get("chart") or "").strip(),
         "excel": (blocks.get("excel") or "").strip(),
         "notes": (blocks.get("notes") or "").strip(),
         "raw": raw,
@@ -40,8 +42,23 @@ def _normalize(tool_name: str, raw: str) -> Dict[str, Any]:
     return _to_schema(tool_name, raw, blocks)
 
 
+def _preserve_raw(tool_name: str, raw: str) -> Dict[str, Any]:
+    return {
+        "tool": tool_name,
+        "title": "",
+        "summary": raw,
+        "table": " ",
+        "chart": "",
+        "excel": "",
+        "notes": "",
+        "raw": raw,
+    }
+
+
 _NORMALIZERS = {
     WATER_VOLUME: lambda raw: _normalize(WATER_VOLUME, raw),
+    USEFUL_VOLUME: lambda raw: _preserve_raw(USEFUL_VOLUME, raw),
+    FLOOD_CONTROL_VOLUME: lambda raw: _normalize(FLOOD_CONTROL_VOLUME, raw),
     VOLUME_DIFF: lambda raw: _normalize(VOLUME_DIFF, raw),
     LEVEL_CHANGE: lambda raw: _normalize(LEVEL_CHANGE, raw),
     FLOW_RATE: lambda raw: _normalize(FLOW_RATE, raw),
