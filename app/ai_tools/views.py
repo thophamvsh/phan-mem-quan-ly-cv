@@ -24,8 +24,6 @@ class AiChatAPIView(APIView):
                 user=request.user,
                 content=serializer.validated_data["content"],
                 session_id=serializer.validated_data.get("session_id") or None,
-                provider=serializer.validated_data.get("provider") or "openai",
-                model=serializer.validated_data.get("model") or "",
             )
         except AiToolsError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

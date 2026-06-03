@@ -21,10 +21,10 @@ from .tool_format import sanitize_tool_content
 logger = logging.getLogger(__name__)
 SONGHINH_KEYWORDS = ("song hinh", "songhinh", "sh", "thuong kon tum", "kontum")
 VINHSON_KEYWORDS = ("vinh son", "vinhson", "vs", "vsa", "vsb", "vsc")
-DEFAULT_PROVIDER = getattr(settings, "AI_TOOLS_PROVIDER", "openai")
-DEFAULT_OPENAI_MODEL = getattr(settings, "AI_TOOLS_OPENAI_MODEL", "gpt-4o-mini")
+DEFAULT_PROVIDER = "openai"
+DEFAULT_OPENAI_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_MODEL = getattr(settings, "AI_TOOLS_ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
-OPENAI_MODELS = tuple(getattr(settings, "AI_TOOLS_OPENAI_MODELS", (DEFAULT_OPENAI_MODEL, "gpt-4o-mini", "gpt-4o")))
+OPENAI_MODELS = (DEFAULT_OPENAI_MODEL,)
 ANTHROPIC_MODELS = tuple(
     getattr(
         settings,
@@ -225,16 +225,7 @@ def _lazy_import_tools():
 
 
 def _resolve_model(provider, model):
-    provider = (provider or DEFAULT_PROVIDER or "openai").lower()
-    if provider not in {"openai", "anthropic"}:
-        raise AiToolsError(f"Nha cung cap AI khong ho tro: {provider}")
-
-    allowed = OPENAI_MODELS if provider == "openai" else ANTHROPIC_MODELS
-    default_model = DEFAULT_OPENAI_MODEL if provider == "openai" else DEFAULT_ANTHROPIC_MODEL
-    selected_model = (model or default_model).strip()
-    if selected_model not in allowed:
-        raise AiToolsError(f"Model {selected_model} khong nam trong danh sach duoc phep.")
-    return provider, selected_model
+    return DEFAULT_PROVIDER, DEFAULT_OPENAI_MODEL
 
 
 def detect_reservoir(message):

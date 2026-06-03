@@ -453,20 +453,37 @@ class DashboardSummaryAPIView(APIView):
         operation_hours_by_plant = {}
         
         plants = ["songhinh", "vinhson", "thuongkontum"]
-
-        for plant in plants:
-            records = build_dashboard_records_for_plant(plant, target_date)
-            data_by_plant[plant] = ThongsoSanxuatSerializer(records, many=True).data
-            operation_hours_by_plant[plant] = build_operation_hours_for_records(
-                plant,
-                records,
-            )
-
         report_year = (
             target_date.year
             if target_date
             else timezone.localdate().year
         )
+        settings_lookup = {
+            (
+                record.nha_may,
+                record.nam,
+                record.loai,
+                record.thang,
+                record.tuan,
+            ): record
+            for record in ThongSoThuyVanCaiDat.objects.filter(
+                nha_may__in=plants,
+                nam=report_year,
+            )
+        }
+
+        for plant in plants:
+            records = build_dashboard_records_for_plant(plant, target_date)
+            data_by_plant[plant] = ThongsoSanxuatSerializer(
+                records,
+                many=True,
+                context={"settings_lookup": settings_lookup},
+            ).data
+            operation_hours_by_plant[plant] = build_operation_hours_for_records(
+                plant,
+                records,
+            )
+
         hydrology_settings = build_hydrology_settings_payload(
             report_year,
             plants,

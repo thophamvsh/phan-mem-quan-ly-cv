@@ -75,6 +75,13 @@ class ThongsoSanxuatSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
     def _get_setting_value(self, nha_may, target_date, loai, field, thang=0, tuan=0):
+        settings_lookup = self.context.get("settings_lookup")
+        if settings_lookup is not None:
+            record = settings_lookup.get(
+                (nha_may, target_date.year, loai, thang, tuan),
+            )
+            return getattr(record, field, None) if record else None
+
         if not hasattr(self, "_setting_value_cache"):
             self._setting_value_cache = {}
 
@@ -133,15 +140,15 @@ class ThongsoSanxuatSerializer(serializers.ModelSerializer):
             tuan=week_number,
         )
 
-        fallback_values = {
+        settings_values = {
             "cot_w": annual_value,
             "sanluong_kh_thang": month_value,
             "mucnuoc_gioihan_tuan": weekly_value,
             "mucnuoc_gioihan_tuan_ho_a": weekly_ho_a_value,
             "mucnuoc_gioihan_tuan_ho_b": weekly_ho_b_value,
         }
-        for field, value in fallback_values.items():
-            if data.get(field) is None and value is not None:
+        for field, value in settings_values.items():
+            if value is not None:
                 data[field] = value
 
         return data

@@ -164,6 +164,9 @@ class ThongsoSanxuat(models.Model):
     class Meta:
         ordering = ["-thoi_gian"]
         unique_together = ('thoi_gian', 'nha_may')
+        indexes = [
+            models.Index(fields=["nha_may", "-thoi_gian"], name="tsx_plant_time_desc_idx"),
+        ]
         verbose_name = "Thông số sản xuất"
         verbose_name_plural = "Thông số sản xuất"
 
@@ -290,6 +293,9 @@ class ThongsoGioPhat(models.Model):
     class Meta:
         ordering = ["-ngay", "to_may"]
         unique_together = ('ngay', 'to_may', 'nha_may')
+        indexes = [
+            models.Index(fields=["nha_may", "ngay"], name="tgp_plant_day_idx"),
+        ]
         verbose_name = "Thông số giờ phát"
         verbose_name_plural = "Thông số giờ phát"
 

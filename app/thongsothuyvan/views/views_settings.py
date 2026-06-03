@@ -74,21 +74,31 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
 
 
 def build_hydrology_settings_payload(year, plant_codes):
+    settings_lookup = {
+        (record.nha_may, record.loai, record.thang, record.tuan): record
+        for record in ThongSoThuyVanCaiDat.objects.filter(
+            nha_may__in=plant_codes,
+            nam=year,
+        )
+    }
+
+    def get_prefetched_value(nhamay, loai, field, thang=0, tuan=0):
+        record = settings_lookup.get((nhamay, loai, thang, tuan))
+        return getattr(record, field, None) if record else None
+
     annual = {}
     monthly = {}
 
     for plant_code in plant_codes:
-        annual[plant_code] = get_setting_field_value(
+        annual[plant_code] = get_prefetched_value(
             plant_code,
-            year,
             ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
             "sanluong_kehoach_nam",
         )
         monthly[plant_code] = {}
         for month in range(1, 13):
-            monthly[plant_code][str(month)] = get_setting_field_value(
+            monthly[plant_code][str(month)] = get_prefetched_value(
                 plant_code,
-                year,
                 ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
                 "sanluong_kehoach_thang",
                 thang=month,
@@ -103,9 +113,8 @@ def build_hydrology_settings_payload(year, plant_codes):
         }
         if "songhinh" in plant_codes:
             row["songhinh"] = {
-                "mucnuoc_gioihan_tuan": get_setting_field_value(
+                "mucnuoc_gioihan_tuan": get_prefetched_value(
                     "songhinh",
-                    year,
                     ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
                     "mucnuoc_gioihan_tuan",
                     tuan=week["week"],
@@ -113,9 +122,8 @@ def build_hydrology_settings_payload(year, plant_codes):
             }
         if "thuongkontum" in plant_codes:
             row["thuongkontum"] = {
-                "mucnuoc_gioihan_tuan": get_setting_field_value(
+                "mucnuoc_gioihan_tuan": get_prefetched_value(
                     "thuongkontum",
-                    year,
                     ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
                     "mucnuoc_gioihan_tuan",
                     tuan=week["week"],
@@ -123,16 +131,14 @@ def build_hydrology_settings_payload(year, plant_codes):
             }
         if "vinhson" in plant_codes:
             row["vinhson"] = {
-                "mucnuoc_gioihan_tuan_ho_a": get_setting_field_value(
+                "mucnuoc_gioihan_tuan_ho_a": get_prefetched_value(
                     "vinhson",
-                    year,
                     ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
                     "mucnuoc_gioihan_tuan_ho_a",
                     tuan=week["week"],
                 ),
-                "mucnuoc_gioihan_tuan_ho_b": get_setting_field_value(
+                "mucnuoc_gioihan_tuan_ho_b": get_prefetched_value(
                     "vinhson",
-                    year,
                     ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
                     "mucnuoc_gioihan_tuan_ho_b",
                     tuan=week["week"],

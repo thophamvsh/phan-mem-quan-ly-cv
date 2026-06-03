@@ -4,12 +4,6 @@ from rest_framework import serializers
 class AiChatRequestSerializer(serializers.Serializer):
     content = serializers.CharField(allow_blank=False, trim_whitespace=True)
     session_id = serializers.CharField(required=False, allow_blank=True)
-    provider = serializers.ChoiceField(
-        choices=("openai", "anthropic"),
-        required=False,
-        default="openai",
-    )
-    model = serializers.CharField(required=False, allow_blank=True)
 
 
 class AiChatResponseSerializer(serializers.Serializer):
