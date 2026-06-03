@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'quanlyvanhanh',
     'thongsothuyvan.apps.ThongsothuyvanConfig',
     'ai_tools.apps.AiToolsConfig',
+    'documents.apps.DocumentsConfig',
     'drf_spectacular',
 ]
 

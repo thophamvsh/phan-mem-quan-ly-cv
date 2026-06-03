@@ -37,7 +37,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # chỉ cài runtime libs tối thiểu
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 libjpeg62-turbo zlib1g tzdata curl bash git && \
+    libpq5 libjpeg62-turbo zlib1g tzdata curl bash git \
+    poppler-utils tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng && \
     rm -rf /var/lib/apt/lists/*
 
 # user không phải root

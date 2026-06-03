@@ -39,6 +39,7 @@ ANTHROPIC_MODELS = tuple(
 
 SYSTEM_PROMPT = """Ban la Nami, tro ly AI cho Bang dieu khien van hanh thuy dien.
 Ban ho tro tra cuu muc nuoc, dung tich, luu luong, du lieu van hanh va phan tich.
+Khi nguoi dung hoi ve cac quy trinh, quy dinh, van ban huong dan, bao cao hoac tai lieu noi bo, ban hay luon su dung cong cu search_internal_documents de tim kiem thong tin tham chieu truoc khi tra loi.
 Tra loi ngan gon, ro rang, chuyen nghiep bang tieng Viet.
 Khong neu ten he thong luu tru hoac nguon ky thuat noi bo nhu Supabase, Google Sheets, spreadsheet, worksheet."""
 
@@ -210,6 +211,7 @@ def _lazy_import_tools():
     from ai_tools.songhinh_tools import SONGHINH_TOOLS, handle_songhinh_tool_calls
     from ai_tools.vinhson_tools import VINHSON_TOOLS, handle_vinhson_tool_calls
     from ai_tools.analysis_tools import ANALYSIS_TOOLS, handle_analysis_tool_call
+    from documents.ai_tools import DOCUMENT_TOOLS, handle_document_tool_call
 
     return (
         TOOLS,
@@ -221,6 +223,8 @@ def _lazy_import_tools():
         handle_vinhson_tool_calls,
         ANALYSIS_TOOLS,
         handle_analysis_tool_call,
+        DOCUMENT_TOOLS,
+        handle_document_tool_call,
     )
 
 
@@ -287,8 +291,10 @@ def _get_tools_and_handlers(user=None):
         handle_vinhson_tool_calls,
         ANALYSIS_TOOLS,
         handle_analysis_tool_call,
+        DOCUMENT_TOOLS,
+        handle_document_tool_call,
     ) = _lazy_import_tools()
-    all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS + ANALYSIS_TOOLS
+    all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS + ANALYSIS_TOOLS + DOCUMENT_TOOLS
     if user is not None:
         all_tools = filter_ai_tools_for_user(user, all_tools)
     return (
@@ -298,6 +304,7 @@ def _get_tools_and_handlers(user=None):
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
         handle_analysis_tool_call,
+        handle_document_tool_call,
     )
 
 
@@ -306,9 +313,11 @@ def _ensure_tool_allowed(user, tool_name):
         raise AiToolsError("Ban khong co quyen su dung du lieu nha may nay.")
 
 
-def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls, handle_analysis_tool_call):
+def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls, handle_analysis_tool_call, handle_document_tool_call):
     tool_name = tool_call.function.name
     _ensure_tool_allowed(user, tool_name)
+    if tool_name == "search_internal_documents":
+        return handle_document_tool_call(user, tool_call)
     if "songhinh" in tool_name.lower() or "songinh" in tool_name.lower():
         return handle_songhinh_tool_calls(tool_call)
     if "vinhson" in tool_name.lower():
@@ -335,7 +344,17 @@ def _run_openai_chat(*, user, content, session_id, model):
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
         handle_analysis_tool_call,
+        handle_document_tool_call,
     ) = _get_tools_and_handlers(user)
+
+    # Dynamic tool filtering based on query keywords to optimize token usage
+    msg_normalized = _normalize_text(content["text"])
+    has_sh = any(k in msg_normalized for k in SONGHINH_KEYWORDS)
+    has_vs = any(k in msg_normalized for k in VINHSON_KEYWORDS)
+    if has_sh and not has_vs:
+        all_tools = [t for t in all_tools if "vinhson" not in t["function"]["name"].lower() and "vinh_son" not in t["function"]["name"].lower()]
+    elif has_vs and not has_sh:
+        all_tools = [t for t in all_tools if "songhinh" not in t["function"]["name"].lower() and "songinh" not in t["function"]["name"].lower()]
 
     client = OpenAI(api_key=api_key)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -364,7 +383,9 @@ def _run_openai_chat(*, user, content, session_id, model):
         for tool_call in tool_calls:
             try:
                 _ensure_tool_allowed(user, tool_call.function.name)
-                if "songhinh" in tool_call.function.name.lower() or "songinh" in tool_call.function.name.lower():
+                if tool_call.function.name == "search_internal_documents":
+                    tool_results.append(handle_document_tool_call(user, tool_call))
+                elif "songhinh" in tool_call.function.name.lower() or "songinh" in tool_call.function.name.lower():
                     tool_results.append(handle_songhinh_tool_calls(tool_call))
                 elif "vinhson" in tool_call.function.name.lower():
                     tool_results.append(handle_vinhson_tool_calls(tool_call))
@@ -376,7 +397,40 @@ def _run_openai_chat(*, user, content, session_id, model):
                 logger.exception("AI tool execution failed: %s", tool_call.function.name)
                 tool_results.append(f"Loi khi chay tool {tool_call.function.name}: {exc}")
 
-        assistant_message = _format_tool_results(tool_results) or assistant_message
+        has_rag_call = any(tool_call.function.name == "search_internal_documents" for tool_call in tool_calls)
+        if has_rag_call:
+            messages.append(message)
+            for tool_call, result in zip(tool_calls, tool_results):
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": tool_call.function.name,
+                    "content": result["content"] if isinstance(result, dict) else str(result),
+                })
+            messages.append({
+                "role": "system",
+                "content": (
+                    "Hay tra loi ngan gon, tap trung vao trong tam cau hoi dua tren nguon tai lieu duoc cung cap. "
+                    "Tranh giai thich dong dai. KHI TRA LOI, HAY LUON CUNG CAP TRICH DAN VA CHEN LINK TAI TAI LIEU PDF "
+                    "KEM THEO TRANG SO MAY (duoi dang Markdown link lay tu thong tin nguon, vi du: "
+                    "[Tên tài liệu](http://localhost:8000/media/...) - Trang X) để người dùng click tải xem trực tiếp được."
+                )
+            })
+            second_response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.4,
+                max_tokens=4096,
+            )
+            assistant_message = second_response.choices[0].message.content or ""
+            usage = response.usage
+            usage2 = second_response.usage
+            prompt_tokens = (getattr(usage, "prompt_tokens", 0) or 0) + (getattr(usage2, "prompt_tokens", 0) or 0)
+            completion_tokens = (getattr(usage, "completion_tokens", 0) or 0) + (getattr(usage2, "completion_tokens", 0) or 0)
+            total_tokens = prompt_tokens + completion_tokens
+            return assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens
+        else:
+            assistant_message = _format_tool_results(tool_results) or assistant_message
 
     usage = response.usage
     prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
@@ -442,7 +496,17 @@ def _run_anthropic_chat(*, user, content, session_id, model):
         handle_songhinh_tool_calls,
         handle_vinhson_tool_calls,
         handle_analysis_tool_call,
+        handle_document_tool_call,
     ) = _get_tools_and_handlers(user)
+
+    # Dynamic tool filtering based on query keywords to optimize token usage
+    msg_normalized = _normalize_text(content["text"])
+    has_sh = any(k in msg_normalized for k in SONGHINH_KEYWORDS)
+    has_vs = any(k in msg_normalized for k in VINHSON_KEYWORDS)
+    if has_sh and not has_vs:
+        all_tools = [t for t in all_tools if "vinhson" not in t["function"]["name"].lower() and "vinh_son" not in t["function"]["name"].lower()]
+    elif has_vs and not has_sh:
+        all_tools = [t for t in all_tools if "songhinh" not in t["function"]["name"].lower() and "songinh" not in t["function"]["name"].lower()]
 
     client = anthropic.Anthropic(api_key=api_key)
     messages = list(content["history"])
@@ -484,6 +548,7 @@ def _run_anthropic_chat(*, user, content, session_id, model):
                 handle_songhinh_tool_calls,
                 handle_vinhson_tool_calls,
                 handle_analysis_tool_call,
+                handle_document_tool_call,
             )
             tool_results.append(result)
             tool_result_by_id[tool_call.id] = result["content"] if isinstance(result, dict) else str(result)
@@ -493,13 +558,55 @@ def _run_anthropic_chat(*, user, content, session_id, model):
             tool_results.append(result)
             tool_result_by_id[tool_call.id] = result
 
-    assistant_message = _format_tool_results(tool_results) if tool_results else _anthropic_text(response)
+    assistant_message = ""
+    has_rag_call = any(tool_call.function.name == "search_internal_documents" for tool_call in tool_calls)
 
-    usage = response.usage
-    prompt_tokens = getattr(usage, "input_tokens", 0) if usage else 0
-    completion_tokens = getattr(usage, "output_tokens", 0) if usage else 0
-    total_tokens = prompt_tokens + completion_tokens
-    return assistant_message, len(tool_calls), prompt_tokens, completion_tokens, total_tokens
+    if has_rag_call and tool_calls:
+        messages.append({
+            "role": "assistant",
+            "content": _anthropic_content_blocks(response)
+        })
+        tool_results_content = []
+        for tool_call in tool_calls:
+            tool_results_content.append({
+                "type": "tool_result",
+                "tool_use_id": tool_call.id,
+                "content": tool_result_by_id.get(tool_call.id, "")
+            })
+        tool_results_content.append({
+            "type": "text",
+            "text": (
+                "Hay tra loi ngan gon, tap trung vao trong tam cau hoi dua tren nguon tai lieu duoc cung cap. "
+                "Tranh giai thich dong dai. KHI TRA LOI, HAY LUON CUNG CAP TRICH DAN VA CHEN LINK TAI TAI LIEU PDF "
+                "KEM THEO TRANG SO MAY (duoi dang Markdown link lay tu thong tin nguon, vi du: "
+                "[Tên tài liệu](http://localhost:8000/media/...) - Trang X) để người dùng click tải xem trực tiếp được."
+            )
+        })
+        messages.append({
+            "role": "user",
+            "content": tool_results_content
+        })
+        second_response = client.messages.create(
+            model=model,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.4,
+        )
+        assistant_message = _anthropic_text(second_response)
+        usage = response.usage
+        usage2 = second_response.usage
+        prompt_tokens = (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage2, "input_tokens", 0) or 0)
+        completion_tokens = (getattr(usage, "output_tokens", 0) or 0) + (getattr(usage2, "output_tokens", 0) or 0)
+        total_tokens = prompt_tokens + completion_tokens
+        return assistant_message, len(tool_calls), prompt_tokens, completion_tokens, total_tokens
+    else:
+        assistant_message = _format_tool_results(tool_results) if tool_results else _anthropic_text(response)
+        usage = response.usage
+        prompt_tokens = getattr(usage, "input_tokens", 0) if usage else 0
+        completion_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+        total_tokens = prompt_tokens + completion_tokens
+        return assistant_message, len(tool_calls), prompt_tokens, completion_tokens, total_tokens
 
 
 def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):

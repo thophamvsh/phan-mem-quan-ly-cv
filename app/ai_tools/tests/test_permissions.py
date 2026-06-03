@@ -133,6 +133,10 @@ class AiToolFactoryScopeTests(TestCase):
             object(),
             [_tool("get_vinhson_operational_data")],
             object(),
+            [],
+            object(),
+            [],
+            object(),
         )
         with patch("ai_tools.services._lazy_import_tools", return_value=fake_import):
             tools, *_ = _get_tools_and_handlers(self.vinhson_user)

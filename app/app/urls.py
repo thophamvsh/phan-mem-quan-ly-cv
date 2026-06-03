@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/nhatkyvanhanh/", include(("nhatkyvanhanh.urls", "nhatkyvanhanh"), namespace="legacy-nhatkyvanhanh")),
     path("api/quanlyvanhanh/", include(("quanlyvanhanh.urls", "quanlyvanhanh"), namespace="legacy-quanlyvanhanh")),
     path("api/ai/", include("ai_tools.urls")),
+    path("api/documents/", include("documents.urls")),
 
     # Versioned API routes (v1)
     path('api/v1/', include('core.urls')),
@@ -42,6 +43,7 @@ urlpatterns = [
     path("api/v1/nhatkyvanhanh/", include(("nhatkyvanhanh.urls", "nhatkyvanhanh"), namespace="v1-nhatkyvanhanh")),
     path("api/v1/quanlyvanhanh/", include(("quanlyvanhanh.urls", "quanlyvanhanh"), namespace="v1-quanlyvanhanh")),
     path("api/v1/ai/", include("ai_tools.urls")),
+    path("api/v1/documents/", include("documents.urls")),
     path("api/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="legacy-thongsothuyvan")),
     path("api/v1/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="v1-thongsothuyvan")),
 ]
