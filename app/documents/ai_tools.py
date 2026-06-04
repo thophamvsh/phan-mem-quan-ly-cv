@@ -29,7 +29,7 @@ DOCUMENT_TOOLS = [
                     },
                     "document_type": {
                         "type": "string",
-                        "description": "Loai tai lieu neu biet, vi du quy_trinh, quy_dinh, bao_cao.",
+                        "description": "Loai tai lieu (vi du quy_trinh, quy_dinh, bao_cao) CHI duoc cung cap neu nguoi dung neu ro trong cau hoi. KHONG duoc tu suy luan hoac tu doan neu nguoi dung khong de cap truc tiep.",
                     },
                     "limit": {
                         "type": "integer",

@@ -310,7 +310,7 @@ def _get_tools_and_handlers(user=None):
 
 def _ensure_tool_allowed(user, tool_name):
     if not can_user_use_ai_tool(user, tool_name):
-        raise AiToolsError("Ban khong co quyen su dung du lieu nha may nay.")
+        raise AiToolsError("Bạn không có quyền sử dụng công cụ này hoặc công cụ không tồn tại.")
 
 
 def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls, handle_analysis_tool_call, handle_document_tool_call):
@@ -330,12 +330,12 @@ def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_son
 def _run_openai_chat(*, user, content, session_id, model):
     api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", None)
     if not api_key:
-        raise AiToolsError("Backend chua cau hinh OPENAI_API_KEY.")
+        raise AiToolsError("Backend chưa cấu hình OPENAI_API_KEY.")
 
     try:
         from openai import OpenAI
     except ImportError as exc:
-        raise AiToolsError("Backend chua cai goi openai. Hay them openai vao requirements va cai lai moi truong.") from exc
+        raise AiToolsError("Backend chưa cài đặt goi openai. Hay thêm openai vào requirements và cài lại môi trường.") from exc
 
     (
         all_tools,
@@ -410,10 +410,8 @@ def _run_openai_chat(*, user, content, session_id, model):
             messages.append({
                 "role": "system",
                 "content": (
-                    "Hay tra loi ngan gon, tap trung vao trong tam cau hoi dua tren nguon tai lieu duoc cung cap. "
-                    "Tranh giai thich dong dai. KHI TRA LOI, HAY LUON CUNG CAP TRICH DAN VA CHEN LINK TAI TAI LIEU PDF "
-                    "KEM THEO TRANG SO MAY (duoi dang Markdown link lay tu thong tin nguon, vi du: "
-                    "[Tên tài liệu](http://localhost:8000/media/...) - Trang X) để người dùng click tải xem trực tiếp được."
+                    "Hãy trả lời ngan gon, tập trung vào trọng tâm câu hỏi dựa trên nguồn tài liệu được cung cấp. "
+                "Tránh giải thích dài. KHI TRẢ LỜI, HAY LUÔN CUNG CẤP TRÍCH DẪN VÀ CHÈN TÊN TÀI LIỆU PDF VÀ SỐ TRANG "
                 )
             })
             second_response = client.chat.completions.create(
@@ -576,10 +574,8 @@ def _run_anthropic_chat(*, user, content, session_id, model):
         tool_results_content.append({
             "type": "text",
             "text": (
-                "Hay tra loi ngan gon, tap trung vao trong tam cau hoi dua tren nguon tai lieu duoc cung cap. "
-                "Tranh giai thich dong dai. KHI TRA LOI, HAY LUON CUNG CAP TRICH DAN VA CHEN LINK TAI TAI LIEU PDF "
-                "KEM THEO TRANG SO MAY (duoi dang Markdown link lay tu thong tin nguon, vi du: "
-                "[Tên tài liệu](http://localhost:8000/media/...) - Trang X) để người dùng click tải xem trực tiếp được."
+                "Hãy trả lời ngan gon, tập trung vào trọng tâm câu hỏi dựa trên nguồn tài liệu được cung cấp. "
+                "Tránh giải thích dài. KHI TRẢ LỜI, HAY LUÔN CUNG CẤP TRÍCH DẪN VÀ CHÈN TÊN TÀI LIỆU PDF VÀ SỐ TRANG "
             )
         })
         messages.append({

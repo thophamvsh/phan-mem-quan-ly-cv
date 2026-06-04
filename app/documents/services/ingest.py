@@ -25,6 +25,8 @@ def process_document(document):
                     heading_path=chunk.get("heading_path", ""),
                     content=content,
                     token_count=chunk.get("token_count", 0),
+                    page_from=chunk.get("page_from"),
+                    page_to=chunk.get("page_to"),
                     metadata=chunk.get("metadata", {}),
                     embedding=get_embedding(content),
                 )
