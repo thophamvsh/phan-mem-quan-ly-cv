@@ -1,3 +1,5 @@
+import re
+from collections import Counter
 from pathlib import Path
 
 
@@ -91,8 +93,34 @@ def _ocr_pdf(path):
 
 
 def _is_text_too_short(text):
-    compact = "".join(ch for ch in (text or "") if not ch.isspace())
+    meaningful_text = _meaningful_text_for_length(text)
+    compact = "".join(ch for ch in meaningful_text if not ch.isspace())
     return len(compact) < MIN_EXTRACTED_TEXT_CHARS
+
+
+def _meaningful_text_for_length(text):
+    lines = []
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("# ") and line.lower().endswith(".pdf"):
+            continue
+        if re.match(r"^#{1,6}\s*Trang\s+\d+\s*$", line, re.IGNORECASE):
+            continue
+        if re.match(r"^Trang\s+\d+\s*$", line, re.IGNORECASE):
+            continue
+        if re.match(r"^[\w.-]+\([^)]*\)\s*-\s*\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}$", line):
+            continue
+        lines.append(line)
+
+    counts = Counter(lines)
+    meaningful_lines = [
+        line
+        for line in lines
+        if not (counts[line] >= 3 and len(line) < 160)
+    ]
+    return "\n".join(meaningful_lines)
 
 
 def _fallback_text(path):

@@ -3,6 +3,7 @@ from pathlib import Path
 from rest_framework import serializers
 
 from documents.models import Document, DocumentChunk
+from documents.services.normalization import canonicalize_doc_type
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -55,6 +56,9 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_document_type(self, value):
+        return canonicalize_doc_type(value)
+
     def create(self, validated_data):
         uploaded_file = validated_data.pop("file")
         if not validated_data.get("title"):
@@ -67,6 +71,9 @@ class DocumentSearchSerializer(serializers.Serializer):
     factory = serializers.ChoiceField(choices=Document.FACTORY_CHOICES, required=False, allow_blank=True)
     document_type = serializers.CharField(required=False, allow_blank=True)
     limit = serializers.IntegerField(required=False, min_value=1, max_value=12, default=5)
+
+    def validate_document_type(self, value):
+        return canonicalize_doc_type(value)
 
 
 class DocumentChunkResultSerializer(serializers.Serializer):

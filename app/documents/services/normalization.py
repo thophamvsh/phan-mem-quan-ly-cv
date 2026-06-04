@@ -2,6 +2,27 @@ import re
 import unicodedata
 
 
+DOCUMENT_TYPE_CHOICES = (
+    ("quy_trinh", "Quy trình"),
+    ("quy_dinh", "Quy định"),
+    ("quy_che", "Quy chế"),
+    ("cong_van", "Công văn"),
+    ("thong_tu", "Thông tư"),
+    ("nghi_dinh", "Nghị định"),
+    ("bao_cao", "Báo cáo"),
+)
+
+DOCUMENT_TYPE_ALIASES = {
+    "quy trinh": "quy_trinh",
+    "quy dinh": "quy_dinh",
+    "quy che": "quy_che",
+    "cong van": "cong_van",
+    "thong tu": "thong_tu",
+    "nghi dinh": "nghi_dinh",
+    "bao cao": "bao_cao",
+}
+
+
 VIETNAMESE_MOJIBAKE_REPLACEMENTS = (
     ("Ä‘", "d"),
     ("Ã„â€˜", "d"),
@@ -21,7 +42,16 @@ def normalize_text(value):
 
 
 def normalize_doc_type(value):
-    return normalize_text(value).replace("_", " ").strip()
+    text = normalize_text(value).replace("_", " ").replace("-", " ").strip()
+    text = re.sub(r"\s+", " ", text)
+    return DOCUMENT_TYPE_ALIASES.get(text, text)
+
+
+def canonicalize_doc_type(value):
+    normalized = normalize_doc_type(value)
+    if normalized in dict(DOCUMENT_TYPE_CHOICES):
+        return normalized
+    return str(value or "").strip()
 
 
 def normalize_date_part(day, month):

@@ -1,19 +1,24 @@
+import importlib
 import logging
-import os
 import re
 
 import numpy as np
+from django.conf import settings
 
-from ai_tools.permissions import (
-    AI_TOOL_SCOPE_SONGHINH,
-    AI_TOOL_SCOPE_VINHSON,
-    get_ai_tool_scopes_for_user,
-)
-from documents.models import Document, DocumentChunk
-from documents.services.embeddings import get_embedding
-from documents.services.normalization import normalize_doc_type, normalize_text
-from documents.services.query_parser import parse_query
-from documents.services.ranker import matches_document_type, score_chunk
+try:
+    permissions = importlib.import_module("ai_tools.permissions")
+except ModuleNotFoundError:
+    permissions = importlib.import_module("app.ai_tools.permissions")
+
+AI_TOOL_SCOPE_SONGHINH = permissions.AI_TOOL_SCOPE_SONGHINH
+AI_TOOL_SCOPE_VINHSON = permissions.AI_TOOL_SCOPE_VINHSON
+get_ai_tool_scopes_for_user = permissions.get_ai_tool_scopes_for_user
+
+from ..models import Document, DocumentChunk
+from .embeddings import get_embedding
+from .normalization import normalize_doc_type, normalize_text
+from .query_parser import parse_query
+from .ranker import matches_document_type, score_chunk
 
 
 logger = logging.getLogger(__name__)
@@ -434,8 +439,8 @@ def _get_page_num(chunk, content):
 def _get_file_url(document, page_num):
     if not document.original_file:
         return ""
-    base_url = os.environ.get("KHO_BACKEND_BASE_URL", "http://localhost:8000").rstrip("/")
-    file_url = f"{base_url}{document.original_file.url}"
+    base_url = getattr(settings, "KHO_BACKEND_BASE_URL", "http://localhost:8000").rstrip("/")
+    file_url = f"{base_url}/api/documents/{document.id}/view/"
     if page_num and document.original_file.name.lower().endswith(".pdf"):
         return f"{file_url}#page={page_num}"
     return file_url

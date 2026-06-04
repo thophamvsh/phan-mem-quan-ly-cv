@@ -1,3 +1,5 @@
+import re
+
 from documents.services.normalization import normalize_doc_type, normalize_text
 from documents.services.query_parser import parse_query
 
@@ -8,13 +10,20 @@ METADATA_WEIGHT = 0.20
 SECTION_WEIGHT = 0.10
 
 
+def _loose_phrase_text(text):
+    return re.sub(r"[^a-z0-9/.-]+", " ", text or "").strip()
+
+
 def score_keyword(parsed_query, chunk_text):
     normalized = normalize_text(chunk_text)
     if not normalized:
         return 0.0
 
+    normalized_loose = _loose_phrase_text(normalized)
+    query_loose = _loose_phrase_text(parsed_query["normalized"])
+
     score = 0.0
-    if parsed_query["normalized"] and parsed_query["normalized"] in normalized:
+    if query_loose and query_loose in normalized_loose:
         score += 1.0
 
     terms = parsed_query["terms"]

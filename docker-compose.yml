@@ -3,6 +3,12 @@ version: "3.9"
 name: vsh-dev # cố định tên project để tránh đổi tên volumes ngoài ý muốn
 
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - vsh-net
+
   db:
     image: postgres:13-alpine
     environment:
@@ -42,6 +48,9 @@ services:
       DB_USER: ${DB_USER:-devuser}
       DB_PASS: ${DB_PASS:-changeme}
       DEBUG: ${DEBUG:-True}
+      DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
@@ -64,6 +73,45 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - vsh-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+      args:
+        DEV: ${DEV:-true}
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-devdb}
+      DB_USER: ${DB_USER:-devuser}
+      DB_PASS: ${DB_PASS:-changeme}
+      DEBUG: ${DEBUG:-True}
+      DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    volumes:
+      - ./app:/app
+      - dev-media-data:/vol/web/media
+      - dev-static-data:/vol/web/static
+      - dev-logs-data:/vol/web/logs
+    command: >
+      sh -c "
+        python manage.py wait_for_db &&
+        celery -A app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+      "
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
     networks:
       - vsh-net

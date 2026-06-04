@@ -23,7 +23,7 @@ def get_embedding(text):
             )
             return list(response.data[0].embedding)
         except Exception:
-            pass
+            logger.exception("OpenAI embedding request failed. Falling back to local hash embedding.")
     return _hash_embedding(text or "")
 
 

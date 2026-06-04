@@ -1,7 +1,19 @@
+import logging
+import mimetypes
+import os
+import threading
+
+from django.conf import settings
+from django.db import close_old_connections
+from django.http import FileResponse, Http404
+from django.utils.decorators import method_decorator
+from django.views.decorators.clickjacking import xframe_options_exempt
 from rest_framework import generics, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from ai_tools.permissions import CanUseAiTools, has_ai_tools_permission
 from documents.models import Document
@@ -10,25 +22,48 @@ from documents.serializers import (
     DocumentSerializer,
     DocumentUploadSerializer,
 )
-import threading
-from django.db import close_old_connections
 from documents.services.ingest import process_document
 from documents.services.retrieval import filter_documents_for_user, search_documents
+
+
+logger = logging.getLogger(__name__)
+
+DOCUMENT_CONTENT_TYPES = {
+    ".csv": "text/csv",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".md": "text/markdown",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
 
 
 def _run_process_in_background(document_id):
     def _bg_process():
         close_old_connections()
         try:
-            from documents.models import Document
             document = Document.objects.get(pk=document_id)
             process_document(document)
+        except Document.DoesNotExist:
+            logger.warning("Document %s no longer exists before background processing started.", document_id)
         except Exception:
-            pass
+            logger.exception("Background processing failed for document %s.", document_id)
         finally:
             close_old_connections()
 
     threading.Thread(target=_bg_process, daemon=True).start()
+
+
+def _enqueue_process_document(document_id):
+    if getattr(settings, "DOCUMENTS_USE_CELERY", False):
+        try:
+            from documents.tasks import process_document_task
+
+            process_document_task.delay(document_id)
+            return
+        except Exception:
+            logger.exception("Could not enqueue document %s with Celery. Falling back to local thread.", document_id)
+
+    _run_process_in_background(document_id)
 
 
 class DocumentListCreateAPIView(generics.ListCreateAPIView):
@@ -52,7 +87,7 @@ class DocumentListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         document = serializer.save(created_by=self.request.user)
-        _run_process_in_background(document.id)
+        _enqueue_process_document(document.id)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -80,7 +115,7 @@ class DocumentReprocessAPIView(APIView):
         document.error_message = ""
         document.save(update_fields=["status", "error_message", "updated_at"])
 
-        _run_process_in_background(document.id)
+        _enqueue_process_document(document.id)
 
         document.refresh_from_db()
         return Response(DocumentSerializer(document).data)
@@ -96,14 +131,7 @@ class DocumentSearchAPIView(APIView):
         return Response({"results": results})
 
 
-from django.http import FileResponse, Http404
-import os
-from django.utils.decorators import method_decorator
-from django.views.decorators.clickjacking import xframe_options_exempt
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-
-@method_decorator(xframe_options_exempt, name='dispatch')
+@method_decorator(xframe_options_exempt, name="dispatch")
 class DocumentViewAPIView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -114,7 +142,7 @@ class DocumentViewAPIView(APIView):
         token = request.query_params.get("token")
 
         if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+            token = auth_header.split(" ", 1)[1]
 
         if token:
             try:
@@ -122,7 +150,7 @@ class DocumentViewAPIView(APIView):
                 validated_token = jwt_authenticator.get_validated_token(token)
                 user = jwt_authenticator.get_user(validated_token)
             except (InvalidToken, TokenError):
-                pass
+                logger.warning("Invalid token used for document view %s.", pk)
 
         if not user or not user.is_authenticated:
             if request.user and request.user.is_authenticated:
@@ -143,5 +171,10 @@ class DocumentViewAPIView(APIView):
         if not os.path.exists(file_path):
             raise Http404("File tài liệu vật lý không tìm thấy trên server.")
 
-        response = FileResponse(open(file_path, "rb"), content_type="application/pdf")
-        return response
+        extension = os.path.splitext(file_path)[1].lower()
+        content_type = DOCUMENT_CONTENT_TYPES.get(extension) or mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+        return FileResponse(
+            open(file_path, "rb"),
+            content_type=content_type,
+            filename=os.path.basename(file_path),
+        )
