@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 
-from documents.services.docling_convert import _is_text_too_short
+from documents.services.docling_convert import _is_pdf_text_low_quality, _is_text_too_short
 
 
 class DoclingConvertTests(SimpleTestCase):
@@ -36,3 +36,29 @@ thoph(Pham Hoang Tho) - 04/06/2026 16:44:22
         markdown = f"# van-ban.pdf\n\n## Trang 1\n\n{body}"
 
         self.assertFalse(_is_text_too_short(markdown))
+
+    def test_garbled_pdf_text_is_low_quality_even_when_long_enough(self):
+        garbled = " ".join(
+            [
+                "ceNG noa xAHqr cHU xcniavrET NAM DQc l$p Tr; do H4nh phric",
+                "PHOr HQ VAN HANH GrtrA CAC HO soNc BA HA SONC HINH",
+                "Mta lii dugc quy dinh t ngdy 01 th6ng 9 den ngdy 15 thring l2",
+            ]
+            * 8
+        )
+        markdown = f"# quy-che.pdf\n\n## Trang 1\n\n{garbled}"
+
+        self.assertTrue(_is_pdf_text_low_quality(markdown))
+
+    def test_readable_vietnamese_pdf_text_is_not_low_quality(self):
+        readable = " ".join(
+            [
+                "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM Độc lập Tự do Hạnh phúc.",
+                "QUY CHẾ PHỐI HỢP VẬN HÀNH GIỮA CÁC HỒ SÔNG BA HẠ SÔNG HINH.",
+                "Mùa lũ được quy định từ ngày 01 tháng 9 đến ngày 15 tháng 12 hằng năm.",
+            ]
+            * 8
+        )
+        markdown = f"# quy-che.pdf\n\n## Trang 1\n\n{readable}"
+
+        self.assertFalse(_is_pdf_text_low_quality(markdown))

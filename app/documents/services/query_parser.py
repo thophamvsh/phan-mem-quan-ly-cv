@@ -11,6 +11,7 @@ STOPWORDS = {
     "anh",
     "ban",
     "cai",
+    "cac",
     "cho",
     "cua",
     "duoc",
@@ -99,11 +100,14 @@ def extract_numbers(text):
 
 def extract_terms(text):
     normalized = normalize_text(text)
-    return [
-        term
-        for term in re.findall(r"[a-z0-9]+", normalized)
-        if len(term) >= 3 and term not in STOPWORDS
-    ]
+    terms = []
+    seen = set()
+    for term in re.findall(r"[a-z0-9]+", normalized):
+        if len(term) < 3 or term in STOPWORDS or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+    return terms
 
 
 def detect_factory(text):

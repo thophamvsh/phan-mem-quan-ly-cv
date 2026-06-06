@@ -107,3 +107,117 @@ class OptimizedViewsTests(APITestCase):
         
         # 09:00 is slot index 9
         self.assertEqual(ap_luc_data['values'][9], 5.4)
+
+    def test_thong_so_to_may_bulk_upsert_accepts_device_code(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thongsotomay-bulk-upsert')
+        response = self.client.post(
+            url,
+            [
+                {
+                    'thiet_bi_ma': 'SH.TB.H1',
+                    'ma_thong_so': 'ap_luc_nuoc',
+                    'ten_thong_so': 'Áp lực nước',
+                    'don_vi': 'bar',
+                    'gia_tri': 6.2,
+                    'thoi_diem_nhap': '2026-05-31 10:00:00',
+                    'ngay_nhap': '2026-05-31',
+                    'nha_may': 'Song Hinh',
+                }
+            ],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['created'], 1)
+        self.assertTrue(
+            ThongSoToMay.objects.filter(
+                thiet_bi=self.device,
+                ma_thong_so='ap_luc_nuoc',
+                ngay_nhap='2026-05-31',
+                gia_tri=6.2,
+            ).exists()
+        )
+
+    def test_thong_so_to_may_bulk_upsert_null_value_deletes_existing_record(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thongsotomay-bulk-upsert')
+        response = self.client.post(
+            url,
+            [
+                {
+                    'thiet_bi_ma': 'SH.TB.H1',
+                    'ma_thong_so': self.ts_tm.ma_thong_so,
+                    'ten_thong_so': self.ts_tm.ten_thong_so,
+                    'don_vi': self.ts_tm.don_vi,
+                    'gia_tri': None,
+                    'thoi_diem_nhap': '2026-05-31T09:00:00+07:00',
+                    'ngay_nhap': '2026-05-31',
+                    'nha_may': 'Song Hinh',
+                }
+            ],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['deleted'], 1)
+        self.assertFalse(
+            ThongSoToMay.objects.filter(id=self.ts_tm.id).exists()
+        )
+
+    def test_thong_so_van_hanh_bulk_create_accepts_thiet_bi_id(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thongsovanhanh-bulk-create')
+        response = self.client.post(
+            url,
+            [
+                {
+                    'thiet_bi_id': self.device.id,
+                    'ma_thong_so': 'dien_ap_h1',
+                    'ten_thong_so': 'Dien ap H1',
+                    'don_vi': 'kV',
+                    'gia_tri': '221.5',
+                    'thoi_diem_nhap': '2026-05-31T10:00:00+07:00',
+                    'ngay_nhap': '2026-05-31',
+                    'nha_may': 'Song Hinh',
+                }
+            ],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['created'], 1)
+        self.assertTrue(
+            ThongSoVanHanh.objects.filter(
+                thiet_bi=self.device,
+                ma_thong_so='dien_ap_h1',
+                ngay_nhap='2026-05-31',
+                gia_tri='221.5',
+            ).exists()
+        )
+
+    def test_thong_so_van_hanh_bulk_create_null_value_deletes_existing_record(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thongsovanhanh-bulk-create')
+        response = self.client.post(
+            url,
+            [
+                {
+                    'thiet_bi_id': self.device.id,
+                    'ma_thong_so': self.ts_vh.ma_thong_so,
+                    'ten_thong_so': self.ts_vh.ten_thong_so,
+                    'don_vi': self.ts_vh.don_vi,
+                    'gia_tri': None,
+                    'thoi_diem_nhap': '2026-05-31T08:30:00+07:00',
+                    'ngay_nhap': '2026-05-31',
+                    'nha_may': 'Song Hinh',
+                }
+            ],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['deleted'], 1)
+        self.assertFalse(
+            ThongSoVanHanh.objects.filter(id=self.ts_vh.id).exists()
+        )

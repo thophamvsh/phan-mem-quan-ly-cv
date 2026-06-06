@@ -106,10 +106,14 @@ def score_section(parsed_query, heading_path, metadata):
 
 def score_chunk(parsed_query, chunk, semantic_score=0.0):
     metadata = chunk.metadata or {}
-    text = f"{chunk.heading_path} {chunk.content}"
+    document_title = getattr(getattr(chunk, "document", None), "title", "")
+    text = f"{document_title} {chunk.heading_path} {chunk.content}"
     keyword = score_keyword(parsed_query, text)
     metadata_score = score_metadata(parsed_query, metadata)
-    section = score_section(parsed_query, chunk.heading_path, metadata)
+    section_heading = " ".join(
+        part for part in (document_title, chunk.heading_path) if part
+    )
+    section = score_section(parsed_query, section_heading, metadata)
     semantic = max(0.0, min(float(semantic_score or 0), 1.0))
 
     final_score = (
@@ -124,6 +128,16 @@ def score_chunk(parsed_query, chunk, semantic_score=0.0):
     chunk_ranges = { (item.get("start"), item.get("end")) for item in metadata.get("date_ranges", []) }
     if query_ranges and (query_ranges & chunk_ranges):
         final_score += 0.35
+
+    content = (chunk.content or "").strip()
+    if document_title and len(content) >= 100:
+        title_keyword = score_keyword(parsed_query, document_title)
+        content_keyword = score_keyword(parsed_query, content)
+        if title_keyword >= 0.2 and content_keyword >= 0.2:
+            final_score += 0.04
+
+    if len(content) < 100 and content.startswith("#"):
+        final_score *= 0.6
 
     return {
         "score": min(final_score, 1.0),

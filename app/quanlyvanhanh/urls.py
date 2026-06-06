@@ -1,18 +1,29 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views, views_excel, views_optimized, views_export, views_h1, views_h2
+from . import (
+    views_excel,
+    views_export,
+    views_h1,
+    views_h2,
+    views_thietbi,
+    views_thietbi_meta,
+    views_thongso_dien,
+    views_optimized,
+    views_thongso_tomay,
+    views_vattu,
+)
 
 app_name = 'quanlyvanhanh'
 
 # Tạo router cho REST API
 router = DefaultRouter()
-router.register(r'thiet-bi', views.ThietBiViewSet, basename='thietbi')
-router.register(r'vat-tu', views.VatTuViewSet, basename='vattu')
-router.register(r'thiet-bi-vat-tu', views.ThietBiVatTuViewSet, basename='thietbivattu')
-router.register(r'thong-so-van-hanh', views.ThongSoVanHanhViewSet, basename='thongsovanhanh')
-router.register(r'thong-so-to-may', views.ThongSoToMayViewSet, basename='thongsotomay')
-router.register(r'an-toan-thiet-bi', views.AnToanThietBiViewSet, basename='antoanthietbi')
-router.register(r'dinh-kem', views.DinhKemViewSet, basename='dinhkem')
+router.register(r'thiet-bi', views_thietbi.ThietBiViewSet, basename='thietbi')
+router.register(r'vat-tu', views_vattu.VatTuViewSet, basename='vattu')
+router.register(r'thiet-bi-vat-tu', views_vattu.ThietBiVatTuViewSet, basename='thietbivattu')
+router.register(r'thong-so-van-hanh', views_thongso_dien.ThongSoVanHanhViewSet, basename='thongsovanhanh')
+router.register(r'thong-so-to-may', views_thongso_tomay.ThongSoToMayViewSet, basename='thongsotomay')
+router.register(r'an-toan-thiet-bi', views_thietbi_meta.AnToanThietBiViewSet, basename='antoanthietbi')
+router.register(r'dinh-kem', views_thietbi_meta.DinhKemViewSet, basename='dinhkem')
 
 urlpatterns = [
     # Excel import endpoints (phải đặt trước router để tránh conflict)

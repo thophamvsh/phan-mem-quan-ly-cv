@@ -7,6 +7,11 @@ TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".log"}
 UNSUPPORTED_EXTENSIONS = {".doc"}
 PDF_EXTENSIONS = {".pdf"}
 MIN_EXTRACTED_TEXT_CHARS = 300
+MIN_PDF_TEXT_QUALITY_SCORE = 0.42
+VIETNAMESE_DIACRITIC_RE = re.compile(
+    r"[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]",
+    re.IGNORECASE,
+)
 
 
 def convert_file_to_markdown(file_path):
@@ -36,7 +41,9 @@ def convert_file_to_markdown(file_path):
     document = getattr(result, "document", None)
     if document and hasattr(document, "export_to_markdown"):
         markdown = document.export_to_markdown()
-        if suffix in PDF_EXTENSIONS and _is_text_too_short(markdown):
+        if suffix in PDF_EXTENSIONS and (
+            _is_text_too_short(markdown) or _is_pdf_text_low_quality(markdown)
+        ):
             return _extract_pdf_text_or_ocr(path)
         return markdown
     return _fallback_text(path)
@@ -45,7 +52,7 @@ def convert_file_to_markdown(file_path):
 def _extract_pdf_text_or_ocr(path):
     try:
         markdown = _extract_pdf_text(path)
-        if not _is_text_too_short(markdown):
+        if not _is_text_too_short(markdown) and not _is_pdf_text_low_quality(markdown):
             return markdown
     except Exception:
         pass
@@ -96,6 +103,52 @@ def _is_text_too_short(text):
     meaningful_text = _meaningful_text_for_length(text)
     compact = "".join(ch for ch in meaningful_text if not ch.isspace())
     return len(compact) < MIN_EXTRACTED_TEXT_CHARS
+
+
+def _is_pdf_text_low_quality(text):
+    meaningful_text = _meaningful_text_for_length(text)
+    compact = "".join(ch for ch in meaningful_text if not ch.isspace())
+    if len(compact) < MIN_EXTRACTED_TEXT_CHARS:
+        return True
+
+    normalized = meaningful_text.lower()
+    words = re.findall(r"[\wÀ-ỹ]+", normalized, flags=re.UNICODE)
+    long_words = [word for word in words if len(word) >= 4]
+    if not long_words:
+        return True
+
+    suspicious_words = [
+        word
+        for word in long_words
+        if re.search(r"\d", word)
+        or re.search(r"[qwxz]{2,}", word)
+        or re.search(r"[bcdfghjklmnpqrstvwxz]{5,}", word)
+    ]
+    suspicious_ratio = len(suspicious_words) / len(long_words)
+    diacritic_ratio = len(VIETNAMESE_DIACRITIC_RE.findall(meaningful_text)) / max(1, len(compact))
+
+    common_vietnamese_markers = (
+        "cộng hòa",
+        "doc lap",
+        "độc lập",
+        "hanh phuc",
+        "hạnh phúc",
+        "quy định",
+        "quy dinh",
+        "căn cứ",
+        "can cu",
+        "ngày",
+        "ngay",
+        "tháng",
+        "thang",
+        "vận hành",
+        "van hanh",
+        "hồ chứa",
+        "ho chua",
+    )
+    marker_hits = sum(1 for marker in common_vietnamese_markers if marker in normalized)
+    quality_score = (marker_hits / 6) + min(diacritic_ratio * 20, 0.35) - suspicious_ratio
+    return quality_score < MIN_PDF_TEXT_QUALITY_SCORE
 
 
 def _meaningful_text_for_length(text):
