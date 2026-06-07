@@ -173,12 +173,12 @@ def import_excel_h2(request):
         df = pd.read_excel(excel_file, header=None)
 
         # ===== VALIDATION: Kiểm tra file Excel có phải là file H2 không =====
-        # 1. Kiểm tra số hàng và số cột cơ bản
-        if len(df) < 27:
+        # 1. Kiểm tra số hàng và số cột cơ bản (phải có ít nhất 3 hàng header)
+        if len(df) < 3:
             return JsonResponse({
-                'error': f'File Excel không hợp lệ: File thông số H2 phải có ít nhất 27 hàng (3 header + 24 data rows). File hiện tại có {len(df)} hàng.',
+                'error': f'File Excel không hợp lệ: File phải có ít nhất 3 hàng header. File hiện tại có {len(df)} hàng.',
                 'status': 'error',
-                'expected_rows': 27,
+                'expected_rows': 3,
                 'actual_rows': len(df)
             }, status=400)
 
@@ -351,15 +351,8 @@ def import_excel_h2(request):
                 'missing_params': missing_params[:10]  # Chỉ trả về 10 đầu tiên
             }, status=400)
 
-        # 4. Kiểm tra số hàng dữ liệu (từ row 4 đến row 27 phải có đủ 24 hàng)
+        # 4. Kiểm tra số hàng dữ liệu (không bắt buộc đủ 24 hàng do pandas có thể bỏ qua dòng trống cuối file)
         data_row_count = len(df) - 3  # Trừ 3 header rows
-        if data_row_count < 24:
-            return JsonResponse({
-                'error': f'File Excel không hợp lệ: File thông số H2 phải có đúng 24 hàng dữ liệu (từ A4 đến A27). File hiện tại có {data_row_count} hàng dữ liệu.',
-                'status': 'error',
-                'expected_data_rows': 24,
-                'actual_data_rows': data_row_count
-            }, status=400)
 
         # 5. Cảnh báo nếu có quá nhiều hàng (có thể là file 48 slots)
         if data_row_count >= 48:
@@ -434,9 +427,6 @@ def import_excel_h2(request):
 
         # Xử lý dữ liệu từ A4 đến T27 (24 rows × 20 columns = 480 ô)
         for row_idx in range(3, 27):  # A4 to A27
-            if row_idx >= len(df):
-                break
-
             time_cycle = time_cycles[row_idx - 3] if row_idx - 3 < len(time_cycles) else None
             if not time_cycle:
                 continue
@@ -447,7 +437,7 @@ def import_excel_h2(request):
                     continue
 
                 mapping = column_mapping[col_idx]
-                value = df.iloc[row_idx, col_idx]
+                value = df.iloc[row_idx, col_idx] if row_idx < len(df) else None
 
                 # Xử lý 3 dạng ô: có số, trống, dấu "-"
                 if pd.isna(value) or value == '' or value == '-':

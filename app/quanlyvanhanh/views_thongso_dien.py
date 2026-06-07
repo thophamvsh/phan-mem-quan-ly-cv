@@ -287,3 +287,29 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                 "deleted_count": deleted_count,
             }
         )
+
+    @action(detail=False, methods=["delete"])
+    def delete_by_day(self, request):
+        thiet_bi_ma = request.query_params.get("thiet_bi_ma")
+        thiet_bi_id = request.query_params.get("thiet_bi_id")
+        ngay_str = request.query_params.get("ngay")
+
+        if not ngay_str:
+            return Response(
+                {"error": "Can cung cap tham so ngay (ngay)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(ngay_nhap=ngay_str)
+        if thiet_bi_id:
+            queryset = queryset.filter(thiet_bi_id=thiet_bi_id)
+        elif thiet_bi_ma:
+            queryset = queryset.filter(thiet_bi__ma_day_du=thiet_bi_ma)
+
+        deleted_count = queryset.delete()[0]
+        return Response(
+            {
+                "message": f"Da xoa {deleted_count} thong so van hanh",
+                "deleted_count": deleted_count,
+            }
+        )
