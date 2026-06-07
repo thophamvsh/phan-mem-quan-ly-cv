@@ -7,7 +7,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from core.factory_scope import filter_queryset_by_factory
+from core.factory_scope import filter_queryset_by_factory, get_user_factory_code, has_profile_permission
 from .models import ThongSoVanHanh, ThongSoToMay, ThietBi
 
 
@@ -29,6 +29,8 @@ def _scoped_thiet_bi_queryset(user):
 def export_thong_so(request):
     """Xuất dữ liệu thông số vận hành ra file Excel"""
     try:
+        if not has_profile_permission(request.user, "can_export_excel"):
+            return HttpResponse('Tài khoản của bạn chưa được cấp quyền xuất dữ liệu Excel. Vui lòng liên hệ quản trị viên.', status=403, content_type='text/plain; charset=utf-8')
         # Lấy tham số từ request
         params = _query_params(request)
         date = params.get('date')
@@ -61,7 +63,7 @@ def export_thong_so(request):
 
         # Filter theo thiết bị nếu không phải "all"
         if thiet_bi != 'all':
-            queryset = queryset.filter(thiet_bi__ma_day_du=thiet_bi)
+            queryset = queryset.filter(thiet_bi__ma_day_du__startswith=thiet_bi)
 
 
         # Chuyển đổi thành DataFrame
@@ -147,6 +149,8 @@ def export_thong_so(request):
 def export_thong_so_to_may_h1(request):
     """Xuất dữ liệu thông số tổ máy H1 ra file Excel"""
     try:
+        if not has_profile_permission(request.user, "can_export_excel"):
+            return HttpResponse('Tài khoản của bạn chưa được cấp quyền xuất dữ liệu Excel. Vui lòng liên hệ quản trị viên.', status=403, content_type='text/plain; charset=utf-8')
         # Lấy tham số từ request
         params = _query_params(request)
         date = params.get('date')
@@ -168,18 +172,20 @@ def export_thong_so_to_may_h1(request):
             )
 
         # Lấy thiết bị H1
+        factory_code = get_user_factory_code(request.user) or 'SH'
         try:
-            thiet_bi = _scoped_thiet_bi_queryset(request.user).get(ma_day_du='SH.TB.H1.GE')
+            thiet_bi = _scoped_thiet_bi_queryset(request.user).get(ma_day_du=f'{factory_code}.TB.H1.GE')
         except ThietBi.DoesNotExist:
             return HttpResponse(
                 'Không tìm thấy thiết bị H1',
                 status=404
             )
 
-        # Lấy dữ liệu thông số tổ máy H1
+        # Lấy dữ liệu thông số tổ máy H1 (bao gồm cả các thiết bị con)
+        prefix = ".".join(thiet_bi.ma_day_du.split(".")[:3])  # E.g., "SH.TB.H1"
         queryset = filter_queryset_by_factory(
             ThongSoToMay.objects.select_related('thiet_bi').filter(
-                thiet_bi=thiet_bi,
+                thiet_bi__ma_day_du__startswith=prefix,
                 ngay_nhap=export_date
             ),
             request.user,
@@ -317,6 +323,8 @@ def export_thong_so_to_may_h1(request):
 def export_thong_so_to_may_h2(request):
     """Xuất dữ liệu thông số tổ máy H2 ra file Excel"""
     try:
+        if not has_profile_permission(request.user, "can_export_excel"):
+            return HttpResponse('Tài khoản của bạn chưa được cấp quyền xuất dữ liệu Excel. Vui lòng liên hệ quản trị viên.', status=403, content_type='text/plain; charset=utf-8')
         # Lấy tham số từ request
         params = _query_params(request)
         date = params.get('date')
@@ -338,18 +346,20 @@ def export_thong_so_to_may_h2(request):
             )
 
         # Lấy thiết bị H2
+        factory_code = get_user_factory_code(request.user) or 'SH'
         try:
-            thiet_bi = _scoped_thiet_bi_queryset(request.user).get(ma_day_du='SH.TB.H2.GE')
+            thiet_bi = _scoped_thiet_bi_queryset(request.user).get(ma_day_du=f'{factory_code}.TB.H2.GE')
         except ThietBi.DoesNotExist:
             return HttpResponse(
                 'Không tìm thấy thiết bị H2',
                 status=404
             )
 
-        # Lấy dữ liệu thông số tổ máy H2
+        # Lấy dữ liệu thông số tổ máy H2 (bao gồm cả các thiết bị con)
+        prefix = ".".join(thiet_bi.ma_day_du.split(".")[:3])  # E.g., "SH.TB.H2"
         queryset = filter_queryset_by_factory(
             ThongSoToMay.objects.select_related('thiet_bi').filter(
-                thiet_bi=thiet_bi,
+                thiet_bi__ma_day_du__startswith=prefix,
                 ngay_nhap=export_date
             ),
             request.user,

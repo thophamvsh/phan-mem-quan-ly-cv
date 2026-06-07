@@ -10,6 +10,7 @@ from . import (
     views_thongso_dien,
     views_optimized,
     views_thongso_tomay,
+    views_tram,
     views_vattu,
 )
 
@@ -22,6 +23,7 @@ router.register(r'vat-tu', views_vattu.VatTuViewSet, basename='vattu')
 router.register(r'thiet-bi-vat-tu', views_vattu.ThietBiVatTuViewSet, basename='thietbivattu')
 router.register(r'thong-so-van-hanh', views_thongso_dien.ThongSoVanHanhViewSet, basename='thongsovanhanh')
 router.register(r'thong-so-to-may', views_thongso_tomay.ThongSoToMayViewSet, basename='thongsotomay')
+router.register(r'thong-so-tram-110kv', views_tram.ThongSoTram110KVViewSet, basename='thongsotram110kv')
 router.register(r'an-toan-thiet-bi', views_thietbi_meta.AnToanThietBiViewSet, basename='antoanthietbi')
 router.register(r'dinh-kem', views_thietbi_meta.DinhKemViewSet, basename='dinhkem')
 
@@ -35,6 +37,10 @@ urlpatterns = [
     # Thông số tổ máy H2 endpoints
     path('thong-so-to-may-h2/excel_template/', views_h2.excel_template_h2, name='excel_template_tomay_h2'),
     path('thong-so-to-may-h2/excel_import/', views_h2.import_excel_h2, name='excel_import_tomay_h2'),
+    # Thông số trạm 110kV endpoints
+    path('thong-so-tram-110kv/excel_template/', views_tram.excel_template_tram, name='excel_template_tram'),
+    path('thong-so-tram-110kv/excel_import/', views_tram.excel_import_tram, name='excel_import_tram'),
+    path('thong-so-tram-110kv/export/', views_tram.export_thong_so_tram_110kv, name='export_thong_so_tram_110kv'),
     # Export endpoints
     path('export-thong-so/', views_export.export_thong_so, name='export_thong_so'),
     path('thong-so-to-may-h1/export/', views_export.export_thong_so_to_may_h1, name='export_thong_so_to_may_h1'),
@@ -45,4 +51,3 @@ urlpatterns = [
     # Router URLs (đặt cuối cùng)
     path('', include(router.urls)),
 ]
-

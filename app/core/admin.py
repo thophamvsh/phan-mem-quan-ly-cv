@@ -180,6 +180,10 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
         }),
+        ('Quyền Excel', {
+            'fields': ('can_import_excel', 'can_export_excel'),
+            'description': 'Quyền import và export dữ liệu Excel'
+        }),
         ('Quyền thủy văn và sản xuất', {
             'fields': (
                 'can_view_hydrology_data',

@@ -16,7 +16,7 @@ import base64
 import qrcode
 
 from .models import (
-    ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay
+    ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV
 )
 
 # # Cho phép A hoặc A.B-C...
@@ -576,6 +576,59 @@ class ThongSoToMayResource(resources.ModelResource):
         report_skipped = True
 
 
+class ThongSoTram110KVResource(resources.ModelResource):
+    """Resource cho import/export Thông số trạm 110kV"""
+    thiet_bi_ma = fields.Field(
+        column_name="Mã thiết bị",
+        attribute="thiet_bi",
+        widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
+    )
+    ten_thong_so = fields.Field(
+        column_name="Tên thông số",
+        attribute="ten_thong_so",
+    )
+    ma_thong_so = fields.Field(
+        column_name="Mã thông số",
+        attribute="ma_thong_so",
+    )
+    don_vi = fields.Field(
+        column_name="Đơn vị",
+        attribute="don_vi",
+    )
+    ky_hieu_van_hanh = fields.Field(
+        column_name="Ký hiệu vận hành",
+        attribute="ky_hieu_van_hanh",
+    )
+    nha_may = fields.Field(
+        column_name="Nhà máy",
+        attribute="nha_may",
+    )
+    gia_tri = fields.Field(
+        column_name="Giá trị",
+        attribute="gia_tri",
+    )
+    thoi_diem_nhap = fields.Field(
+        column_name="Thời điểm nhập",
+        attribute="thoi_diem_nhap",
+    )
+    ngay_nhap = fields.Field(
+        column_name="Ngày nhập",
+        attribute="ngay_nhap",
+        widget=FlexibleDateWidget(),
+    )
+
+    class Meta:
+        model = ThongSoTram110KV
+        import_id_fields = ("thiet_bi_ma", "ma_thong_so", "thoi_diem_nhap", "ngay_nhap")
+        fields = (
+            "thiet_bi_ma", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
+            "nha_may", "gia_tri", "thoi_diem_nhap", "ngay_nhap", "ghi_chu"
+        )
+        export_order = fields
+        skip_unchanged = True
+        report_skipped = True
+
+
 # ===================== MIXIN =====================
 
 class XLSXOnlyMixin:
@@ -1115,6 +1168,118 @@ class ThongSoToMayAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExportMo
                     total_deleted += deleted_count
                     self.message_user(request, f"Đã xóa {deleted_count} thông số của nhà máy '{plant}'.")
 
+            self.message_user(request, f"Tổng cộng đã xóa {total_deleted} thông số.")
+        else:
+            self.message_user(request, "Không có thông số nào được chọn.")
+
+    def thoi_diem_nhap_24h(self, obj):
+        """Hiển thị thời gian theo định dạng 24 giờ"""
+        if obj.thoi_diem_nhap:
+            return obj.thoi_diem_nhap.strftime('%H:%M')
+        return '-'
+    thoi_diem_nhap_24h.short_description = 'Thời điểm nhập'
+    thoi_diem_nhap_24h.admin_order_field = 'thoi_diem_nhap'
+
+    def ngay_nhap_24h(self, obj):
+        """Hiển thị ngày nhập theo định dạng 24 giờ"""
+        if obj.ngay_nhap:
+            return obj.ngay_nhap.strftime('%d/%m/%Y')
+        return '-'
+    ngay_nhap_24h.short_description = 'Ngày nhập'
+    ngay_nhap_24h.admin_order_field = 'ngay_nhap'
+
+    fieldsets = (
+        ('Thông tin cơ bản', {
+            'fields': ('thiet_bi', 'ma_thong_so', 'ten_thong_so', 'gia_tri', 'don_vi')
+        }),
+        ('Thông tin bổ sung', {
+            'fields': ('ky_hieu_van_hanh', 'nha_may', 'ghi_chu')
+        }),
+        ('Thời gian', {
+            'fields': ('thoi_diem_nhap', 'ngay_nhap')
+        }),
+    )
+
+
+@admin.register(ThongSoTram110KV)
+class ThongSoTram110KVAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExportModelAdmin):
+    resource_class = ThongSoTram110KVResource
+    list_display = ['thiet_bi', 'ma_thong_so', 'ten_thong_so', 'gia_tri', 'nha_may', 'thoi_diem_nhap_24h', 'ngay_nhap_24h']
+    list_filter = ['nha_may', 'ngay_nhap', 'thoi_diem_nhap']
+    search_fields = ['ma_thong_so', 'ten_thong_so', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh', 'thiet_bi__ten']
+    autocomplete_fields = ['thiet_bi']
+    readonly_fields = ['thoi_diem_nhap', 'ngay_nhap']
+    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter', 'delete_by_plant']
+
+    @admin.action(description="Xóa các thông số trạm 110kV đã chọn")
+    def delete_selected(self, request, queryset):
+        """Xóa các thông số trạm 110kV đã chọn"""
+        count = queryset.count()
+        if count > 0:
+            queryset.delete()
+            self.message_user(request, f"Đã xóa {count} thông số trạm 110kV.")
+        else:
+            self.message_user(request, "Không có thông số nào được chọn để xóa.")
+
+    @admin.action(description="Xóa theo ngày đã chọn")
+    def delete_by_date(self, request, queryset):
+        """Xóa tất cả thông số theo ngày của các bản ghi đã chọn"""
+        if queryset.exists():
+            dates = queryset.values_list('ngay_nhap', flat=True).distinct()
+            total_deleted = 0
+            for date in dates:
+                deleted_count = ThongSoTram110KV.objects.filter(ngay_nhap=date).count()
+                ThongSoTram110KV.objects.filter(ngay_nhap=date).delete()
+                total_deleted += deleted_count
+                self.message_user(request, f"Đã xóa {deleted_count} thông số của ngày {date}.")
+            self.message_user(request, f"Tổng cộng đã xóa {total_deleted} thông số.")
+        else:
+            self.message_user(request, "Không có thông số nào được chọn.")
+
+    @admin.action(description="Xóa theo thiết bị đã chọn")
+    def delete_by_device(self, request, queryset):
+        """Xóa tất cả thông số theo thiết bị của các bản ghi đã chọn"""
+        if queryset.exists():
+            devices = queryset.values_list('thiet_bi', flat=True).distinct()
+            total_deleted = 0
+            for device_id in devices:
+                device = queryset.filter(thiet_bi_id=device_id).first().thiet_bi
+                if device:
+                    deleted_count = ThongSoTram110KV.objects.filter(thiet_bi=device).count()
+                    ThongSoTram110KV.objects.filter(thiet_bi=device).delete()
+                    total_deleted += deleted_count
+                    self.message_user(request, f"Đã xóa {deleted_count} thông số của thiết bị {device.ten}.")
+            self.message_user(request, f"Tổng cộng đã xóa {total_deleted} thông số.")
+        else:
+            self.message_user(request, "Không có thông số nào được chọn.")
+
+    @admin.action(description="Xóa theo thông số đã chọn")
+    def delete_by_parameter(self, request, queryset):
+        """Xóa tất cả thông số theo mã thông số của các bản ghi đã chọn"""
+        if queryset.exists():
+            parameters = queryset.values_list('ma_thong_so', flat=True).distinct()
+            total_deleted = 0
+            for param in parameters:
+                deleted_count = ThongSoTram110KV.objects.filter(ma_thong_so=param).count()
+                ThongSoTram110KV.objects.filter(ma_thong_so=param).delete()
+                total_deleted += deleted_count
+                self.message_user(request, f"Đã xóa {deleted_count} thông số có mã '{param}'.")
+            self.message_user(request, f"Tổng cộng đã xóa {total_deleted} thông số.")
+        else:
+            self.message_user(request, "Không có thông số nào được chọn.")
+
+    @admin.action(description="Xóa theo nhà máy đã chọn")
+    def delete_by_plant(self, request, queryset):
+        """Xóa tất cả thông số theo nhà máy của các bản ghi đã chọn"""
+        if queryset.exists():
+            plants = queryset.values_list('nha_may', flat=True).distinct()
+            total_deleted = 0
+            for plant in plants:
+                if plant:
+                    deleted_count = ThongSoTram110KV.objects.filter(nha_may=plant).count()
+                    ThongSoTram110KV.objects.filter(nha_may=plant).delete()
+                    total_deleted += deleted_count
+                    self.message_user(request, f"Đã xóa {deleted_count} thông số của nhà máy '{plant}'.")
             self.message_user(request, f"Tổng cộng đã xóa {total_deleted} thông số.")
         else:
             self.message_user(request, "Không có thông số nào được chọn.")

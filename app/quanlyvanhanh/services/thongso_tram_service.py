@@ -5,45 +5,8 @@ from core.factory_scope import (
     get_user_factory_name,
     has_all_factory_access,
 )
-from quanlyvanhanh.models import ThietBi, ThongSoToMay
-from quanlyvanhanh.serializers import ThongSoToMayCreateSerializer
-
-PARAM_DEVICE_SUFFIX = {
-    "ap_luc_nuoc": ".GE",
-    "ap_luc_chen_truc": ".TuB.SH",
-    "luu_luong_chen_truc": ".TuB.SH",
-    "luu_luong_o_huong_tuabin": ".TuB.OH",
-    "nhiet_do_o_huong_tuabin": ".TuB.OH",
-    "luu_luong_o_huong_may_phat": ".GE.OH",
-    "nhiet_do_o_huong_may_phat": ".GE.OH",
-    "luu_luong_o_do_may_phat": ".GE.OD",
-    "nhiet_do_o_do": ".GE.OD",
-    "nhiet_do_o_huong_o_do": ".GE.OD.PD",
-    "nhiet_do_dau_o_do": ".GE.OD.BD",
-    "luu_luong_lam_mat_may_phat": ".GE",
-    "nhiet_do_nuoc_lam_mat_may_phat": ".GE",
-    "nhiet_do_khi_mat": ".GE",
-    "nhiet_do_khi_nong": ".GE",
-    "nhiet_do_cuon_day_stato": ".GE",
-    "toc_do": ".GOV.TB3",
-    "gioi_han_do_mo_canh_huong": ".TuB.CH",
-    "do_mo_canh_huong": ".TuB.CH",
-    "do_roi_toc": ".TuB.CH",
-}
-
-def get_specific_thiet_bi(base_device, param_code):
-    """
-    base_device: ThietBi object (e.g. SH.TB.H1.GE or SH.TB.H1)
-    param_code: string (e.g. "nhiet_do_o_huong_tuabin")
-    """
-    prefix = ".".join(base_device.ma_day_du.split(".")[:3])  # E.g., "SH.TB.H1"
-    suffix = PARAM_DEVICE_SUFFIX.get(param_code, ".GE")
-    target_code = f"{prefix}{suffix}"
-    try:
-        return ThietBi.objects.get(ma_day_du=target_code)
-    except ThietBi.DoesNotExist:
-        return base_device
-
+from quanlyvanhanh.models import ThietBi, ThongSoTram110KV
+from quanlyvanhanh.serializers import ThongSoTram110KVCreateSerializer
 
 
 def resolve_scoped_thiet_bi(user, item_data):
@@ -63,7 +26,7 @@ def resolve_scoped_thiet_bi(user, item_data):
     return None
 
 
-def bulk_upsert_thong_so_to_may(user, data_list):
+def bulk_upsert_thong_so_tram_110kv(user, data_list):
     created_count = 0
     updated_count = 0
     deleted_count = 0
@@ -80,18 +43,15 @@ def bulk_upsert_thong_so_to_may(user, data_list):
                 "Bạn không có quyền nhập thông số cho thiết bị này."
             )
 
-        # Ánh xạ thiết bị con chính xác dựa theo mã thông số
-        specific_tb = get_specific_thiet_bi(thiet_bi_obj, item_data.get("ma_thong_so"))
-
         should_delete = item_data.get("gia_tri") in (None, "")
 
-        item_data["thiet_bi"] = specific_tb.id
-        serializer = ThongSoToMayCreateSerializer(data=item_data)
+        item_data["thiet_bi"] = thiet_bi_obj.id
+        serializer = ThongSoTram110KVCreateSerializer(data=item_data)
         serializer.is_valid(raise_exception=True)
         validated_data = serializer.validated_data
 
         if should_delete:
-            deleted_count += ThongSoToMay.objects.filter(
+            deleted_count += ThongSoTram110KV.objects.filter(
                 thiet_bi=validated_data["thiet_bi"],
                 ten_thong_so=validated_data["ten_thong_so"],
                 thoi_diem_nhap=validated_data["thoi_diem_nhap"],
@@ -99,7 +59,7 @@ def bulk_upsert_thong_so_to_may(user, data_list):
             ).delete()[0]
             continue
 
-        _, created = ThongSoToMay.objects.update_or_create(
+        _, created = ThongSoTram110KV.objects.update_or_create(
             thiet_bi=validated_data["thiet_bi"],
             ten_thong_so=validated_data["ten_thong_so"],
             thoi_diem_nhap=validated_data["thoi_diem_nhap"],

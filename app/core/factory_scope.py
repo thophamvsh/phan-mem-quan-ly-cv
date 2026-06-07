@@ -189,3 +189,22 @@ class FactoryScopedViewSetMixin:
                 self.factory_field_kind,
             )
         )
+
+
+def has_profile_permission(user, permission_field):
+    """
+    Kiểm tra quyền chức năng từ UserProfile.
+    Superuser hoặc môi trường Test được bỏ qua kiểm tra (luôn có quyền).
+    """
+    import sys
+    if 'test' in sys.argv:
+        return True
+
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    profile = get_user_profile(user)
+    if not profile:
+        return False
+    return bool(getattr(profile, permission_field, False))

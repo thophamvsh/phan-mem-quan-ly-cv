@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from datetime import time, datetime
-from .models import ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay
+from .models import ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV
 
 
 def get_thiet_bi_qr_payload(obj):
@@ -398,3 +398,55 @@ class ThongSoToMayCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Giá trị không được âm")
 
         return data
+
+
+# -------------------------
+# THÔNG SỐ TRẠM 110KV SERIALIZERS
+# -------------------------
+class ThongSoTram110KVSerializer(serializers.ModelSerializer):
+    """Serializer cho model ThongSoTram110KV"""
+    thiet_bi_ten = serializers.CharField(source='thiet_bi.ten', read_only=True)
+    thiet_bi_ma_day_du = serializers.CharField(source='thiet_bi.ma_day_du', read_only=True)
+    don_vi = serializers.CharField(allow_blank=True, required=False, allow_null=True)
+
+    class Meta:
+        model = ThongSoTram110KV
+        fields = [
+            'id', 'thiet_bi', 'thiet_bi_ten', 'thiet_bi_ma_day_du', 'ten_thong_so', 'ma_thong_so',
+            'don_vi', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh',
+            'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at']
+
+
+class ThongSoTram110KVCreateSerializer(serializers.ModelSerializer):
+    """Serializer đơn giản cho việc tạo thông số trạm 110kV"""
+    don_vi = serializers.CharField(allow_blank=True, required=False, allow_null=True)
+
+    class Meta:
+        model = ThongSoTram110KV
+        fields = [
+            'thiet_bi', 'ten_thong_so', 'ma_thong_so', 'don_vi', 'gia_tri',
+            'ghi_chu', 'nha_may', 'ky_hieu_van_hanh', 'thoi_diem_nhap', 'ngay_nhap'
+        ]
+        validators = []
+
+    def validate_thoi_diem_nhap(self, value):
+        """Chuẩn hóa format thoi_diem_nhap cho DateTimeField"""
+        if isinstance(value, str):
+            try:
+                if 'T' in value:
+                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    return dt
+                elif ' ' in value:
+                    return datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                else:
+                    parts = value.split(':')
+                    hh, mm = int(parts[0]), int(parts[1])
+                    ss = int(parts[2]) if len(parts) > 2 else 0
+                    today = datetime.now().date()
+                    return datetime.combine(today, time(hh, mm, ss))
+            except Exception as e:
+                raise serializers.ValidationError(f'Định dạng thoi_diem_nhap không hợp lệ: {str(e)}')
+        return value
+

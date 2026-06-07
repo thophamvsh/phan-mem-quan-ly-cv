@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from core.factory_scope import (
     apply_request_factory_to_serializer,
     filter_queryset_by_factory,
+    has_profile_permission,
 )
 from quanlyvanhanh.models import ThietBi, ThongSoToMay
 from quanlyvanhanh.serializers import (
@@ -39,6 +40,29 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
 
     queryset = ThongSoToMay.objects.select_related("thiet_bi").all()
     serializer_class = ThongSoToMaySerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        
+        # Check custom profile permissions based on action
+        if self.action in ["list", "retrieve", "by_date", "by_device", "config"]:
+            if not has_profile_permission(request.user, "can_view_operation_parameters"):
+                self.permission_denied(
+                    request,
+                    message="Tài khoản của bạn chưa được cấp quyền xem thông số vận hành. Vui lòng liên hệ quản trị viên."
+                )
+        elif self.action in ["create", "update", "partial_update", "bulk_create", "bulk_upsert"]:
+            if not has_profile_permission(request.user, "can_edit_operation_parameters"):
+                self.permission_denied(
+                    request,
+                    message="Tài khoản của bạn chưa được cấp quyền thêm/sửa thông số vận hành. Vui lòng liên hệ quản trị viên."
+                )
+        elif self.action in ["destroy", "delete_by_day"]:
+            if not has_profile_permission(request.user, "can_delete_operation_parameters"):
+                self.permission_denied(
+                    request,
+                    message="Tài khoản của bạn chưa được cấp quyền xóa dữ liệu thông số vận hành. Vui lòng liên hệ quản trị viên."
+                )
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -119,9 +143,15 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
 
         queryset = self.get_queryset()
         if device_id:
-            queryset = queryset.filter(thiet_bi_id=device_id)
+            try:
+                device = ThietBi.objects.get(id=device_id)
+                prefix = ".".join(device.ma_day_du.split(".")[:3])
+                queryset = queryset.filter(thiet_bi__ma_day_du__startswith=prefix)
+            except ThietBi.DoesNotExist:
+                queryset = queryset.filter(thiet_bi_id=device_id)
         else:
-            queryset = queryset.filter(thiet_bi__ma_day_du=device_code)
+            prefix = ".".join(device_code.split(".")[:3])
+            queryset = queryset.filter(thiet_bi__ma_day_du__startswith=prefix)
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
@@ -179,9 +209,15 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
 
         queryset = self.get_queryset().filter(ngay_nhap=ngay_str)
         if thiet_bi_id:
-            queryset = queryset.filter(thiet_bi_id=thiet_bi_id)
+            try:
+                device = ThietBi.objects.get(id=thiet_bi_id)
+                prefix = ".".join(device.ma_day_du.split(".")[:3])
+                queryset = queryset.filter(thiet_bi__ma_day_du__startswith=prefix)
+            except ThietBi.DoesNotExist:
+                queryset = queryset.filter(thiet_bi_id=thiet_bi_id)
         elif thiet_bi_ma:
-            queryset = queryset.filter(thiet_bi__ma_day_du=thiet_bi_ma)
+            prefix = ".".join(thiet_bi_ma.split(".")[:3])
+            queryset = queryset.filter(thiet_bi__ma_day_du__startswith=prefix)
 
         deleted_count = queryset.delete()[0]
         return Response(

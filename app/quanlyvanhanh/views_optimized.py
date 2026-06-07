@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 
-from core.factory_scope import filter_queryset_by_factory
+from core.factory_scope import filter_queryset_by_factory, has_profile_permission
 from .models import ThietBi, ThongSoVanHanh, ThongSoToMay
 
 
@@ -151,6 +151,11 @@ class ThongSoByDayView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        if not has_profile_permission(request.user, "can_view_operation_parameters"):
+            return Response(
+                {"detail": "Tài khoản của bạn chưa được cấp quyền xem thông số vận hành. Vui lòng liên hệ quản trị viên."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         tb_id = request.GET.get("thiet_bi_id")
         tb_ma = request.GET.get("thiet_bi_ma")
         ngay_str = request.GET.get("ngay")
@@ -192,7 +197,7 @@ class ThongSoByDayView(APIView):
 
         # Lấy tất cả bản ghi thuộc NGÀY chọn, dựa vào cả thoi_diem_nhap__date và ngay_nhap
         qs = (filter_queryset_by_factory(
-                ThongSoVanHanh.objects.filter(thiet_bi=tb),
+                ThongSoVanHanh.objects.filter(thiet_bi__ma_day_du__startswith=tb.ma_day_du),
                 request.user,
                 "nha_may",
                 "string",
@@ -339,6 +344,11 @@ class ThongSoToMayByDayView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        if not has_profile_permission(request.user, "can_view_operation_parameters"):
+            return Response(
+                {"detail": "Tài khoản của bạn chưa được cấp quyền xem thông số vận hành. Vui lòng liên hệ quản trị viên."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         tb_id = request.GET.get("thiet_bi_id")
         tb_ma = request.GET.get("thiet_bi_ma")
         ngay_str = request.GET.get("ngay")
@@ -374,9 +384,10 @@ class ThongSoToMayByDayView(APIView):
         # Tạo 24 mốc thời gian của ngày (00:00 -> 23:00)
         slots = day_slots_h1(ngay)
 
-        # Query các bản ghi trong ngày
+        # Query các bản ghi trong ngày (bao gồm các thiết bị con của tổ máy)
+        prefix = ".".join(tb.ma_day_du.split(".")[:3])  # E.g., "SH.TB.H1" hoặc "SH.TB.H2"
         qs = (filter_queryset_by_factory(
-                ThongSoToMay.objects.filter(thiet_bi=tb),
+                ThongSoToMay.objects.filter(thiet_bi__ma_day_du__startswith=prefix),
                 request.user,
                 "nha_may",
                 "string",

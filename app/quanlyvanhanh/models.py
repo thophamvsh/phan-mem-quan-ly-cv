@@ -207,3 +207,45 @@ class ThongSoToMay(models.Model):
 
     def __str__(self):
         return f"{self.ten_thong_so} - {self.thiet_bi.ten} - {self.ngay_nhap} {self.thoi_diem_nhap}"
+
+
+# -------------------------
+# THÔNG SỐ TRẠM 110KV
+# -------------------------
+class ThongSoTram110KV(models.Model):
+    # Thông tin cơ bản
+    ten_thong_so = models.CharField(max_length=255, verbose_name="Tên thông số")
+    ma_thong_so = models.CharField(max_length=100, verbose_name="Mã thông số")
+    don_vi = models.CharField(max_length=50, verbose_name="Đơn vị")
+
+    # Thông tin thiết bị
+    thiet_bi = models.ForeignKey(ThietBi, on_delete=models.CASCADE, verbose_name="Thiết bị")
+    nha_may = models.CharField(max_length=64, verbose_name="Nhà máy")
+    ky_hieu_van_hanh = models.CharField(max_length=100, blank=True, verbose_name="Ký hiệu vận hành")
+
+    # Dữ liệu thông số
+    gia_tri = models.CharField(max_length=255, null=True, blank=True, verbose_name="Giá trị")
+    ghi_chu = models.TextField(blank=True, verbose_name="Ghi chú")
+
+    # Thời gian
+    thoi_diem_nhap = models.DateTimeField(verbose_name="Thời điểm nhập")
+    ngay_nhap = models.DateField(verbose_name="Ngày nhập")
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ngày tạo")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Ngày cập nhật")
+
+    class Meta:
+        db_table = "thong_so_tram_110kv"
+        verbose_name = "Thông số trạm 110kV"
+        verbose_name_plural = "Thông số trạm 110kV"
+        unique_together = [['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap']]
+        indexes = [
+            models.Index(fields=['ngay_nhap', 'thoi_diem_nhap']),
+            models.Index(fields=['thiet_bi', 'ngay_nhap']),
+            models.Index(fields=['ten_thong_so', 'ngay_nhap']),
+        ]
+
+    def __str__(self):
+        return f"{self.ten_thong_so} - {self.thiet_bi.ten} - {self.ngay_nhap} {self.thoi_diem_nhap}"
+

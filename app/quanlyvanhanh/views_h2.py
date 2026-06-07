@@ -5,8 +5,10 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from core.factory_scope import filter_queryset_by_factory, get_user_factory_name
+from core.factory_scope import filter_queryset_by_factory, get_user_factory_name, get_user_factory_code, has_profile_permission
 from .models import ThietBi, ThongSoToMay
+from .services.thongso_tomay_service import get_specific_thiet_bi
+
 
 
 @api_view(["GET"])
@@ -14,6 +16,8 @@ from .models import ThietBi, ThongSoToMay
 def excel_template_h2(request):
     """Tạo template Excel cho thông số tổ máy H2"""
     try:
+        if not has_profile_permission(request.user, "can_export_excel"):
+            return JsonResponse({'error': 'Tài khoản của bạn chưa được cấp quyền xuất dữ liệu hoặc tải template Excel. Vui lòng liên hệ quản trị viên.'}, status=403)
         # Tạo 24 chu kỳ từ 00:00 đến 23:00 (mỗi giờ)
         time_cycles = []
         for hour in range(24):
@@ -152,6 +156,8 @@ def excel_template_h2(request):
 def import_excel_h2(request):
     """Import dữ liệu từ Excel cho thông số tổ máy H2"""
     try:
+        if not has_profile_permission(request.user, "can_import_excel"):
+            return JsonResponse({'error': 'Tài khoản của bạn chưa được cấp quyền import dữ liệu từ Excel. Vui lòng liên hệ quản trị viên.'}, status=403)
         # Lấy file Excel
         excel_file = request.FILES.get('file')
         if not excel_file:
@@ -367,7 +373,8 @@ def import_excel_h2(request):
         # ===== VALIDATION HOÀN TẤT =====
 
         # Lấy thiết bị H2
-        device_code = request_data.get('device_code', 'SH.TB.H2.GE')  # Default to H2
+        factory_code = get_user_factory_code(request.user) or 'SH'
+        device_code = request_data.get('device_code', f'{factory_code}.TB.H2.GE')  # Default to H2
         try:
             thiet_bi = filter_queryset_by_factory(
                 ThietBi.objects.all(),
@@ -412,9 +419,10 @@ def import_excel_h2(request):
 
         imported_count = 0
 
-        # Lấy trước các bản ghi hiện có để tra cứu trên memory
+        # Lấy trước các bản ghi hiện có (bao gồm các thiết bị con) để tra cứu trên memory
+        prefix = ".".join(thiet_bi.ma_day_du.split(".")[:3])  # E.g., "SH.TB.H2"
         existing_records = ThongSoToMay.objects.filter(
-            thiet_bi=thiet_bi,
+            thiet_bi__ma_day_du__startswith=prefix,
             ngay_nhap=target_date
         )
         existing_lookup = {
@@ -454,16 +462,20 @@ def import_excel_h2(request):
                 try:
                     nha_may_val = get_user_factory_name(request.user) or thiet_bi.nha_may
                     lookup_key = (mapping["ten"], time_cycle)
+                    
+                    # Xác định thiết bị con cụ thể
+                    target_tb = get_specific_thiet_bi(thiet_bi, mapping["ma"])
 
                     if lookup_key in existing_lookup:
                         obj = existing_lookup[lookup_key]
-                        if obj.gia_tri != numeric_value or obj.nha_may != nha_may_val:
+                        if obj.gia_tri != numeric_value or obj.nha_may != nha_may_val or obj.thiet_bi_id != target_tb.id:
                             obj.gia_tri = numeric_value
                             obj.nha_may = nha_may_val
+                            obj.thiet_bi = target_tb
                             to_update.append(obj)
                     else:
                         obj = ThongSoToMay(
-                            thiet_bi=thiet_bi,
+                            thiet_bi=target_tb,
                             ten_thong_so=mapping["ten"],
                             thoi_diem_nhap=time_cycle,
                             ngay_nhap=target_date,
@@ -485,7 +497,7 @@ def import_excel_h2(request):
         if to_create:
             ThongSoToMay.objects.bulk_create(to_create)
         if to_update:
-            ThongSoToMay.objects.bulk_update(to_update, ['gia_tri', 'nha_may'])
+            ThongSoToMay.objects.bulk_update(to_update, ['gia_tri', 'nha_may', 'thiet_bi'])
 
         return JsonResponse({
             'message': f'Import thành công {imported_count} bản ghi',

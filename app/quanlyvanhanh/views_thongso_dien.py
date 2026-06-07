@@ -10,6 +10,7 @@ from core.factory_scope import (
     filter_queryset_by_factory,
     get_user_factory_name,
     has_all_factory_access,
+    has_profile_permission,
 )
 from quanlyvanhanh.models import ThietBi, ThongSoVanHanh
 from quanlyvanhanh.serializers import (
@@ -43,6 +44,29 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
 
     queryset = ThongSoVanHanh.objects.select_related("thiet_bi").all()
     serializer_class = ThongSoVanHanhSerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        
+        # Check custom profile permissions based on action
+        if self.action in ["list", "retrieve", "by_device", "config"]:
+            if not has_profile_permission(request.user, "can_view_operation_parameters"):
+                self.permission_denied(
+                    request,
+                    message="Tài khoản của bạn chưa được cấp quyền xem thông số vận hành. Vui lòng liên hệ quản trị viên."
+                )
+        elif self.action in ["create", "update", "partial_update", "bulk_create", "bulk_upsert"]:
+            if not has_profile_permission(request.user, "can_edit_operation_parameters"):
+                self.permission_denied(
+                    request,
+                    message="Tài khoản của bạn chưa được cấp quyền thêm/sửa thông số vận hành. Vui lòng liên hệ quản trị viên."
+                )
+        elif self.action in ["destroy", "delete_by_day"]:
+            if not has_profile_permission(request.user, "can_delete_operation_parameters"):
+                self.permission_denied(
+                    request,
+                    message="Tài khoản của bạn chưa được cấp quyền xóa dữ liệu thông số vận hành. Vui lòng liên hệ quản trị viên."
+                )
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,

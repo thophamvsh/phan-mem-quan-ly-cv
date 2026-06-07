@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from core.factory_scope import filter_queryset_by_factory, get_user_factory_name
+from core.factory_scope import filter_queryset_by_factory, get_user_factory_name, get_user_factory_code, has_profile_permission
 from .models import ThongSoVanHanh, ThietBi
 
 
@@ -20,6 +20,8 @@ def excel_template(request):
     Tạo template Excel cho thông số vận hành điện
     """
     try:
+        if not has_profile_permission(request.user, "can_export_excel"):
+            return JsonResponse({'error': 'Tài khoản của bạn chưa được cấp quyền xuất dữ liệu hoặc tải template Excel. Vui lòng liên hệ quản trị viên.'}, status=403)
         # Tạo workbook mới
         wb = Workbook()
         ws = wb.active
@@ -135,6 +137,8 @@ def excel_import(request):
     Import dữ liệu từ file Excel
     """
     try:
+        if not has_profile_permission(request.user, "can_import_excel"):
+            return JsonResponse({'error': 'Tài khoản của bạn chưa được cấp quyền import dữ liệu từ Excel. Vui lòng liên hệ quản trị viên.'}, status=403)
         if 'file' not in request.FILES:
             return JsonResponse({'error': 'Không có file được upload'}, status=400)
 
@@ -206,22 +210,22 @@ def excel_import(request):
             # TRẠM PHÂN PHỐI (19 thông số cuối - cột O-AG)
             {'name': 'Tổng P máy phát', 'device': 'SH.TB.TPP', 'field': 'tong_p_may_phat', 'unit': 'MW'},
             {'name': 'Tổng Q máy phát', 'device': 'SH.TB.TPP', 'field': 'tong_q_may_phat', 'unit': 'MVar'},
-            {'name': 'Điện áp ĐZ 172', 'device': 'SH.TB.TPP', 'field': 'dien_ap_172', 'unit': 'kV'},
-            {'name': 'Dòng điện ĐZ 172', 'device': 'SH.TB.TPP', 'field': 'dong_dien_172', 'unit': 'A'},
-            {'name': 'Công suất tác dụng ĐZ 172', 'device': 'SH.TB.TPP', 'field': 'cong_suat_tac_dung_172', 'unit': 'MW'},
-            {'name': 'Công suất phản kháng ĐZ 172', 'device': 'SH.TB.TPP', 'field': 'cong_suat_phan_khang_172', 'unit': 'MVar'},
-            {'name': 'Điện áp ĐZ 174', 'device': 'SH.TB.TPP', 'field': 'dien_ap_174', 'unit': 'kV'},
-            {'name': 'Dòng điện ĐZ 174', 'device': 'SH.TB.TPP', 'field': 'dong_dien_174', 'unit': 'A'},
-            {'name': 'Công suất tác dụng ĐZ 174', 'device': 'SH.TB.TPP', 'field': 'cong_suat_tac_dung_174', 'unit': 'MW'},
-            {'name': 'Công suất phản kháng ĐZ 174', 'device': 'SH.TB.TPP', 'field': 'cong_suat_phan_khang_174', 'unit': 'MVar'},
-            {'name': 'Điện áp ĐZ 471', 'device': 'SH.TB.TPP', 'field': 'dien_ap_471', 'unit': 'kV'},
-            {'name': 'Dòng điện ĐZ 471', 'device': 'SH.TB.TPP', 'field': 'dong_dien_471', 'unit': 'A'},
-            {'name': 'Công suất tác dụng ĐZ 471', 'device': 'SH.TB.TPP', 'field': 'cong_suat_tac_dung_471', 'unit': 'MW'},
-            {'name': 'Công suất phản kháng ĐZ 471', 'device': 'SH.TB.TPP', 'field': 'cong_suat_phan_khang_471', 'unit': 'MVar'},
-            {'name': 'Điện áp ĐZ 472', 'device': 'SH.TB.TPP', 'field': 'dien_ap_472', 'unit': 'kV'},
-            {'name': 'Dòng điện ĐZ 472', 'device': 'SH.TB.TPP', 'field': 'dong_dien_472', 'unit': 'A'},
-            {'name': 'Công suất tác dụng ĐZ 472', 'device': 'SH.TB.TPP', 'field': 'cong_suat_tac_dung_472', 'unit': 'MW'},
-            {'name': 'Công suất phản kháng ĐZ 472', 'device': 'SH.TB.TPP', 'field': 'cong_suat_phan_khang_472', 'unit': 'MVar'},
+            {'name': 'Điện áp ĐZ 172', 'device': 'SH.TB.TPP.110.172', 'field': 'dien_ap_172', 'unit': 'kV'},
+            {'name': 'Dòng điện ĐZ 172', 'device': 'SH.TB.TPP.110.172', 'field': 'dong_dien_172', 'unit': 'A'},
+            {'name': 'Công suất tác dụng ĐZ 172', 'device': 'SH.TB.TPP.110.172', 'field': 'cong_suat_tac_dung_172', 'unit': 'MW'},
+            {'name': 'Công suất phản kháng ĐZ 172', 'device': 'SH.TB.TPP.110.172', 'field': 'cong_suat_phan_khang_172', 'unit': 'MVar'},
+            {'name': 'Điện áp ĐZ 174', 'device': 'SH.TB.TPP.110.174', 'field': 'dien_ap_174', 'unit': 'kV'},
+            {'name': 'Dòng điện ĐZ 174', 'device': 'SH.TB.TPP.110.174', 'field': 'dong_dien_174', 'unit': 'A'},
+            {'name': 'Công suất tác dụng ĐZ 174', 'device': 'SH.TB.TPP.110.174', 'field': 'cong_suat_tac_dung_174', 'unit': 'MW'},
+            {'name': 'Công suất phản kháng ĐZ 174', 'device': 'SH.TB.TPP.110.174', 'field': 'cong_suat_phan_khang_174', 'unit': 'MVar'},
+            {'name': 'Điện áp ĐZ 471', 'device': 'SH.TB.TPP.22.471', 'field': 'dien_ap_471', 'unit': 'kV'},
+            {'name': 'Dòng điện ĐZ 471', 'device': 'SH.TB.TPP.22.471', 'field': 'dong_dien_471', 'unit': 'A'},
+            {'name': 'Công suất tác dụng ĐZ 471', 'device': 'SH.TB.TPP.22.471', 'field': 'cong_suat_tac_dung_471', 'unit': 'MW'},
+            {'name': 'Công suất phản kháng ĐZ 471', 'device': 'SH.TB.TPP.22.471', 'field': 'cong_suat_phan_khang_471', 'unit': 'MVar'},
+            {'name': 'Điện áp ĐZ 472', 'device': 'SH.TB.TPP.22.472', 'field': 'dien_ap_472', 'unit': 'kV'},
+            {'name': 'Dòng điện ĐZ 472', 'device': 'SH.TB.TPP.22.472', 'field': 'dong_dien_472', 'unit': 'A'},
+            {'name': 'Công suất tác dụng ĐZ 472', 'device': 'SH.TB.TPP.22.472', 'field': 'cong_suat_tac_dung_472', 'unit': 'MW'},
+            {'name': 'Công suất phản kháng ĐZ 472', 'device': 'SH.TB.TPP.22.472', 'field': 'cong_suat_phan_khang_472', 'unit': 'MVar'},
             {'name': 'Tổng P 22kV', 'device': 'SH.TB.TPP', 'field': 'tong_p_22kv', 'unit': 'MW'}
         ]
 
@@ -234,12 +238,28 @@ def excel_import(request):
             'string',
         )
 
-        for ma_thiet_bi in ['SH.TB.H1', 'SH.TB.H2', 'SH.TB.TPP']:
+        factory_code = get_user_factory_code(request.user) or 'SH'
+        required_devices = set(mapping['device'] for mapping in column_mapping)
+
+        for ma_thiet_bi in required_devices:
+            lookup_code = ma_thiet_bi
+            if factory_code != 'SH':
+                lookup_code = ma_thiet_bi.replace('SH.TB', f'{factory_code}.TB')
+
             try:
-                thiet_bi = scoped_thiet_bi.get(ma_day_du=ma_thiet_bi)
+                thiet_bi = scoped_thiet_bi.get(ma_day_du=lookup_code)
                 thiet_bi_map[ma_thiet_bi] = thiet_bi
             except ThietBi.DoesNotExist:
-                continue
+                # Fallback to TPP parent if sub-device is not found (useful for other stations like VS)
+                if '.TPP.' in lookup_code:
+                    fallback_code = lookup_code.split('.TPP.')[0] + '.TPP'
+                    try:
+                        thiet_bi = scoped_thiet_bi.get(ma_day_du=fallback_code)
+                        thiet_bi_map[ma_thiet_bi] = thiet_bi
+                    except ThietBi.DoesNotExist:
+                        continue
+                else:
+                    continue
 
         if not thiet_bi_map:
             return JsonResponse({'error': 'Không tìm thấy thiết bị trong phạm vi nhà máy được phân quyền'}, status=403)
