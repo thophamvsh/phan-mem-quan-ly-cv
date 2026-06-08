@@ -72,7 +72,8 @@ def export_thong_so(request):
             data.append({
                 'Ngày': obj.ngay_nhap,
                 'Thời điểm': obj.thoi_diem_nhap.strftime('%H:%M'),
-                'Thiết bị': obj.thiet_bi.ten,
+                'Mã thiết bị': obj.thiet_bi.ma_day_du if obj.thiet_bi else '',
+                'Thiết bị': obj.thiet_bi.ten if obj.thiet_bi else '',
                 'Tên thông số': obj.ten_thong_so,
                 'Giá trị': obj.gia_tri,
                 'Đơn vị': obj.don_vi,

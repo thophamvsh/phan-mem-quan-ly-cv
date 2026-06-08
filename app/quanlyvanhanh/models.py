@@ -249,3 +249,74 @@ class ThongSoTram110KV(models.Model):
     def __str__(self):
         return f"{self.ten_thong_so} - {self.thiet_bi.ten} - {self.ngay_nhap} {self.thoi_diem_nhap}"
 
+
+# -------------------------
+# CẤU HÌNH NGƯỠNG THÔNG SỐ (ALARM, TRIP, ĐỊNH MỨC)
+# -------------------------
+class NguongThongSo(models.Model):
+    nha_may = models.CharField(max_length=64, blank=True, verbose_name="Nhà máy")
+    thiet_bi = models.ForeignKey(
+        ThietBi, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="nguong_thong_so", verbose_name="Thiết bị"
+    )
+    ma_thong_so = models.CharField(max_length=100, db_index=True, verbose_name="Mã thông số")
+    ten_thong_so = models.CharField(max_length=255, blank=True, verbose_name="Tên thông số")
+    don_vi = models.CharField(max_length=50, blank=True, verbose_name="Đơn vị")
+
+    alarm = models.FloatField(null=True, blank=True, verbose_name="Ngưỡng cảnh báo (Alarm)")
+    trip = models.FloatField(null=True, blank=True, verbose_name="Ngưỡng sự cố (Trip)")
+    rated = models.FloatField(null=True, blank=True, verbose_name="Giá trị định mức (Rated)")
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ngày tạo")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Ngày cập nhật")
+
+    class Meta:
+        db_table = "nguong_thong_so"
+        verbose_name = "Ngưỡng thông số"
+        verbose_name_plural = "Ngưỡng thông số"
+        unique_together = [['nha_may', 'thiet_bi', 'ma_thong_so']]
+
+    def clean(self):
+        super().clean()
+
+        # Tự động ánh xạ thiết bị nếu bị bỏ trống nhưng có mã thông số
+        if not self.thiet_bi and self.ma_thong_so:
+            from django.db.models import Q
+            from quanlyvanhanh.models import ThongSoToMay, ThongSoTram110KV, ThongSoVanHanh
+
+            # 1. Thử tìm thiết bị từ ThongSoToMay
+            qs = ThongSoToMay.objects.filter(ma_thong_so=self.ma_thong_so)
+            if self.nha_may:
+                qs = qs.filter(nha_may=self.nha_may)
+            rec = qs.first()
+            if rec and rec.thiet_bi:
+                self.thiet_bi = rec.thiet_bi
+                return
+
+            # 2. Thử tìm thiết bị từ ThongSoTram110KV
+            qs = ThongSoTram110KV.objects.filter(ma_thong_so=self.ma_thong_so)
+            if self.nha_may:
+                qs = qs.filter(nha_may=self.nha_may)
+            rec = qs.first()
+            if rec and rec.thiet_bi:
+                self.thiet_bi = rec.thiet_bi
+                return
+
+            # 3. Thử tìm thiết bị từ ThongSoVanHanh
+            qs = ThongSoVanHanh.objects.filter(ma_thong_so=self.ma_thong_so)
+            if self.nha_may:
+                qs = qs.filter(nha_may=self.nha_may)
+            rec = qs.first()
+            if rec and rec.thiet_bi:
+                self.thiet_bi = rec.thiet_bi
+                return
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        device_str = self.thiet_bi.ma_day_du if self.thiet_bi else "Mặc định"
+        return f"{self.nha_may} - {device_str} - {self.ma_thong_so}"
+
+

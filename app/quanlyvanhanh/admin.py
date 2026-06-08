@@ -16,7 +16,7 @@ import base64
 import qrcode
 
 from .models import (
-    ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV
+    ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV, NguongThongSo
 )
 
 # # Cho phép A hoặc A.B-C...
@@ -158,6 +158,50 @@ class FlexibleForeignKeyWidget(ForeignKeyWidget):
         return self.missing_parents
 
 
+class NguongThongSoThietBiWidget(ForeignKeyWidget):
+    """Widget thông minh tìm kiếm thiết bị cho cấu hình ngưỡng thông số"""
+    def clean(self, value, row=None, **kwargs):
+        if not value or value == '' or str(value).strip() == '':
+            return None
+        value = str(value).strip()
+
+        # 1. Tìm chính xác theo mã đầy đủ (ma_day_du)
+        try:
+            return self.model.objects.get(ma_day_du__iexact=value)
+        except self.model.DoesNotExist:
+            pass
+
+        # 2. Tìm theo tên thiết bị (ten) kết hợp mã thông số từ dòng Excel
+        ma_thong_so = None
+        if row:
+            for key in ['ma_thong_so', 'Mã thông số', 'ma_thong_so_id', 'mathongso']:
+                if key in row:
+                    ma_thong_so = str(row[key]).strip()
+                    break
+
+        candidates = self.model.objects.filter(ten__iexact=value)
+        if not candidates.exists():
+            candidates = self.model.objects.filter(ten__icontains=value)
+
+        if candidates.exists():
+            if candidates.count() == 1:
+                return candidates.first()
+
+            if ma_thong_so:
+                from quanlyvanhanh.models import ThongSoToMay, ThongSoTram110KV, ThongSoVanHanh
+                for tb in candidates:
+                    if ThongSoToMay.objects.filter(thiet_bi=tb, ma_thong_so=ma_thong_so).exists():
+                        return tb
+                    if ThongSoTram110KV.objects.filter(thiet_bi=tb, ma_thong_so=ma_thong_so).exists():
+                        return tb
+                    if ThongSoVanHanh.objects.filter(thiet_bi=tb, ma_thong_so=ma_thong_so).exists():
+                        return tb
+
+            return candidates.first()
+
+        return None
+
+
 # ===================== RESOURCES =====================
 
 class SafeExportChangeListMixin:
@@ -231,6 +275,20 @@ class SafeExportChangeListMixin:
             sortable_by,
         )
         return cl.get_queryset(request)
+
+    @admin.action(description="Xuất Excel các bản ghi đã chọn")
+    def export_selected_to_excel(self, request, queryset):
+        """Xuất Excel các dòng đã chọn sử dụng resource_class"""
+        resource_class = self.get_export_resource_class()
+        resource = resource_class()
+        dataset = resource.export(queryset)
+        response = HttpResponse(
+            dataset.xlsx,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f"{self.model._meta.db_table}_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class ThietBiResource(resources.ModelResource):
@@ -451,6 +509,11 @@ class ThongSoVanHanhResource(resources.ModelResource):
         attribute="thiet_bi",
         widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
     )
+    thiet_bi_ten = fields.Field(
+        column_name="Tên thiết bị",
+        attribute="thiet_bi__ten",
+        readonly=True,
+    )
     ten_thong_so = fields.Field(
         column_name="Tên thông số",
         attribute="ten_thong_so",
@@ -496,7 +559,7 @@ class ThongSoVanHanhResource(resources.ModelResource):
         model = ThongSoVanHanh
         import_id_fields = ("thiet_bi_ma", "ma_thong_so", "thoi_diem_nhap")  # Sử dụng mã thiết bị + mã thông số + thời điểm làm khóa định danh
         fields = (
-            "thiet_bi_ma", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
+            "thiet_bi_ma", "thiet_bi_ten", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
             "nha_may", "gia_tri", "gia_tri_thiet_ke", "gia_tri_toi_da", "gia_tri_toi_thieu", "thoi_diem_nhap"
         )
         export_order = fields
@@ -529,6 +592,11 @@ class ThongSoToMayResource(resources.ModelResource):
         column_name="Mã thiết bị",
         attribute="thiet_bi",
         widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
+    )
+    thiet_bi_ten = fields.Field(
+        column_name="Tên thiết bị",
+        attribute="thiet_bi__ten",
+        readonly=True,
     )
     ten_thong_so = fields.Field(
         column_name="Tên thông số",
@@ -568,7 +636,7 @@ class ThongSoToMayResource(resources.ModelResource):
         model = ThongSoToMay
         import_id_fields = ("thiet_bi_ma", "ma_thong_so", "thoi_diem_nhap", "ngay_nhap")
         fields = (
-            "thiet_bi_ma", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
+            "thiet_bi_ma", "thiet_bi_ten", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
             "nha_may", "gia_tri", "thoi_diem_nhap", "ngay_nhap", "ghi_chu"
         )
         export_order = fields
@@ -582,6 +650,11 @@ class ThongSoTram110KVResource(resources.ModelResource):
         column_name="Mã thiết bị",
         attribute="thiet_bi",
         widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
+    )
+    thiet_bi_ten = fields.Field(
+        column_name="Tên thiết bị",
+        attribute="thiet_bi__ten",
+        readonly=True,
     )
     ten_thong_so = fields.Field(
         column_name="Tên thông số",
@@ -621,7 +694,7 @@ class ThongSoTram110KVResource(resources.ModelResource):
         model = ThongSoTram110KV
         import_id_fields = ("thiet_bi_ma", "ma_thong_so", "thoi_diem_nhap", "ngay_nhap")
         fields = (
-            "thiet_bi_ma", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
+            "thiet_bi_ma", "thiet_bi_ten", "ten_thong_so", "ma_thong_so", "don_vi", "ky_hieu_van_hanh",
             "nha_may", "gia_tri", "thoi_diem_nhap", "ngay_nhap", "ghi_chu"
         )
         export_order = fields
@@ -937,7 +1010,7 @@ class ThongSoVanHanhAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExport
     search_fields = ['ma_thong_so', 'ten_thong_so', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh']
     autocomplete_fields = ['thiet_bi']
     readonly_fields = ['thoi_diem_nhap', 'ngay_nhap']
-    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter']
+    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter', 'export_selected_to_excel']
 
     @admin.action(description="Xóa các thông số đã chọn")
     def delete_selected(self, request, queryset):
@@ -1085,7 +1158,7 @@ class ThongSoToMayAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExportMo
     search_fields = ['ma_thong_so', 'ten_thong_so', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh', 'thiet_bi__ten']
     autocomplete_fields = ['thiet_bi']
     readonly_fields = ['thoi_diem_nhap', 'ngay_nhap']
-    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter', 'delete_by_plant']
+    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter', 'delete_by_plant', 'export_selected_to_excel']
 
     @admin.action(description="Xóa các thông số tổ máy đã chọn")
     def delete_selected(self, request, queryset):
@@ -1209,7 +1282,7 @@ class ThongSoTram110KVAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExpo
     search_fields = ['ma_thong_so', 'ten_thong_so', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh', 'thiet_bi__ten']
     autocomplete_fields = ['thiet_bi']
     readonly_fields = ['thoi_diem_nhap', 'ngay_nhap']
-    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter', 'delete_by_plant']
+    actions = ['delete_selected', 'delete_by_date', 'delete_by_device', 'delete_by_parameter', 'delete_by_plant', 'export_selected_to_excel']
 
     @admin.action(description="Xóa các thông số trạm 110kV đã chọn")
     def delete_selected(self, request, queryset):
@@ -1311,3 +1384,33 @@ class ThongSoTram110KVAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExpo
             'fields': ('thoi_diem_nhap', 'ngay_nhap')
         }),
     )
+
+
+class NguongThongSoResource(resources.ModelResource):
+    """Resource cho import/export Ngưỡng thông số"""
+    thiet_bi_ma = fields.Field(
+        column_name="Mã thiết bị",
+        attribute="thiet_bi",
+        widget=NguongThongSoThietBiWidget(ThietBi, "ma_day_du"),
+    )
+    thiet_bi_ten = fields.Field(
+        column_name="Tên thiết bị",
+        attribute="thiet_bi__ten",
+        readonly=True,
+    )
+
+    class Meta:
+        model = NguongThongSo
+        fields = ('id', 'nha_may', 'thiet_bi_ma', 'thiet_bi_ten', 'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated')
+        export_order = ('id', 'nha_may', 'thiet_bi_ma', 'thiet_bi_ten', 'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated')
+
+
+@admin.register(NguongThongSo)
+class NguongThongSoAdmin(SafeExportChangeListMixin, ImportExportModelAdmin):
+    resource_class = NguongThongSoResource
+    list_display = ['nha_may', 'thiet_bi', 'ma_thong_so', 'ten_thong_so', 'alarm', 'trip', 'rated', 'don_vi']
+    list_filter = ['nha_may', 'ma_thong_so']
+    search_fields = ['ma_thong_so', 'ten_thong_so', 'thiet_bi__ten', 'thiet_bi__ma_day_du']
+    autocomplete_fields = ['thiet_bi']
+    actions = ['export_selected_to_excel']
+
