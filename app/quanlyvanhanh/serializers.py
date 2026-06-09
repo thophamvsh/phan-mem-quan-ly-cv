@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from datetime import time, datetime
-from .models import ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV
+from .models import ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV, NguongThongSo
 
 
 def get_thiet_bi_qr_payload(obj):
@@ -449,4 +449,19 @@ class ThongSoTram110KVCreateSerializer(serializers.ModelSerializer):
             except Exception as e:
                 raise serializers.ValidationError(f'Định dạng thoi_diem_nhap không hợp lệ: {str(e)}')
         return value
+
+
+class NguongThongSoSerializer(serializers.ModelSerializer):
+    """Serializer cho model NguongThongSo"""
+    thiet_bi_ten = serializers.CharField(source='thiet_bi.ten', read_only=True)
+    thiet_bi_ma = serializers.CharField(source='thiet_bi.ma_day_du', read_only=True)
+
+    class Meta:
+        model = NguongThongSo
+        fields = [
+            'id', 'nha_may', 'thiet_bi', 'thiet_bi_ten', 'thiet_bi_ma',
+            'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated',
+            'min_value', 'max_value', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
 

@@ -1388,27 +1388,116 @@ class ThongSoTram110KVAdmin(SafeExportChangeListMixin, XLSXOnlyMixin, ImportExpo
 
 class NguongThongSoResource(resources.ModelResource):
     """Resource cho import/export Ngưỡng thông số"""
-    thiet_bi_ma = fields.Field(
-        column_name="Mã thiết bị",
+    thiet_bi = fields.Field(
+        column_name="thiet_bi",
         attribute="thiet_bi",
         widget=NguongThongSoThietBiWidget(ThietBi, "ma_day_du"),
     )
     thiet_bi_ten = fields.Field(
-        column_name="Tên thiết bị",
+        column_name="thiet_bi_ten",
         attribute="thiet_bi__ten",
         readonly=True,
     )
 
+    def before_import_row(self, row, **kwargs):
+        # Ánh xạ các cột có tiêu đề khác nhau về đúng tên trường model
+        mapping = {
+            "thiet_bi": ["Mã thiết bị", "ma_thiet_bi", "thiet_bi_ma", "thiet_bi_ma_day_du", "ma_thietbi"],
+            "nha_may": ["Nhà máy"],
+            "ma_thong_so": ["Mã thông số", "mathongso", "ma_thong_so_id"],
+            "ten_thong_so": ["Tên thông số", "tenthongso"],
+            "don_vi": ["Đơn vị", "donvi"],
+            "alarm": ["Cảnh báo", "Ngưỡng cảnh báo (Alarm)"],
+            "trip": ["Sự cố", "Ngưỡng sự cố (Trip)"],
+            "rated": ["Định mức", "Giá trị định mức (Rated)"],
+            "min_value": ["Min", "Giá trị nhỏ nhất", "min_value", "giatri_min", "Giá trị nhỏ nhất (Min)"],
+            "max_value": ["Max", "Giá trị lớn nhất", "max_value", "giatri_max", "Giá trị lớn nhất (Max)"],
+        }
+        for target_key, alt_keys in mapping.items():
+            if target_key not in row or row[target_key] is None or str(row[target_key]).strip() == "":
+                for alt_key in alt_keys:
+                    if alt_key in row and row[alt_key] is not None and str(row[alt_key]).strip() != "":
+                        row[target_key] = row[alt_key]
+                        break
+        # Loại bỏ khoảng trắng thừa để tránh lỗi lệch chuỗi
+        for key in ["nha_may", "ma_thong_so", "thiet_bi"]:
+            if key in row and row[key] is not None:
+                row[key] = str(row[key]).strip()
+
+    def get_instance(self, instance_loader, row):
+        # 1. Thử tìm theo ID nếu trong file Excel/row có ID
+        if 'id' in row and row['id']:
+            try:
+                return NguongThongSo.objects.get(id=row['id'])
+            except NguongThongSo.DoesNotExist:
+                pass
+
+        # 2. Thử tìm theo unique key (nha_may, thiet_bi, ma_thong_so)
+        nha_may = row.get('nha_may') or ''
+        ma_thong_so = row.get('ma_thong_so')
+
+        thiet_bi_val = row.get('thiet_bi')
+        thiet_bi_obj = None
+        if thiet_bi_val:
+            if isinstance(thiet_bi_val, ThietBi):
+                thiet_bi_obj = thiet_bi_val
+            else:
+                widget = NguongThongSoThietBiWidget(ThietBi, "ma_day_du")
+                try:
+                    thiet_bi_obj = widget.clean(thiet_bi_val, row)
+                except Exception:
+                    pass
+
+        # Nếu thiet_bi_obj vẫn là None, mô phỏng lại logic auto-mapping của NguongThongSo.clean()
+        if not thiet_bi_obj and ma_thong_so:
+            from quanlyvanhanh.models import ThongSoToMay, ThongSoTram110KV, ThongSoVanHanh
+            
+            # 1. Thử tìm thiết bị từ ThongSoToMay
+            qs = ThongSoToMay.objects.filter(ma_thong_so=ma_thong_so)
+            if nha_may:
+                qs = qs.filter(nha_may=nha_may)
+            rec = qs.first()
+            if rec and rec.thiet_bi:
+                thiet_bi_obj = rec.thiet_bi
+            else:
+                # 2. Thử tìm thiết bị từ ThongSoTram110KV
+                qs = ThongSoTram110KV.objects.filter(ma_thong_so=ma_thong_so)
+                if nha_may:
+                    qs = qs.filter(nha_may=nha_may)
+                rec = qs.first()
+                if rec and rec.thiet_bi:
+                    thiet_bi_obj = rec.thiet_bi
+                else:
+                    # 3. Thử tìm thiết bị từ ThongSoVanHanh
+                    qs = ThongSoVanHanh.objects.filter(ma_thong_so=ma_thong_so)
+                    if nha_may:
+                        qs = qs.filter(nha_may=nha_may)
+                    rec = qs.first()
+                    if rec and rec.thiet_bi:
+                        thiet_bi_obj = rec.thiet_bi
+
+        if ma_thong_so:
+            try:
+                return NguongThongSo.objects.get(
+                    nha_may=nha_may,
+                    thiet_bi=thiet_bi_obj,
+                    ma_thong_so=ma_thong_so
+                )
+            except (NguongThongSo.DoesNotExist, NguongThongSo.MultipleObjectsReturned):
+                pass
+
+        return super().get_instance(instance_loader, row)
+
     class Meta:
         model = NguongThongSo
-        fields = ('id', 'nha_may', 'thiet_bi_ma', 'thiet_bi_ten', 'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated')
-        export_order = ('id', 'nha_may', 'thiet_bi_ma', 'thiet_bi_ten', 'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated')
+        fields = ('id', 'nha_may', 'thiet_bi', 'thiet_bi_ten', 'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated', 'min_value', 'max_value')
+        export_order = ('id', 'nha_may', 'thiet_bi', 'thiet_bi_ten', 'ma_thong_so', 'ten_thong_so', 'don_vi', 'alarm', 'trip', 'rated', 'min_value', 'max_value')
 
 
 @admin.register(NguongThongSo)
 class NguongThongSoAdmin(SafeExportChangeListMixin, ImportExportModelAdmin):
     resource_class = NguongThongSoResource
-    list_display = ['nha_may', 'thiet_bi', 'ma_thong_so', 'ten_thong_so', 'alarm', 'trip', 'rated', 'don_vi']
+    list_display = ['nha_may', 'thiet_bi', 'ma_thong_so', 'ten_thong_so', 'alarm', 'trip', 'rated', 'min_value', 'max_value', 'don_vi']
     list_filter = ['nha_may', 'ma_thong_so']
     search_fields = ['ma_thong_so', 'ten_thong_so', 'thiet_bi__ten', 'thiet_bi__ma_day_du']
     autocomplete_fields = ['thiet_bi']

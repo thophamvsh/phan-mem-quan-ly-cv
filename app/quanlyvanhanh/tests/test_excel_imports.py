@@ -100,3 +100,79 @@ class ExcelImportTests(APITestCase):
         # Xác minh các bản ghi được ghi hàng loạt thành công xuống DB (24 dòng * 20 cột = 480 bản ghi)
         count = ThongSoToMay.objects.filter(thiet_bi=self.h1_ge, ngay_nhap='2026-05-31').count()
         self.assertEqual(count, 480)
+
+    def test_excel_import_h2_validation(self):
+        self.client.force_authenticate(user=self.user)
+        # Tạo thiết bị H2
+        self.h2_device = ThietBi.objects.create(
+            ten="Tổ máy H2",
+            ma="SH.TB.H2",
+            ma_day_du="SH.TB.H2",
+            nha_may="Song Hinh"
+        )
+        self.h2_ge = ThietBi.objects.create(
+            ten="Tổ máy H2 GE",
+            ma="GE",
+            nha_may="Song Hinh",
+            cha=self.h2_device
+        )
+
+        url = reverse('quanlyvanhanh:excel_import_tomay_h2')
+
+        headers_row1 = ["THÔNG SỐ H2"] + [""] * 19
+        headers_row2 = [
+            "Áp lực nước", "Áp lực chèn trục", "Lưu lượng chèn trục", "Lưu lượng ổ hướng tuabin",
+            "Nhiệt độ ổ hướng tuabin", "Lưu lượng ổ hướng máy phát", "Nhiệt độ ổ hướng máy phát",
+            "Lưu lượng ổ đỡ máy phát", "Nhiệt độ ổ đỡ", "Nhiệt độ ổ hướng - ổ đỡ",
+            "Nhiệt độ đầu ổ đỡ", "Lưu lượng làm mát máy phát", "Nhiệt độ nước làm mát máy phát",
+            "Nhiệt độ khí mát", "Nhiệt độ khí nóng", "Nhiệt độ cuộn dây stato",
+            "Tốc độ", "Giới hạn độ mở cánh hướng", "Độ mở cánh hướng", "Độ rơi tốc"
+        ]
+        headers_row3 = ["bar"] * 20
+        
+        data_rows = [[5.5] + [1.2] * 19] * 24
+
+        excel_buf = self._create_excel_file([headers_row1, headers_row2, headers_row3] + data_rows)
+
+        response = self.client.post(url, {
+            'file': excel_buf,
+            'selected_date': '2026-05-31',
+            'device_code': 'SH.TB.H2.GE'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('Import thành công', response.json()['message'])
+        
+        count = ThongSoToMay.objects.filter(thiet_bi=self.h2_ge, ngay_nhap='2026-05-31').count()
+        self.assertEqual(count, 480)
+
+    def test_excel_import_mismatch_error(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:excel_import_tomay')  # H1 import
+
+        # File Excel của H2
+        headers_row1 = ["THÔNG SỐ H2"] + [""] * 19
+        headers_row2 = [
+            "Áp lực nước", "Áp lực chèn trục", "Lưu lượng chèn trục", "Lưu lượng ổ hướng tuabin",
+            "Nhiệt độ ổ hướng tuabin", "Lưu lượng ổ hướng máy phát", "Nhiệt độ ổ hướng máy phát",
+            "Lưu lượng ổ đỡ máy phát", "Nhiệt độ ổ đỡ", "Nhiệt độ ổ hướng - ổ đỡ",
+            "Nhiệt độ đầu ổ đỡ", "Lưu lượng làm mát máy phát", "Nhiệt độ nước làm mát máy phát",
+            "Nhiệt độ khí mát", "Nhiệt độ khí nóng", "Nhiệt độ cuộn dây stato",
+            "Tốc độ", "Giới hạn độ mở cánh hướng", "Độ mở cánh hướng", "Độ rơi tốc"
+        ]
+        headers_row3 = ["bar"] * 20
+        data_rows = [[5.5] + [1.2] * 19] * 24
+
+        excel_buf = self._create_excel_file([headers_row1, headers_row2, headers_row3] + data_rows)
+
+        # Upload file H2 nhưng truyền device_code H1 (hoặc gọi API import H1)
+        response = self.client.post(url, {
+            'file': excel_buf,
+            'selected_date': '2026-05-31',
+            'device_code': 'SH.TB.H1.GE'
+        }, format='multipart')
+
+        # Phải trả về lỗi 400 Bad Request do lệch tổ máy
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('không khớp với tổ máy được chọn', response.json()['error'])
+

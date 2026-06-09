@@ -266,6 +266,8 @@ class NguongThongSo(models.Model):
     alarm = models.FloatField(null=True, blank=True, verbose_name="Ngưỡng cảnh báo (Alarm)")
     trip = models.FloatField(null=True, blank=True, verbose_name="Ngưỡng sự cố (Trip)")
     rated = models.FloatField(null=True, blank=True, verbose_name="Giá trị định mức (Rated)")
+    min_value = models.FloatField(null=True, blank=True, verbose_name="Giá trị nhỏ nhất (Min)")
+    max_value = models.FloatField(null=True, blank=True, verbose_name="Giá trị lớn nhất (Max)")
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ngày tạo")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Ngày cập nhật")
