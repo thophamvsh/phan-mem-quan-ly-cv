@@ -47,25 +47,45 @@ def bulk_create_thong_so_van_hanh(user, data_list):
         item_data.pop("device_code", None)
         item_data["thiet_bi_id"] = thiet_bi_obj.id
 
+        base_lookup = {
+            "thiet_bi": thiet_bi_obj,
+            "thoi_diem_nhap": item_data.get("thoi_diem_nhap"),
+        }
+        code_lookup = dict(base_lookup)
+        name_lookup = dict(base_lookup)
+
+        if item_data.get("ma_thong_so"):
+            code_lookup["ma_thong_so"] = item_data.get("ma_thong_so")
+        if item_data.get("ten_thong_so"):
+            name_lookup["ten_thong_so"] = item_data.get("ten_thong_so")
+
         if item_data.get("gia_tri") in (None, ""):
-            deleted_count += ThongSoVanHanh.objects.filter(
-                thiet_bi=thiet_bi_obj,
-                ten_thong_so=item_data.get("ten_thong_so"),
-                thoi_diem_nhap=item_data.get("thoi_diem_nhap"),
-            ).delete()[0]
+            delete_qs = ThongSoVanHanh.objects.none()
+            if item_data.get("ma_thong_so"):
+                delete_qs = delete_qs | ThongSoVanHanh.objects.filter(**code_lookup)
+            if item_data.get("ten_thong_so"):
+                delete_qs = delete_qs | ThongSoVanHanh.objects.filter(**name_lookup)
+            deleted_count += delete_qs.delete()[0]
             continue
 
-        _, created = ThongSoVanHanh.objects.update_or_create(
-            thiet_bi=thiet_bi_obj,
-            ten_thong_so=item_data.get("ten_thong_so"),
-            thoi_diem_nhap=item_data.get("thoi_diem_nhap"),
-            defaults=item_data,
-        )
+        code_qs = ThongSoVanHanh.objects.none()
+        if item_data.get("ma_thong_so"):
+            code_qs = ThongSoVanHanh.objects.filter(**code_lookup)
 
-        if created:
-            created_count += 1
-        else:
+        name_obj = None
+        if item_data.get("ten_thong_so"):
+            name_obj = ThongSoVanHanh.objects.filter(**name_lookup).first()
+
+        target_obj = name_obj or code_qs.first()
+        if target_obj:
+            ThongSoVanHanh.objects.filter(pk=target_obj.pk).update(**item_data)
             updated_count += 1
+
+            duplicate_qs = code_qs.exclude(pk=target_obj.pk)
+            deleted_count += duplicate_qs.delete()[0]
+        else:
+            ThongSoVanHanh.objects.create(**item_data)
+            created_count += 1
 
     return {
         "created": created_count,

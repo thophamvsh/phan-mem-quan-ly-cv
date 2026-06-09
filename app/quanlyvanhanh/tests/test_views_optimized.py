@@ -6,7 +6,7 @@ from datetime import datetime, time
 import pytz
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from quanlyvanhanh.models import ThietBi, ThongSoVanHanh, ThongSoToMay
+from quanlyvanhanh.models import ThietBi, ThongSoVanHanh, ThongSoToMay, ThongSoTram110KV
 
 
 class OptimizedViewsTests(APITestCase):
@@ -196,6 +196,41 @@ class OptimizedViewsTests(APITestCase):
             ).exists()
         )
 
+    def test_thong_so_van_hanh_bulk_create_updates_unique_name_match(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thongsovanhanh-bulk-create')
+        response = self.client.post(
+            url,
+            [
+                {
+                    'thiet_bi_id': self.device.id,
+                    'ma_thong_so': 'dien_ap_kich_tu',
+                    'ten_thong_so': self.ts_vh.ten_thong_so,
+                    'don_vi': self.ts_vh.don_vi,
+                    'gia_tri': '225.5',
+                    'thoi_diem_nhap': '2026-05-31T08:30:00+07:00',
+                    'ngay_nhap': '2026-05-31',
+                    'nha_may': 'Song Hinh',
+                }
+            ],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['created'], 0)
+        self.assertEqual(response.data['updated'], 1)
+        self.assertEqual(
+            ThongSoVanHanh.objects.filter(
+                thiet_bi=self.device,
+                ten_thong_so=self.ts_vh.ten_thong_so,
+                thoi_diem_nhap=self.ts_vh.thoi_diem_nhap,
+            ).count(),
+            1,
+        )
+        self.ts_vh.refresh_from_db()
+        self.assertEqual(self.ts_vh.ma_thong_so, 'dien_ap_kich_tu')
+        self.assertEqual(self.ts_vh.gia_tri, '225.5')
+
     def test_thong_so_van_hanh_bulk_create_null_value_deletes_existing_record(self):
         self.client.force_authenticate(user=self.user)
         url = reverse('quanlyvanhanh:thongsovanhanh-bulk-create')
@@ -221,3 +256,41 @@ class OptimizedViewsTests(APITestCase):
         self.assertFalse(
             ThongSoVanHanh.objects.filter(id=self.ts_vh.id).exists()
         )
+
+    def test_thong_so_tram_bulk_upsert_fills_blank_nha_may(self):
+        tram_device = ThietBi.objects.create(
+            ten='Tram T1',
+            ma='SH.TB.TPP.110.T1',
+            ma_day_du='SH.TB.TPP.110.T1',
+            nha_may='Song Hinh',
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thongsotram110kv-bulk-upsert')
+        response = self.client.post(
+            url,
+            [
+                {
+                    'thiet_bi_ma': tram_device.ma_day_du,
+                    'ma_thong_so': 'nhiet_do_mba_t1',
+                    'ten_thong_so': 'Nhiet do MBA T1',
+                    'don_vi': 'C',
+                    'gia_tri': '45',
+                    'thoi_diem_nhap': '2026-05-31T10:00:00+07:00',
+                    'ngay_nhap': '2026-05-31',
+                    'nha_may': '',
+                    'ky_hieu_van_hanh': '',
+                    'ghi_chu': '',
+                }
+            ],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        record = ThongSoTram110KV.objects.get(
+            thiet_bi=tram_device,
+            ma_thong_so='nhiet_do_mba_t1',
+            ngay_nhap='2026-05-31',
+        )
+        self.assertEqual(record.nha_may, 'Song Hinh')
+        self.assertEqual(record.gia_tri, '45')

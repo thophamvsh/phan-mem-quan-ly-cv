@@ -239,9 +239,13 @@ class ThongSoTram110KVViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def config(self, request):
         """API trả về cấu hình cột động theo nhà máy của tài khoản đang đăng nhập"""
-        factory_code = get_user_factory_code(request.user)
+        factory_code = get_user_factory_code(request.user) or 'SH'
         config = get_factory_config(factory_code)
-        return Response(config)
+        return Response({
+            **config,
+            "factory_code": factory_code,
+            "nha_may": get_user_factory_name(request.user) or factory_code,
+        })
 
 
 @api_view(["GET"])

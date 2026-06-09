@@ -34,14 +34,17 @@ def bulk_upsert_thong_so_tram_110kv(user, data_list):
     for raw_item in data_list:
         item_data = dict(raw_item)
 
-        if not has_all_factory_access(user):
-            item_data["nha_may"] = get_user_factory_name(user)
-
         thiet_bi_obj = resolve_scoped_thiet_bi(user, item_data)
         if not thiet_bi_obj:
             raise PermissionDenied(
                 "Bạn không có quyền nhập thông số cho thiết bị này."
             )
+
+        nha_may = (item_data.get("nha_may") or "").strip()
+        if not has_all_factory_access(user):
+            nha_may = get_user_factory_name(user) or nha_may
+        factory_code = (thiet_bi_obj.ma_day_du or "").split(".")[0]
+        item_data["nha_may"] = nha_may or thiet_bi_obj.nha_may or factory_code
 
         should_delete = item_data.get("gia_tri") in (None, "")
 
