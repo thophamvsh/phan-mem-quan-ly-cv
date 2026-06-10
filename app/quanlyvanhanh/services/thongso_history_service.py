@@ -245,9 +245,9 @@ def format_dt(value):
     return timezone.localtime(value).isoformat()
 
 
-def get_metric_thresholds(source, metric, device=None, queryset=None):
+def get_metric_thresholds(user, source, metric, device=None, queryset=None):
     # Cấu hình ngưỡng mặc định trả về
-    thresholds = {"alarm": None, "trip": None, "rated": None}
+    thresholds = {"alarm": None, "trip": None, "rated": None, "min_value": None, "max_value": None}
     if not metric:
         return thresholds
 
@@ -259,15 +259,43 @@ def get_metric_thresholds(source, metric, device=None, queryset=None):
                 "alarm": record.alarm,
                 "trip": record.trip,
                 "rated": record.rated,
+                "min_value": record.min_value,
+                "max_value": record.max_value,
             }
 
     # 2. Tìm kiếm ngưỡng cấu hình chung cấp nhà máy
+    # Lấy tên nhà máy thực tế của thiết bị hoặc của user
+    from core.factory_scope import get_user_factory_name
+    factory_name = None
+    if device and device.nha_may:
+        factory_name = device.nha_may
+    else:
+        factory_name = get_user_factory_name(user)
+
+    if factory_name:
+        record = NguongThongSo.objects.filter(
+            thiet_bi__isnull=True, 
+            nha_may__iexact=factory_name, 
+            ma_thong_so=metric
+        ).first()
+        if record:
+            return {
+                "alarm": record.alarm,
+                "trip": record.trip,
+                "rated": record.rated,
+                "min_value": record.min_value,
+                "max_value": record.max_value,
+            }
+
+    # Fallback cho trường hợp cũ tìm theo source ("tomay", "dien", "tram")
     record = NguongThongSo.objects.filter(thiet_bi__isnull=True, nha_may=source, ma_thong_so=metric).first()
     if record:
         return {
             "alarm": record.alarm,
             "trip": record.trip,
             "rated": record.rated,
+            "min_value": record.min_value,
+            "max_value": record.max_value,
         }
 
     # 3. Tìm kiếm ngưỡng cấu hình chung hệ thống
@@ -277,6 +305,8 @@ def get_metric_thresholds(source, metric, device=None, queryset=None):
             "alarm": record.alarm,
             "trip": record.trip,
             "rated": record.rated,
+            "min_value": record.min_value,
+            "max_value": record.max_value,
         }
 
     # 4. Fallback đặc thù cho nguồn vận hành điện lấy từ dữ liệu thực tế
@@ -404,7 +434,7 @@ def calculate_history(user, params):
             else None
         ),
         "metrics": metrics,
-        "thresholds": get_metric_thresholds(source, metric, device, queryset),
+        "thresholds": get_metric_thresholds(user, source, metric, device, queryset),
         "stats": stats,
         "points": points,
     }

@@ -48,6 +48,59 @@ class ExcelImportTests(APITestCase):
         buf.name = 'test.xlsx'
         return buf
 
+    def _dien_rows(self, include_index_column=False):
+        headers = [["header"] * 34, ["header"] * 34, ["header"] * 34]
+        values = [111, 222, 333, 444, 555, 666, 777] + [900 + i for i in range(26)]
+        data_rows = []
+        for idx in range(1, 49):
+            row = values[:]
+            if include_index_column:
+                row = [idx] + row
+            data_rows.append(row)
+        return headers + data_rows
+
+    def test_excel_import_dien_legacy_template_keeps_column_a(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:excel_import')
+        excel_buf = self._create_excel_file(self._dien_rows(include_index_column=False))
+
+        response = self.client.post(url, {
+            'file': excel_buf,
+            'selected_date': '2026-06-09',
+            'factory_code': 'SH',
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first_param = ThongSoVanHanh.objects.filter(
+            thiet_bi=self.h1_device,
+            ngay_nhap='2026-06-09',
+            ma_thong_so='dien_ap_kich_tu_h1',
+        ).order_by('thoi_diem_nhap').first()
+
+        self.assertIsNotNone(first_param)
+        self.assertEqual(first_param.gia_tri, '111')
+
+    def test_excel_import_dien_new_template_drops_index_column(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:excel_import')
+        excel_buf = self._create_excel_file(self._dien_rows(include_index_column=True))
+
+        response = self.client.post(url, {
+            'file': excel_buf,
+            'selected_date': '2026-06-10',
+            'factory_code': 'SH',
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first_param = ThongSoVanHanh.objects.filter(
+            thiet_bi=self.h1_device,
+            ngay_nhap='2026-06-10',
+            ma_thong_so='dien_ap_kich_tu_h1',
+        ).order_by('thoi_diem_nhap').first()
+
+        self.assertIsNotNone(first_param)
+        self.assertEqual(first_param.gia_tri, '111')
+
     def test_excel_import_h1_fuzzy_matching(self):
         self.client.force_authenticate(user=self.user)
         url = reverse('quanlyvanhanh:excel_import_tomay')
@@ -175,4 +228,3 @@ class ExcelImportTests(APITestCase):
         # Phải trả về lỗi 400 Bad Request do lệch tổ máy
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('không khớp với tổ máy được chọn', response.json()['error'])
-

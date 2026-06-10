@@ -5,10 +5,13 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from khovattu.models import Bang_nha_may
 from core.factory_scope import (
     apply_request_factory_to_serializer,
+    ensure_factory_code_allowed,
     filter_queryset_by_factory,
     get_user_factory_name,
+    get_user_factory_code,
     has_all_factory_access,
     has_profile_permission,
 )
@@ -21,6 +24,168 @@ from quanlyvanhanh.services.thongso_dien_service import (
     bulk_create_thong_so_van_hanh,
     get_scoped_thiet_bi,
 )
+
+# Cấu hình layout cột động của thông số vận hành điện theo nhà máy
+DIEN_CONFIGS = {
+    'SH': {
+        'title': 'BẢNG NHẬP THÔNG SỐ VẬN HÀNH ĐIỆN SÔNG HÌNH',
+        'layout': [
+            {
+                'group': 'TỔ MÁY H1',
+                'device_code': 'SH.TB.H1',
+                'columns': [
+                    {'ten': 'Điện áp kích từ', 'ma': 'dien_ap_kich_tu_h1', 'don_vi': 'V'},
+                    {'ten': 'Dòng điện kích từ', 'ma': 'dong_dien_kich_tu_h1', 'don_vi': 'A'},
+                    {'ten': 'Điện áp', 'ma': 'dien_ap_h1', 'don_vi': 'kV'},
+                    {'ten': 'Dòng điện', 'ma': 'dong_dien_h1', 'don_vi': 'A'},
+                    {'ten': 'Công suất tác dụng', 'ma': 'cong_suat_tac_dung_h1', 'don_vi': 'MW'},
+                    {'ten': 'Công suất phản kháng', 'ma': 'cong_suat_phan_khang_h1', 'don_vi': 'MVar'},
+                    {'ten': 'Tần số', 'ma': 'tan_so_h1', 'don_vi': 'Hz'},
+                ]
+            },
+            {
+                'group': 'TỔ MÁY H2',
+                'device_code': 'SH.TB.H2',
+                'columns': [
+                    {'ten': 'Điện áp kích từ', 'ma': 'dien_ap_kich_tu_h2', 'don_vi': 'V'},
+                    {'ten': 'Dòng điện kích từ', 'ma': 'dong_dien_kich_tu_h2', 'don_vi': 'A'},
+                    {'ten': 'Điện áp', 'ma': 'dien_ap_h2', 'don_vi': 'kV'},
+                    {'ten': 'Dòng điện', 'ma': 'dong_dien_h2', 'don_vi': 'A'},
+                    {'ten': 'Công suất tác dụng', 'ma': 'cong_suat_tac_dung_h2', 'don_vi': 'MW'},
+                    {'ten': 'Công suất phản kháng', 'ma': 'cong_suat_phan_khang_h2', 'don_vi': 'MVar'},
+                    {'ten': 'Tần số', 'ma': 'tan_so_h2', 'don_vi': 'Hz'},
+                ]
+            },
+            {
+                'group': 'TRẠM PHÂN PHỐI',
+                'device_code': 'SH.TB.TPP',
+                'columns': [
+                    {'ten': 'Tổng P máy phát', 'ma': 'tong_p_may_phat', 'don_vi': 'MW'},
+                    {'ten': 'Tổng Q máy phát', 'ma': 'tong_q_may_phat', 'don_vi': 'MVar'},
+                    {'ten': 'Điện áp ĐZ 172', 'ma': 'dien_ap_172', 'don_vi': 'kV', 'sub_device': '110.172'},
+                    {'ten': 'Dòng điện ĐZ 172', 'ma': 'dong_dien_172', 'don_vi': 'A', 'sub_device': '110.172'},
+                    {'ten': 'Công suất tác dụng ĐZ 172', 'ma': 'cong_suat_tac_dung_172', 'don_vi': 'MW', 'sub_device': '110.172'},
+                    {'ten': 'Công suất phản kháng ĐZ 172', 'ma': 'cong_suat_phan_khang_172', 'don_vi': 'MVar', 'sub_device': '110.172'},
+                    {'ten': 'Điện áp ĐZ 174', 'ma': 'dien_ap_174', 'don_vi': 'kV', 'sub_device': '110.174'},
+                    {'ten': 'Dòng điện ĐZ 174', 'ma': 'dong_dien_174', 'don_vi': 'A', 'sub_device': '110.174'},
+                    {'ten': 'Công suất tác dụng ĐZ 174', 'ma': 'cong_suat_tac_dung_174', 'don_vi': 'MW', 'sub_device': '110.174'},
+                    {'ten': 'Công suất phản kháng ĐZ 174', 'ma': 'cong_suat_phan_khang_174', 'don_vi': 'MVar', 'sub_device': '110.174'},
+                    {'ten': 'Điện áp ĐZ 471', 'ma': 'dien_ap_471', 'don_vi': 'kV', 'sub_device': '22.471'},
+                    {'ten': 'Dòng điện ĐZ 471', 'ma': 'dong_dien_471', 'don_vi': 'A', 'sub_device': '22.471'},
+                    {'ten': 'Công suất tác dụng ĐZ 471', 'ma': 'cong_suat_tac_dung_471', 'don_vi': 'MW', 'sub_device': '22.471'},
+                    {'ten': 'Công suất phản kháng ĐZ 471', 'ma': 'cong_suat_phan_khang_471', 'don_vi': 'MVar', 'sub_device': '22.471'},
+                    {'ten': 'Điện áp ĐZ 472', 'ma': 'dien_ap_472', 'don_vi': 'kV', 'sub_device': '22.472'},
+                    {'ten': 'Dòng điện ĐZ 472', 'ma': 'dong_dien_472', 'don_vi': 'A', 'sub_device': '22.472'},
+                    {'ten': 'Công suất tác dụng ĐZ 472', 'ma': 'cong_suat_tac_dung_472', 'don_vi': 'MW', 'sub_device': '22.472'},
+                    {'ten': 'Công suất phản kháng ĐZ 472', 'ma': 'cong_suat_phan_khang_472', 'don_vi': 'MVar', 'sub_device': '22.472'},
+                    {'ten': 'Tổng P 22kV', 'ma': 'tong_p_22kv', 'don_vi': 'MW'},
+                ]
+            }
+        ]
+    },
+    'VS': {
+        'title': 'BẢNG NHẬP THÔNG SỐ VẬN HÀNH ĐIỆN VĨNH SƠN',
+        'layout': [
+            {
+                'group': 'MÁY PHÁT H1',
+                'device_code': 'VS.TB.H1',
+                'columns': [
+                    {'ten': 'Ukt', 'ma': 'dien_ap_kich_tu_h1', 'don_vi': 'V'},
+                    {'ten': 'Ikt', 'ma': 'dong_dien_kich_tu_h1', 'don_vi': 'A'},
+                    {'ten': 'U', 'ma': 'dien_ap_h1', 'don_vi': 'kV'},
+                    {'ten': 'P', 'ma': 'cong_suat_tac_dung_h1', 'don_vi': 'MW'},
+                    {'ten': 'Q', 'ma': 'cong_suat_phan_khang_h1', 'don_vi': 'MVar'},
+                    {'ten': 'f', 'ma': 'tan_so_h1', 'don_vi': 'Hz'},
+                ]
+            },
+            {
+                'group': 'MÁY PHÁT H2',
+                'device_code': 'VS.TB.H2',
+                'columns': [
+                    {'ten': 'Ukt', 'ma': 'dien_ap_kich_tu_h2', 'don_vi': 'V'},
+                    {'ten': 'Ikt', 'ma': 'dong_dien_kich_tu_h2', 'don_vi': 'A'},
+                    {'ten': 'U', 'ma': 'dien_ap_h2', 'don_vi': 'kV'},
+                    {'ten': 'P', 'ma': 'cong_suat_tac_dung_h2', 'don_vi': 'MW'},
+                    {'ten': 'Q', 'ma': 'cong_suat_phan_khang_h2', 'don_vi': 'MVar'},
+                    {'ten': 'f', 'ma': 'tan_so_h2', 'don_vi': 'Hz'},
+                ]
+            },
+            {
+                'group': 'TRẠM PHÂN PHỐI 110 kV',
+                'device_code': 'VS.TB.TPP',
+                'columns': [
+                    {'ten': 'I1', 'ma': 'dong_dien_thanh_cai', 'don_vi': 'A'},
+                    {'ten': 'I171', 'ma': 'dong_dien_171', 'don_vi': 'A', 'sub_device': '171'},
+                    {'ten': 'P171', 'ma': 'cong_suat_tac_dung_171', 'don_vi': 'MW', 'sub_device': '171'},
+                    {'ten': 'Q171', 'ma': 'cong_suat_phan_khang_171', 'don_vi': 'MVar', 'sub_device': '171'},
+                    {'ten': 'U171', 'ma': 'dien_ap_171', 'don_vi': 'kV', 'sub_device': '171'},
+                    {'ten': 'I2', 'ma': 'dong_dien_172', 'don_vi': 'A', 'sub_device': '172'},
+                    {'ten': 'P172', 'ma': 'cong_suat_tac_dung_172', 'don_vi': 'MW', 'sub_device': '172'},
+                    {'ten': 'Q172', 'ma': 'cong_suat_phan_khang_172', 'don_vi': 'MVar', 'sub_device': '172'},
+                    {'ten': 'U172', 'ma': 'dien_ap_172', 'don_vi': 'kV', 'sub_device': '172'},
+                ]
+            },
+            {
+                'group': 'MBA T1, T2',
+                'device_code': 'VS.TB.TPP',
+                'columns': [
+                    {'ten': 'Nđ\nø T1', 'ma': 'nhiet_do_cuon_day_t1', 'don_vi': '°C', 'sub_device': 'T1'},
+                    {'ten': 'NPA\nT1', 'ma': 'nac_phan_ap_t1', 'don_vi': '', 'sub_device': 'T1'},
+                    {'ten': 'Nđ\nø T2', 'ma': 'nhiet_do_cuon_day_t2', 'don_vi': '°C', 'sub_device': 'T2'},
+                    {'ten': 'NPA\nT2', 'ma': 'nac_phan_ap_t2', 'don_vi': '', 'sub_device': 'T2'},
+                ]
+            },
+            {
+                'group': 'Áp suất khí máy cắt 110kV',
+                'device_code': 'VS.TB.TPP',
+                'columns': [
+                    {'ten': '131', 'ma': 'ap_suat_khi_131', 'don_vi': 'MPa', 'sub_device': '131'},
+                    {'ten': '132', 'ma': 'ap_suat_khi_132', 'don_vi': 'MPa', 'sub_device': '132'},
+                    {'ten': '171', 'ma': 'ap_suat_khi_171', 'don_vi': 'MPa', 'sub_device': '171'},
+                    {'ten': '172', 'ma': 'ap_suat_khi_172', 'don_vi': 'MPa', 'sub_device': '172'},
+                    {'ten': '112', 'ma': 'ap_suat_khi_112', 'don_vi': 'MPa', 'sub_device': '112'},
+                ]
+            },
+            {
+                'group': 'MBA tự dùng TD91',
+                'device_code': 'VS.TB.TD.LV.TD1',
+                'columns': [
+                    {'ten': 'U', 'ma': 'dien_ap_td91', 'don_vi': 'V'},
+                    {'ten': 'I', 'ma': 'dong_dien_td91', 'don_vi': 'A'},
+                    {'ten': 'P', 'ma': 'cong_suat_td91', 'don_vi': 'kW'},
+                ]
+            },
+            {
+                'group': 'MBA tự dùng TD92',
+                'device_code': 'VS.TB.TD.LV.TD2',
+                'columns': [
+                    {'ten': 'U', 'ma': 'dien_ap_td92', 'don_vi': 'V'},
+                    {'ten': 'I', 'ma': 'dong_dien_td92', 'don_vi': 'A'},
+                    {'ten': 'P', 'ma': 'cong_suat_td92', 'don_vi': 'kW'},
+                ]
+            }
+        ]
+    }
+}
+
+
+def get_factory_config(factory_code):
+    """Lấy cấu hình động thông số vận hành điện theo nhà máy"""
+    if not factory_code:
+        factory_code = 'SH'
+    config = DIEN_CONFIGS.get(factory_code, DIEN_CONFIGS['SH'])
+    if factory_code != 'SH':
+        # Clone và customize factory prefix sang nhà máy tương ứng
+        cloned_layout = []
+        for grp in config['layout']:
+            new_grp = dict(grp)
+            new_grp['device_code'] = grp['device_code'].replace('VS.TB', f'{factory_code}.TB')
+            cloned_layout.append(new_grp)
+        return {
+            'title': config['title'],
+            'layout': cloned_layout
+        }
+    return config
 
 
 def _ensure_thiet_bi_access(user, thiet_bi):
@@ -337,3 +502,24 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                 "deleted_count": deleted_count,
             }
         )
+
+    @action(detail=False, methods=["get"])
+    def config(self, request):
+        """API trả về cấu hình cột động theo nhà máy của tài khoản đang đăng nhập"""
+        requested_factory_code = request.query_params.get("factory_code")
+        factory_code = (
+            requested_factory_code or get_user_factory_code(request.user) or 'SH'
+        ).upper()
+        if factory_code not in DIEN_CONFIGS:
+            return Response(
+                {"error": "Nha may khong co cau hinh thong so van hanh dien."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ensure_factory_code_allowed(request.user, factory_code)
+        config = get_factory_config(factory_code)
+        factory = Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
+        return Response({
+            **config,
+            "factory_code": factory_code,
+            "nha_may": factory.ten_nha_may if factory else factory_code,
+        })

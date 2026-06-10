@@ -392,10 +392,15 @@ class ThongSoToMayCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """Validation tùy chỉnh"""
-        # Kiểm tra giá trị không âm
+        # Kiểm tra giá trị không âm nếu là số
         gia_tri = data.get('gia_tri')
-        if gia_tri is not None and gia_tri < 0:
-            raise serializers.ValidationError("Giá trị không được âm")
+        if gia_tri is not None:
+            try:
+                val_float = float(str(gia_tri).replace(",", "."))
+                if val_float < 0:
+                    raise serializers.ValidationError("Giá trị không được âm")
+            except (ValueError, TypeError):
+                pass
 
         return data
 

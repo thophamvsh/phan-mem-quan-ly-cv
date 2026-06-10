@@ -183,7 +183,7 @@ class ThongSoToMay(models.Model):
     ky_hieu_van_hanh = models.CharField(max_length=100, blank=True, verbose_name="Ký hiệu vận hành")
 
     # Dữ liệu thông số
-    gia_tri = models.FloatField(null=True, blank=True, verbose_name="Giá trị")
+    gia_tri = models.CharField(max_length=255, null=True, blank=True, verbose_name="Giá trị")
     ghi_chu = models.TextField(blank=True, verbose_name="Ghi chú")
 
     # Thời gian
@@ -289,7 +289,7 @@ class NguongThongSo(models.Model):
             # 1. Thử tìm thiết bị từ ThongSoToMay
             qs = ThongSoToMay.objects.filter(ma_thong_so=self.ma_thong_so)
             if self.nha_may:
-                qs = qs.filter(nha_may=self.nha_may)
+                qs = qs.filter(Q(nha_may=self.nha_may) | Q(nha_may__icontains=self.nha_may))
             rec = qs.first()
             if rec and rec.thiet_bi:
                 self.thiet_bi = rec.thiet_bi
@@ -298,7 +298,7 @@ class NguongThongSo(models.Model):
             # 2. Thử tìm thiết bị từ ThongSoTram110KV
             qs = ThongSoTram110KV.objects.filter(ma_thong_so=self.ma_thong_so)
             if self.nha_may:
-                qs = qs.filter(nha_may=self.nha_may)
+                qs = qs.filter(Q(nha_may=self.nha_may) | Q(nha_may__icontains=self.nha_may))
             rec = qs.first()
             if rec and rec.thiet_bi:
                 self.thiet_bi = rec.thiet_bi
@@ -307,7 +307,7 @@ class NguongThongSo(models.Model):
             # 3. Thử tìm thiết bị từ ThongSoVanHanh
             qs = ThongSoVanHanh.objects.filter(ma_thong_so=self.ma_thong_so)
             if self.nha_may:
-                qs = qs.filter(nha_may=self.nha_may)
+                qs = qs.filter(Q(nha_may=self.nha_may) | Q(nha_may__icontains=self.nha_may))
             rec = qs.first()
             if rec and rec.thiet_bi:
                 self.thiet_bi = rec.thiet_bi

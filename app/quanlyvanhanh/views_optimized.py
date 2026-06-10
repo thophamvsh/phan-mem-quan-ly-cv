@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 
-from core.factory_scope import filter_queryset_by_factory, has_profile_permission
+from core.factory_scope import filter_queryset_by_factory, has_profile_permission, get_user_factory_code
 from .models import ThietBi, ThongSoVanHanh, ThongSoToMay
 
 
@@ -106,9 +106,14 @@ class ThongSo48Serializer(serializers.Serializer):
     ten = serializers.CharField()
     don_vi = serializers.CharField(allow_blank=True)
     values = serializers.ListField(
-        child=serializers.FloatField(allow_null=True),
+        child=serializers.JSONField(allow_null=True),
         max_length=48
     )
+    alarm = serializers.FloatField(allow_null=True, required=False)
+    trip = serializers.FloatField(allow_null=True, required=False)
+    rated = serializers.FloatField(allow_null=True, required=False)
+    min_value = serializers.FloatField(allow_null=True, required=False)
+    max_value = serializers.FloatField(allow_null=True, required=False)
 
 
 class ThongSo24Serializer(serializers.Serializer):
@@ -116,9 +121,14 @@ class ThongSo24Serializer(serializers.Serializer):
     ten = serializers.CharField()
     don_vi = serializers.CharField(allow_blank=True)
     values = serializers.ListField(
-        child=serializers.FloatField(allow_null=True),
+        child=serializers.JSONField(allow_null=True),
         max_length=24
     )
+    alarm = serializers.FloatField(allow_null=True, required=False)
+    trip = serializers.FloatField(allow_null=True, required=False)
+    rated = serializers.FloatField(allow_null=True, required=False)
+    min_value = serializers.FloatField(allow_null=True, required=False)
+    max_value = serializers.FloatField(allow_null=True, required=False)
 
 
 class ThongSoByDaySerializer(serializers.Serializer):
@@ -188,12 +198,9 @@ class ThongSoByDayView(APIView):
         except ThietBi.DoesNotExist:
             return Response({"detail": "Không tìm thấy thiết bị"}, status=404)
 
-        # Tạo 48 mốc thời gian của ngày
+        # Luôn sử dụng 48 chu kỳ (30 phút) cho thông số vận hành điện để khớp với database lưu chu kỳ 30 phút
+        num_cycles = 48
         slots = day_slots(ngay)
-
-        # Query các bản ghi trong ngày (nằm trong [00:00, 24:00))
-        start = slots[0]
-        end = slots[-1] + timedelta(minutes=30)
 
         # Lấy tất cả bản ghi thuộc NGÀY chọn, dựa vào cả thoi_diem_nhap__date và ngay_nhap
         qs = (filter_queryset_by_factory(
@@ -205,30 +212,29 @@ class ThongSoByDayView(APIView):
               .filter(Q(thoi_diem_nhap__date=ngay) | Q(ngay_nhap=ngay))
               .values_list("ma_thong_so", "thoi_diem_nhap", "gia_tri", "ten_thong_so", "don_vi"))
 
-        # Chuẩn bị map {ma_thong_so: [None]*48}
+        # Chuẩn bị map {ma_thong_so: [None]*num_cycles}
         # Lấy danh sách các thông số có trong dữ liệu
         unique_params = set()
         for ma, td, val, ten, don_vi in qs:
             unique_params.add((ma, ten, don_vi))
 
         # Khởi tạo values rỗng cho tất cả thông số xuất hiện trong ngày
-        ts_values = {ma: [None] * 48 for ma, ten, don_vi in unique_params}
+        ts_values = {ma: [None] * num_cycles for ma, ten, don_vi in unique_params}
         ts_info = {ma: {"ten": ten, "don_vi": don_vi} for ma, ten, don_vi in unique_params}
 
         # Build index mốc cho nhanh
         slot_index = {round30(dt): idx for idx, dt in enumerate(slots)}
 
         # Bổ sung chống "lạc ngày" do 24:00
-        # Map 24:00 (00:00 ngày sau) về slot cuối cùng (47)
+        # Map 24:00 (00:00 ngày sau) về slot cuối cùng
         import pytz
         vietnam_tz = pytz.timezone('Asia/Ho_Chi_Minh')
         twenty_four = vietnam_tz.localize(datetime(ngay.year, ngay.month, ngay.day, 0, 0)) + timedelta(days=1)
-        slot_index[twenty_four] = 47  # map 24:00 (00:00 ngày sau) về slot cuối
+        slot_index[twenty_four] = num_cycles - 1  # map 24:00 (00:00 ngày sau) về slot cuối
 
-        # Lưới an toàn: map các giá trị thời gian cũ về slot 47
-        # Map 23:59:59 về slot 47 (23:30)
+        # Lưới an toàn: map các giá trị thời gian cũ về slot cuối
         twenty_three_fifty_nine = vietnam_tz.localize(datetime(ngay.year, ngay.month, ngay.day, 23, 59, 59))
-        slot_index[twenty_three_fifty_nine] = 47
+        slot_index[twenty_three_fifty_nine] = num_cycles - 1
 
         # Helper: parse số kiểu Việt
         NUM_RE = re.compile(r"[-+]?\d+(?:[.,\s]\d+)*([.,]\d+)?")
@@ -274,7 +280,7 @@ class ThongSoByDayView(APIView):
         for ma, td, val, ten, don_vi in qs:
             # Bảo đảm có key info
             if ma not in ts_values:
-                ts_values[ma] = [None] * 48
+                ts_values[ma] = [None] * num_cycles
                 ts_info[ma] = {"ten": (ten or ""), "don_vi": (don_vi or "")}
 
             # Nếu thiếu thoi_diem_nhap, bỏ qua record (không xác định được slot)
@@ -305,17 +311,25 @@ class ThongSoByDayView(APIView):
             ts_values[ma][idx] = float(num) if num is not None else None
 
         # Trả dữ liệu theo return_all hoặc chỉ những thông số có dữ liệu
+        from quanlyvanhanh.services.thongso_history_service import get_metric_thresholds
+
         thong_sos = []
         for ma, arr in ts_values.items():
             has_data = any(v is not None for v in arr)
             # Nếu aggregate=true, luôn trả về tất cả thông số (kể cả rỗng)
             if has_data or return_all or aggregate:
                 info = ts_info.get(ma, {"ten": "", "don_vi": ""})
+                thresh = get_metric_thresholds(request.user, "dien", ma, tb)
                 thong_sos.append({
                     "ma": ma,
                     "ten": info.get("ten") or "",
                     "don_vi": info.get("don_vi") or "",
                     "values": arr,
+                    "alarm": thresh.get("alarm"),
+                    "trip": thresh.get("trip"),
+                    "rated": thresh.get("rated"),
+                    "min_value": thresh.get("min_value"),
+                    "max_value": thresh.get("max_value"),
                 })
 
         payload = {
@@ -481,21 +495,37 @@ class ThongSoToMayByDayView(APIView):
             if idx is None:
                 # Lệch ngày do TZ → bỏ
                 continue
-            num = parse_vi_number(val)
-            ts_values[ma][idx] = float(num) if num is not None else None
+            if val is not None:
+                val_clean = str(val).strip()
+                stripped = val_clean.replace(".", "").replace(",", "").replace("+", "").replace("-", "").replace(" ", "")
+                if stripped.isdigit():
+                    num = parse_vi_number(val_clean)
+                    ts_values[ma][idx] = float(num) if num is not None else None
+                else:
+                    ts_values[ma][idx] = val_clean
+            else:
+                ts_values[ma][idx] = None
 
         # Trả dữ liệu theo return_all hoặc chỉ những thông số có dữ liệu
+        from quanlyvanhanh.services.thongso_history_service import get_metric_thresholds
+
         thong_sos = []
         for ma, arr in ts_values.items():
             has_data = any(v is not None for v in arr)
             # Nếu aggregate=true, luôn trả về tất cả thông số (kể cả rỗng)
             if has_data or return_all or aggregate:
                 info = ts_info.get(ma, {"ten": "", "don_vi": ""})
+                thresh = get_metric_thresholds(request.user, "tomay", ma, tb)
                 thong_sos.append({
                     "ma": ma,
                     "ten": info.get("ten") or "",
                     "don_vi": info.get("don_vi") or "",
                     "values": arr,
+                    "alarm": thresh.get("alarm"),
+                    "trip": thresh.get("trip"),
+                    "rated": thresh.get("rated"),
+                    "min_value": thresh.get("min_value"),
+                    "max_value": thresh.get("max_value"),
                 })
 
         payload = {
