@@ -6,7 +6,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from quanlyvanhanh.models import ThietBi, ThongSoVanHanh, ThongSoToMay
+from quanlyvanhanh.configs.operation_configs import get_tram_factory_config
+from quanlyvanhanh.models import ThietBi, ThongSoTram110KV, ThongSoVanHanh, ThongSoToMay
 from openpyxl import Workbook
 
 
@@ -228,3 +229,57 @@ class ExcelImportTests(APITestCase):
         # Phải trả về lỗi 400 Bad Request do lệch tổ máy
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('không khớp với tổ máy được chọn', response.json()['error'])
+
+    def test_excel_import_tram_uses_dynamic_config_mapping(self):
+        self.client.force_authenticate(user=self.user)
+        config = get_tram_factory_config("SH")
+        columns = config["columns"]
+
+        def ensure_device_tree(code):
+            parent = None
+            current_parts = []
+            for part in code.split("."):
+                current_parts.append(part)
+                parent, _ = ThietBi.objects.get_or_create(
+                    cha=parent,
+                    ma=part,
+                    defaults={
+                        "ten": ".".join(current_parts),
+                        "nha_may": "Song Hinh",
+                    },
+                )
+            return parent
+
+        for column in columns:
+            ensure_device_tree(column["ma_thiet_bi"])
+
+        rows = [
+            [config["title"]] + [""] * (len(columns) - 1),
+            [column["ten"] for column in columns],
+            [column["don_vi"] for column in columns],
+        ]
+        for row_idx in range(12):
+            rows.append([row_idx * 100 + col_idx for col_idx in range(len(columns))])
+
+        excel_buf = self._create_excel_file(rows)
+        response = self.client.post(
+            reverse("quanlyvanhanh:excel_import_tram"),
+            {
+                "file": excel_buf,
+                "selected_date": "2026-06-11",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["imported_count"], 216)
+
+        first_column = columns[0]
+        first_record = ThongSoTram110KV.objects.get(
+            ma_thong_so=first_column["ma"],
+            thiet_bi__ma_day_du=first_column["ma_thiet_bi"],
+            ngay_nhap="2026-06-11",
+            thoi_diem_nhap__hour=0,
+        )
+        self.assertEqual(first_record.gia_tri, "0")
+        self.assertEqual(first_record.nha_may, "Song Hinh")

@@ -26,55 +26,15 @@ from quanlyvanhanh.serializers import (
     ThongSoTram110KVSerializer,
     ThongSoTram110KVCreateSerializer,
 )
+from quanlyvanhanh.configs.operation_configs import TRAM_CONFIGS, get_tram_factory_config
 from quanlyvanhanh.services.thongso_tram_service import (
     bulk_upsert_thong_so_tram_110kv,
 )
 
-# Cấu hình các cột động theo nhà máy
-TRAM_CONFIGS = {
-    'SH': {
-        'title': 'THÔNG SỐ TRẠM 110/22KV',
-        'columns': [
-            {"ten": "Nhiệt độ MBA T1", "ma": "nhiet_do_mba_t1", "don_vi": "°C", "ma_thiet_bi": "SH.TB.TPP.110.T1"},
-            {"ten": "Nấc phân áp MBA T1", "ma": "nac_phan_ap_mba_t1", "don_vi": "", "ma_thiet_bi": "SH.TB.TPP.110.T1"},
-            {"ten": "Mức dầu MBA T1", "ma": "muc_dau_mba_t1", "don_vi": "", "ma_thiet_bi": "SH.TB.TPP.110.T1"},
-            {"ten": "Nhiệt độ MBA T2", "ma": "nhiet_do_mba_t2", "don_vi": "°C", "ma_thiet_bi": "SH.TB.TPP.110.T2"},
-            {"ten": "Nấc phân áp MBA T2", "ma": "nac_phan_ap_mba_t2", "don_vi": "", "ma_thiet_bi": "SH.TB.TPP.110.T2"},
-            {"ten": "Mức dầu MBA T2", "ma": "muc_dau_mba_t2", "don_vi": "", "ma_thiet_bi": "SH.TB.TPP.110.T2"},
-            {"ten": "Nhiệt độ MBA T3", "ma": "nhiet_do_mba_t3", "don_vi": "°C", "ma_thiet_bi": "SH.TB.TPP.22.T3"},
-            {"ten": "Mức dầu MBA T3", "ma": "muc_dau_mba_t3", "don_vi": "", "ma_thiet_bi": "SH.TB.TPP.22.T3"},
-            {"ten": "Nhiệt độ MBA T4", "ma": "nhiet_do_mba_t4", "don_vi": "°C", "ma_thiet_bi": "SH.TB.TPP.22.T4"},
-            {"ten": "Mức dầu MBA T4", "ma": "muc_dau_mba_t4", "don_vi": "", "ma_thiet_bi": "SH.TB.TPP.22.T4"},
-            {"ten": "Nấc phân áp MBA TD91", "ma": "nac_phan_ap_mba_td91", "don_vi": "", "ma_thiet_bi": "SH.TB.TD.LV.TD1"},
-            {"ten": "Mức dầu MBA TD91", "ma": "muc_dau_mba_td91", "don_vi": "", "ma_thiet_bi": "SH.TB.TD.LV.TD1"},
-            {"ten": "Nấc phân áp MBA TD94", "ma": "nac_phan_ap_mba_td94", "don_vi": "", "ma_thiet_bi": "SH.TB.TD.LV.TD2"},
-            {"ten": "Mức dầu MBA TD94", "ma": "muc_dau_mba_td94", "don_vi": "", "ma_thiet_bi": "SH.TB.TD.LV.TD2"},
-            {"ten": "Áp suất khí MC 171", "ma": "ap_suat_khi_mc_171", "don_vi": "Mpa", "ma_thiet_bi": "SH.TB.TPP.110.171"},
-            {"ten": "Áp suất khí MC 172", "ma": "ap_suat_khi_mc_172", "don_vi": "Mpa", "ma_thiet_bi": "SH.TB.TPP.110.172"},
-            {"ten": "Áp suất khí MC 173", "ma": "ap_suat_khi_mc_173", "don_vi": "Mpa", "ma_thiet_bi": "SH.TB.TPP.110.173"},
-            {"ten": "Áp suất khí MC 174", "ma": "ap_suat_khi_mc_174", "don_vi": "Mpa", "ma_thiet_bi": "SH.TB.TPP.110.174"},
-        ]
-    }
-}
-
 
 def get_factory_config(factory_code):
-    """Lấy cấu hình trạm 110kV theo mã nhà máy (Hỗ trợ cấu hình động)"""
-    if not factory_code:
-        factory_code = 'SH'
-    config = TRAM_CONFIGS.get(factory_code, TRAM_CONFIGS['SH'])
-    if factory_code != 'SH':
-        # Nhân bản cấu hình Sông Hinh nhưng đổi tiền tố thiết bị sang nhà máy tương ứng
-        cloned_columns = []
-        for col in config['columns']:
-            new_col = dict(col)
-            new_col['ma_thiet_bi'] = col['ma_thiet_bi'].replace('SH.TB', f'{factory_code}.TB')
-            cloned_columns.append(new_col)
-        return {
-            'title': f"THÔNG SỐ TRẠM 110/22KV {factory_code.upper()}",
-            'columns': cloned_columns
-        }
-    return config
+    """Lay cau hinh tram 110kV theo ma nha may."""
+    return get_tram_factory_config(factory_code)
 
 
 def _ensure_thiet_bi_access(user, thiet_bi):

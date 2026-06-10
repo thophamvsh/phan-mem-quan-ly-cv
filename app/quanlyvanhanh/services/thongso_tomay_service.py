@@ -7,77 +7,26 @@ from core.factory_scope import (
 )
 from quanlyvanhanh.models import ThietBi, ThongSoToMay
 from quanlyvanhanh.serializers import ThongSoToMayCreateSerializer
+from quanlyvanhanh.configs.operation_configs import (
+    TOMAY_PARAM_DEVICE_SUFFIX,
+    TOMAY_VS_PARAM_DEVICE_SUFFIX,
+    get_tomay_device_suffix,
+)
 
-PARAM_DEVICE_SUFFIX = {
-    "ap_luc_nuoc": ".GE",
-    "ap_luc_chen_truc": ".TuB.SH",
-    "luu_luong_chen_truc": ".TuB.SH",
-    "luu_luong_o_huong_tuabin": ".TuB.OH",
-    "nhiet_do_o_huong_tuabin": ".TuB.OH",
-    "luu_luong_o_huong_may_phat": ".GE.OH",
-    "nhiet_do_o_huong_may_phat": ".GE.OH",
-    "luu_luong_o_do_may_phat": ".GE.OD",
-    "nhiet_do_o_do": ".GE.OD",
-    "nhiet_do_o_huong_o_do": ".GE.OD.PD",
-    "nhiet_do_dau_o_do": ".GE.OD.BD",
-    "luu_luong_lam_mat_may_phat": ".GE",
-    "nhiet_do_nuoc_lam_mat_may_phat": ".GE",
-    "nhiet_do_khi_mat": ".GE",
-    "nhiet_do_khi_nong": ".GE",
-    "nhiet_do_cuon_day_stato": ".GE",
-    "toc_do": ".GOV.TB3",
-    "gioi_han_do_mo_canh_huong": ".TuB.CH",
-    "do_mo_canh_huong": ".TuB.CH",
-    "do_roi_toc": ".TuB.CH",
-}
+PARAM_DEVICE_SUFFIX = TOMAY_PARAM_DEVICE_SUFFIX
+VS_PARAM_DEVICE_SUFFIX = TOMAY_VS_PARAM_DEVICE_SUFFIX
 
-# Ánh xạ hậu tố cho các thông số tổ máy Vĩnh Sơn (VS)
-VS_PARAM_DEVICE_SUFFIX = {
-    "nhiet_do_dau_o_do": ".GE.OD",
-    "nhiet_do_o_do": ".GE.OD",
-    "nhiet_do_o_huong_o_do": ".GE.OH",
-    
-    "nhiet_do_cuon_day_stato_1": ".GE.STA",
-    "nhiet_do_cuon_day_stato_2": ".GE.STA",
-    "nhiet_do_loi_sat_stato_1": ".GE.STA",
-    "nhiet_do_loi_sat_stato_2": ".GE.STA",
-    
-    "nuoc_lam_mat_dau_vao": ".GE.TDN",
-    "nuoc_lam_mat_dau_ra": ".GE.TDN",
-    "nhiet_do_khi_mat": ".GE.TDN",
-    
-    "nhiet_do_dau_o_huong_tuabin": ".TuB.OH",
-    "ap_suat_dau_o_huong_tuabin": ".TuB.OH",
-    "nhiet_do_o_huong_1_tuabin": ".TuB.OH",
-    "nhiet_do_o_huong_2_tuabin": ".TuB.OH",
-    
-    "ap_suat_dau_thuy_luc": ".TL",
-    "muc_dau_thuy_luc": ".TL",
-    "nhiet_do_dau_thuy_luc": ".TL",
-    
-    "toc_do": ".GOV",
-    "gioi_han_do_mo": ".GOV",
-    "do_mo_kim": ".GOV",
-    "do_mo_canh_huong": ".GOV",
-    "do_giam_toc": ".GOV",
-    "do_gia_tang_tan_so": ".GOV",
-}
 
 def get_specific_thiet_bi(base_device, param_code):
     """
     base_device: ThietBi object (e.g. SH.TB.H1.GE or SH.TB.H1)
     param_code: string (e.g. "nhiet_do_o_huong_tuabin")
     """
-    prefix = ".".join(base_device.ma_day_du.split(".")[:3])  # E.g., "SH.TB.H1" hoặc "VS.TB.H1"
-    is_vs = prefix.startswith("VS.")
-
-    if is_vs:
-        suffix = VS_PARAM_DEVICE_SUFFIX.get(param_code, ".GE")
-        # Trường hợp ngoại lệ cho bộ điều tốc tổ máy H2 Vĩnh Sơn
-        if suffix == ".GOV" and ".H2" in prefix:
-            suffix = ".GOV(new)"
-    else:
-        suffix = PARAM_DEVICE_SUFFIX.get(param_code, ".GE")
+    parts = base_device.ma_day_du.split(".")
+    prefix = ".".join(parts[:3])  # E.g., "SH.TB.H1" or "VS.TB.H1"
+    factory_code = parts[0] if parts else ""
+    machine_code = parts[2] if len(parts) > 2 else ""
+    suffix = get_tomay_device_suffix(factory_code, param_code, machine_code)
 
     target_code = f"{prefix}{suffix}"
     try:

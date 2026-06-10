@@ -60,8 +60,8 @@ def excel_template(request):
         factory_code = request.query_params.get("factory_code")
         if not factory_code or not has_all_factory_access(request.user):
             factory_code = get_user_factory_code(request.user) or 'SH'
-        from quanlyvanhanh.views_thongso_dien import get_factory_config
-        config = get_factory_config(factory_code)
+        from quanlyvanhanh.configs.operation_configs import get_dien_factory_config
+        config = get_dien_factory_config(factory_code)
         
         # Tạo workbook mới
         wb = Workbook()
@@ -332,8 +332,8 @@ def excel_import(request):
                     time_cycles_list.append(f"{hour:02d}:00")
                     time_cycles_list.append(f"{hour:02d}:30")
 
-        from quanlyvanhanh.views_thongso_dien import get_factory_config
-        config = get_factory_config(factory_code)
+        from quanlyvanhanh.configs.operation_configs import get_dien_factory_config
+        config = get_dien_factory_config(factory_code)
         
         # Flatten layout thành column_mapping động
         column_mapping = []
