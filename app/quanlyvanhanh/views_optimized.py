@@ -534,3 +534,208 @@ class ThongSoToMayByDayView(APIView):
             "thong_sos": sorted(thong_sos, key=lambda x: x["ma"]),
         }
         return Response(ThongSoToMayByDaySerializer(payload).data, status=status.HTTP_200_OK)
+
+
+class ThongSoActiveAlertsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        from quanlyvanhanh.services.thongso_history_service import get_metric_thresholds
+        from quanlyvanhanh.models import ThongSoTram110KV
+        from django.utils.dateparse import parse_datetime
+        import pytz
+
+        target_date_str = request.GET.get("date")
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                target_date = timezone.localtime(timezone.now()).date()
+        else:
+            today = timezone.localtime(timezone.now()).date()
+            has_today = (
+                filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=today).exists() or
+                filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=today).exists() or
+                filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=today).exists()
+            )
+            if has_today:
+                target_date = today
+            else:
+                from django.db.models import Max
+                latest_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
+                latest_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
+                latest_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
+                dates = [d for d in [latest_vh, latest_tm, latest_tr] if d is not None]
+                target_date = max(dates) if dates else today
+
+        # 1. Query parameter records from all 3 models for the target date
+        qs_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=target_date)
+        qs_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=target_date)
+        qs_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=target_date)
+
+        records = []
+        for r in qs_vh.select_related("thiet_bi"):
+            records.append({
+                "source": "dien",
+                "thiet_bi": r.thiet_bi,
+                "ma_thong_so": r.ma_thong_so,
+                "ten_thong_so": r.ten_thong_so,
+                "gia_tri": r.gia_tri,
+                "don_vi": r.don_vi,
+                "thoi_diem_nhap": r.thoi_diem_nhap,
+            })
+        for r in qs_tm.select_related("thiet_bi"):
+            records.append({
+                "source": "tomay",
+                "thiet_bi": r.thiet_bi,
+                "ma_thong_so": r.ma_thong_so,
+                "ten_thong_so": r.ten_thong_so,
+                "gia_tri": r.gia_tri,
+                "don_vi": r.don_vi,
+                "thoi_diem_nhap": r.thoi_diem_nhap,
+            })
+        for r in qs_tr.select_related("thiet_bi"):
+            records.append({
+                "source": "tram",
+                "thiet_bi": r.thiet_bi,
+                "ma_thong_so": r.ma_thong_so,
+                "ten_thong_so": r.ten_thong_so,
+                "gia_tri": r.gia_tri,
+                "don_vi": r.don_vi,
+                "thoi_diem_nhap": r.thoi_diem_nhap,
+            })
+
+        # Helper: parse number
+        NUM_RE = re.compile(r"[-+]?\d+(?:[.,\s]\d+)*([.,]\d+)?")
+
+        def parse_number_local(s):
+            if s is None:
+                return None
+            if isinstance(s, (int, float, Decimal)):
+                return float(s)
+            s = str(s).strip()
+            if not s:
+                return None
+            m = NUM_RE.search(s)
+            if not m:
+                return None
+            s = m.group(0).replace(' ', '')
+            has_dot = '.' in s
+            has_comma = ',' in s
+            if has_dot and has_comma:
+                dec = '.' if s.rfind('.') > s.rfind(',') else ','
+            elif has_comma:
+                dec = ','
+            elif has_dot:
+                dec = '.'
+            else:
+                dec = None
+            if dec:
+                other = ',' if dec == '.' else '.'
+                s = s.replace(other, '').replace(dec, '.')
+            try:
+                return float(s)
+            except Exception:
+                return None
+
+        # Resolve alerts
+        alerts_map = {}
+        thresholds_cache = {}
+
+        for r in records:
+            val = parse_number_local(r["gia_tri"])
+            if val is None:
+                continue
+
+            # Check cache for thresholds
+            cache_key = (r["source"], r["ma_thong_so"], r["thiet_bi"].id)
+            if cache_key not in thresholds_cache:
+                thresh = get_metric_thresholds(request.user, r["source"], r["ma_thong_so"], r["thiet_bi"])
+                thresholds_cache[cache_key] = thresh
+            else:
+                thresh = thresholds_cache[cache_key]
+
+            alarm = thresh.get("alarm")
+            trip = thresh.get("trip")
+            rated = thresh.get("rated")
+            min_val = thresh.get("min_value")
+            max_val = thresh.get("max_value")
+
+            if alarm is None and trip is None and min_val is None and max_val is None:
+                continue
+
+            # Determine limit direction
+            is_low_limit = False
+            ma = r["ma_thong_so"]
+            don_vi = r["don_vi"] or ""
+            is_flow = "luu_luong" in ma or don_vi.lower() == "l/p"
+            is_pressure = "ap_luc" in ma or "ap_suat" in ma or don_vi.lower() in ("bar", "mpa")
+            if is_flow or is_pressure:
+                is_low_limit = True
+
+            if alarm is not None and trip is not None:
+                is_low_limit = trip < alarm
+            elif rated is not None:
+                if alarm is not None:
+                    is_low_limit = alarm < rated
+                elif trip is not None:
+                    is_low_limit = trip < rated
+
+            is_alert = False
+            alert_type = None
+
+            if trip is not None:
+                if is_low_limit and val <= trip:
+                    is_alert = True
+                    alert_type = "trip"
+                elif not is_low_limit and val >= trip:
+                    is_alert = True
+                    alert_type = "trip"
+
+            if not is_alert and alarm is not None:
+                # Tính biên cảnh báo (Warning Margin) tiệm cận alarm
+                margin = abs(alarm - rated) * 0.2 if rated is not None else alarm * 0.02
+                if is_low_limit:
+                    if val <= alarm:
+                        is_alert = True
+                        alert_type = "alarm"
+                    elif val <= alarm + margin:
+                        is_alert = True
+                        alert_type = "near_alarm"
+                else:
+                    if val >= alarm:
+                        is_alert = True
+                        alert_type = "alarm"
+                    elif val >= alarm - margin:
+                        is_alert = True
+                        alert_type = "near_alarm"
+
+
+
+            if is_alert:
+                # Group by device code + parameter code to keep only the latest alert
+                group_key = (r["thiet_bi"].ma_day_du, r["ma_thong_so"])
+                local_time = timezone.localtime(r["thoi_diem_nhap"])
+                
+                alert_item = {
+                    "id": f"{r['source']}-{r['thiet_bi'].ma_day_du}-{r['ma_thong_so']}-{r['thoi_diem_nhap'].timestamp()}",
+                    "thiet_bi_ten": r["thiet_bi"].ten,
+                    "thiet_bi_ma": r["thiet_bi"].ma_day_du,
+                    "ma_thong_so": r["ma_thong_so"],
+                    "ten_thong_so": r["ten_thong_so"],
+                    "gia_tri": val,
+                    "don_vi": r["don_vi"],
+                    "alarm": alarm,
+                    "trip": trip,
+                    "min_value": min_val,
+                    "max_value": max_val,
+                    "thoi_diem_nhap": local_time.isoformat(),
+                    "alert_type": alert_type,
+                    "direction": "low" if is_low_limit else "high",
+                }
+
+                existing = alerts_map.get(group_key)
+                if not existing or r["thoi_diem_nhap"] > parse_datetime(existing["thoi_diem_nhap"]):
+                    alerts_map[group_key] = alert_item
+
+        return Response(list(alerts_map.values()), status=status.HTTP_200_OK)

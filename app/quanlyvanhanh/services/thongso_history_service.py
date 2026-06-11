@@ -251,9 +251,23 @@ def get_metric_thresholds(user, source, metric, device=None, queryset=None):
     if not metric:
         return thresholds
 
-    # 1. Tìm kiếm ngưỡng cấu hình riêng cho thiết bị cụ thể
+    # 1. Tìm kiếm ngưỡng cấu hình riêng cho thiết bị cụ thể hoặc thiết bị con
     if device:
         record = NguongThongSo.objects.filter(thiet_bi=device, ma_thong_so=metric).first()
+        if not record and getattr(device, "ma_day_du", None):
+            record = NguongThongSo.objects.filter(
+                thiet_bi__ma_day_du__startswith=device.ma_day_du,
+                ma_thong_so=metric
+            ).first()
+            if not record:
+                # Nếu thiết bị là thiết bị con của tổ máy H1/H2 (vd: SH.TB.H1.GE), tìm kiếm theo tiền tố tổ máy (vd: SH.TB.H1)
+                parts = device.ma_day_du.split(".")
+                if len(parts) >= 4 and parts[2].startswith("H"):
+                    unit_prefix = ".".join(parts[:3])
+                    record = NguongThongSo.objects.filter(
+                        thiet_bi__ma_day_du__startswith=unit_prefix,
+                        ma_thong_so=metric
+                    ).first()
         if record:
             return {
                 "alarm": record.alarm,

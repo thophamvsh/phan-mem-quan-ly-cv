@@ -51,6 +51,7 @@ urlpatterns = [
     path('thong-so-van-hanh/by_day/', views_optimized.ThongSoByDayView.as_view(), name='thong-so-by-day'),
     path('thong-so-to-may/by_day/', views_optimized.ThongSoToMayByDayView.as_view(), name='thong-so-to-may-by-day'),
     path('thong-so-lich-su/', views_history.ThongSoLichSuView.as_view(), name='thong-so-lich-su'),
+    path('thong-so/active-alerts/', views_optimized.ThongSoActiveAlertsView.as_view(), name='thong-so-active-alerts'),
     # Router URLs (đặt cuối cùng)
     path('', include(router.urls)),
 ]

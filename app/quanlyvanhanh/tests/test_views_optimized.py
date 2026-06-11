@@ -6,7 +6,8 @@ from datetime import datetime, time
 import pytz
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from quanlyvanhanh.models import ThietBi, ThongSoVanHanh, ThongSoToMay, ThongSoTram110KV
+from quanlyvanhanh.models import ThietBi, ThongSoVanHanh, ThongSoToMay, ThongSoTram110KV, NguongThongSo
+from django.utils import timezone
 
 
 class OptimizedViewsTests(APITestCase):
@@ -294,3 +295,112 @@ class OptimizedViewsTests(APITestCase):
         )
         self.assertEqual(record.nha_may, 'Song Hinh')
         self.assertEqual(record.gia_tri, '45')
+
+    def test_thong_so_to_may_by_day_resolves_fallback_thresholds_for_subdevices(self):
+        # Create a sub-device that belongs to TuB under H1 (e.g. TuB.SH)
+        sub_device = ThietBi.objects.create(
+            ten="Lưu lượng chèn trục H1",
+            ma="SH.TB.H1.TuB.SH",
+            ma_day_du="SH.TB.H1.TuB.SH",
+            cha=self.device,
+            nha_may="Song Hinh"
+        )
+        
+        # Configure a threshold for this sub-device specifically
+        NguongThongSo.objects.create(
+            nha_may="Song Hinh",
+            thiet_bi=sub_device,
+            ma_thong_so="luu_luong_chen_truc",
+            ten_thong_so="Lưu lượng chèn trục",
+            alarm=8.0,
+            trip=6.0,
+            rated=10.0,
+        )
+
+        # Create a sample ThongSoToMay record so it is returned by the API
+        dt_0930 = self.vietnam_tz.localize(datetime(2026, 5, 31, 9, 30))
+        ThongSoToMay.objects.create(
+            thiet_bi=sub_device,
+            ma_thong_so="luu_luong_chen_truc",
+            ten_thong_so="Lưu lượng chèn trục",
+            don_vi="l/p",
+            gia_tri=5.0,
+            thoi_diem_nhap=dt_0930,
+            ngay_nhap=self.target_date,
+            nha_may="Song Hinh"
+        )
+        
+        # Now query H1 main device 'SH.TB.H1' via the by_day endpoint
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thong-so-to-may-by-day')
+        response = self.client.get(url, {
+            'thiet_bi_ma': 'SH.TB.H1',
+            'ngay': '2026-05-31',
+            'aggregate': 'true'
+        })
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify the thresholds are correctly resolved and returned for 'luu_luong_chen_truc'
+        thong_sos = response.data['thong_sos']
+        chen_truc_data = next((ts for ts in thong_sos if ts['ma'] == 'luu_luong_chen_truc'), None)
+        self.assertIsNotNone(chen_truc_data)
+        
+        # The thresholds should be resolved successfully using fallback prefix lookup
+        self.assertEqual(chen_truc_data['alarm'], 8.0)
+        self.assertEqual(chen_truc_data['trip'], 6.0)
+        self.assertEqual(chen_truc_data['rated'], 10.0)
+
+    def test_thong_so_active_alerts_endpoint(self):
+        # Configure threshold for ap_luc_nuoc
+        NguongThongSo.objects.create(
+            nha_may="Song Hinh",
+            thiet_bi=self.device,
+            ma_thong_so="ap_luc_nuoc",
+            ten_thong_so="Áp lực nước",
+            alarm=5.0,
+            trip=4.0,
+        )
+
+        # Create today's measurement that is within the Alarm Warning Margin (5.05, within margin 5.1)
+        today = timezone.localtime(timezone.now()).date()
+        dt_now = timezone.localtime(timezone.now())
+        ThongSoToMay.objects.create(
+            thiet_bi=self.device,
+            ma_thong_so="ap_luc_nuoc",
+            ten_thong_so="Áp lực nước",
+            don_vi="bar",
+            gia_tri=5.05, # below alarm + margin (5.1) but above alarm (5.0)
+            thoi_diem_nhap=dt_now,
+            ngay_nhap=today,
+            nha_may="Song Hinh"
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thong-so-active-alerts')
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        alert = response.data[0]
+        self.assertEqual(alert["ma_thong_so"], "ap_luc_nuoc")
+        self.assertEqual(alert["gia_tri"], 5.05)
+        self.assertEqual(alert["alert_type"], "near_alarm")
+
+        # Now test actual alarm violation (e.g. 4.8, below alarm 5.0 but above trip 4.0)
+        ThongSoToMay.objects.all().delete()
+        ThongSoToMay.objects.create(
+            thiet_bi=self.device,
+            ma_thong_so="ap_luc_nuoc",
+            ten_thong_so="Áp lực nước",
+            don_vi="bar",
+            gia_tri=4.8,
+            thoi_diem_nhap=dt_now,
+            ngay_nhap=today,
+            nha_may="Song Hinh"
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        alert = response.data[0]
+        self.assertEqual(alert["alert_type"], "alarm")
