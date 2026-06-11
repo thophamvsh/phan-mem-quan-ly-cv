@@ -90,6 +90,7 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         _ensure_thiet_bi_access(self.request.user, serializer.validated_data.get("thiet_bi"))
         serializer.save(
+            nguoi_nhap=self.request.user,
             **apply_request_factory_to_serializer(
                 self.request.user,
                 serializer,
@@ -99,11 +100,14 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
+        if not self.request.user.is_superuser and serializer.instance.nguoi_nhap and serializer.instance.nguoi_nhap != self.request.user:
+            raise PermissionDenied("Bạn không có quyền sửa thông số này vì nó được nhập bởi người dùng khác.")
         _ensure_thiet_bi_access(
             self.request.user,
             serializer.validated_data.get("thiet_bi", serializer.instance.thiet_bi),
         )
         serializer.save(
+            nguoi_nhap=self.request.user,
             **apply_request_factory_to_serializer(
                 self.request.user,
                 serializer,
@@ -111,6 +115,11 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
                 "string",
             )
         )
+
+    def perform_destroy(self, instance):
+        if not self.request.user.is_superuser and instance.nguoi_nhap and instance.nguoi_nhap != self.request.user:
+            raise PermissionDenied("Bạn không có quyền xóa thông số này vì nó được nhập bởi người dùng khác.")
+        instance.delete()
 
     @action(detail=False, methods=["get"])
     def by_date(self, request):
@@ -218,6 +227,11 @@ class ThongSoToMayViewSet(viewsets.ModelViewSet):
         elif thiet_bi_ma:
             prefix = ".".join(thiet_bi_ma.split(".")[:3])
             queryset = queryset.filter(thiet_bi__ma_day_du__startswith=prefix)
+
+        if not request.user.is_superuser:
+            forbidden_exists = queryset.filter(nguoi_nhap__isnull=False).exclude(nguoi_nhap=request.user).exists()
+            if forbidden_exists:
+                raise PermissionDenied("Bạn không có quyền xóa các thông số tổ máy của ngày này vì có một số bản ghi được nhập bởi người dùng khác.")
 
         deleted_count = queryset.delete()[0]
         return Response(

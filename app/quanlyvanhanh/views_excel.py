@@ -432,6 +432,14 @@ def excel_import(request):
             thiet_bi__in=thiet_bi_map.values(),
             ngay_nhap=import_date
         )
+
+        if not request.user.is_superuser:
+            for rec in existing_records:
+                if rec.nguoi_nhap and rec.nguoi_nhap != request.user:
+                    return JsonResponse({
+                        'error': f'Bạn không có quyền cập nhật thông số ngày {import_date} vì một số bản ghi đã được nhập bởi người dùng khác ({rec.nguoi_nhap.username or rec.nguoi_nhap.email}).'
+                    }, status=403)
+
         existing_lookup = {
             (rec.thiet_bi_id, rec.ma_thong_so, rec.thoi_diem_nhap): rec
             for rec in existing_records
@@ -478,12 +486,14 @@ def excel_import(request):
                             if (thong_so.gia_tri != gia_tri_str or
                                 thong_so.don_vi != unit or
                                 thong_so.ten_thong_so != param_name or
-                                thong_so.nha_may != nha_may_val):
+                                thong_so.nha_may != nha_may_val or
+                                thong_so.nguoi_nhap != request.user):
                                 
                                 thong_so.gia_tri = gia_tri_str
                                 thong_so.don_vi = unit
                                 thong_so.ten_thong_so = param_name
                                 thong_so.nha_may = nha_may_val
+                                thong_so.nguoi_nhap = request.user
                                 to_update.append(thong_so)
                         else:
                             thong_so = ThongSoVanHanh(
@@ -494,7 +504,8 @@ def excel_import(request):
                                 don_vi=unit,
                                 ten_thong_so=param_name,
                                 ngay_nhap=ngay,
-                                nha_may=nha_may_val
+                                nha_may=nha_may_val,
+                                nguoi_nhap=request.user
                             )
                             to_create.append(thong_so)
                             existing_lookup[lookup_key] = thong_so
@@ -511,7 +522,7 @@ def excel_import(request):
         if to_create:
             ThongSoVanHanh.objects.bulk_create(to_create)
         if to_update:
-            ThongSoVanHanh.objects.bulk_update(to_update, ['gia_tri', 'don_vi', 'ten_thong_so', 'nha_may'])
+            ThongSoVanHanh.objects.bulk_update(to_update, ['gia_tri', 'don_vi', 'ten_thong_so', 'nha_may', 'nguoi_nhap'])
 
         return JsonResponse({
             'message': 'Import thành công',

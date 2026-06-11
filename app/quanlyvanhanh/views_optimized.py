@@ -540,6 +540,11 @@ class ThongSoActiveAlertsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        if not has_profile_permission(request.user, "can_view_operation_parameters"):
+            return Response(
+                {"detail": "Tài khoản của bạn chưa được cấp quyền xem thông số vận hành. Vui lòng liên hệ quản trị viên."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         from quanlyvanhanh.services.thongso_history_service import get_metric_thresholds
         from quanlyvanhanh.models import ThongSoTram110KV
         from django.utils.dateparse import parse_datetime
@@ -732,6 +737,7 @@ class ThongSoActiveAlertsView(APIView):
                     "thoi_diem_nhap": local_time.isoformat(),
                     "alert_type": alert_type,
                     "direction": "low" if is_low_limit else "high",
+                    "nha_may": r["thiet_bi"].nha_may or ("Sông Hinh" if r["thiet_bi"].ma_day_du.startswith("SH") else ("Vĩnh Sơn" if r["thiet_bi"].ma_day_du.startswith("VS") else "")),
                 }
 
                 existing = alerts_map.get(group_key)

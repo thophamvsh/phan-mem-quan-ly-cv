@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from ai_tools.models import AiConversationMessage
 from ai_tools.permissions import (
     AI_TOOL_SCOPE_SONGHINH,
     AI_TOOL_SCOPE_VINHSON,
@@ -178,6 +179,46 @@ class AiToolFactoryScopeTests(TestCase):
             "Xin lỗi! Bạn không được quyền hỏi thông tin nhà máy Vĩnh Sơn, xin bạn hãy hỏi nhà máy của mình.",
         )
         self.assertEqual(response["tools_called"], 0)
+
+    def test_run_ai_chat_greets_with_user_title_and_name_without_provider_call(self):
+        self.songhinh_user.profile.chuc_danh = "Giám đốc"
+        self.songhinh_user.profile.ho_ten = "Nguyễn Văn An"
+        self.songhinh_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Hi Nami",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(
+            response["response"],
+            "Xin chào Giám đốc Nguyễn Văn An, tôi có thể giúp gì cho ngài?",
+        )
+        self.assertEqual(response["tools_called"], 0)
+
+        assistant_message = AiConversationMessage.objects.filter(
+            user=self.songhinh_user,
+            role=AiConversationMessage.ROLE_ASSISTANT,
+        ).latest("id")
+        self.assertTrue(assistant_message.meta["greeting"])
+        self.assertEqual(assistant_message.content, response["response"])
+
+    def test_run_ai_chat_does_not_treat_greeting_with_request_as_simple_greeting(self):
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            run_openai.return_value = ("Đang xử lý yêu cầu.", 0, 0, 0, 0)
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Hi Nami phân tích nhiệt độ ổ hướng tuabin H1 Sông Hinh",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_called_once()
+        self.assertEqual(response["response"], "Đang xử lý yêu cầu.")
 
 
 class AiToolsApiPermissionTests(APITestCase):

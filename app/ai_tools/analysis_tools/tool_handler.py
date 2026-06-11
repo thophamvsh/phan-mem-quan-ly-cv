@@ -3,7 +3,7 @@ import logging
 
 from ai_tools.tool_format import make_tool_response, render_markdown
 
-from .services import analyze_hydro_data, compare_hydro_periods
+from .services import analyze_hydro_data, compare_hydro_periods, get_unit_state_profile
 from .tool_definitions import ANALYSIS_TOOLS
 
 
@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 TOOL_REGISTRY = {
     "analyze_hydro_data": analyze_hydro_data,
     "compare_hydro_periods": compare_hydro_periods,
+    "get_unit_state_profile": get_unit_state_profile,
 }
+
 
 
 def handle_analysis_tool_call(tool_call):

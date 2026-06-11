@@ -114,10 +114,10 @@ class ThongSoVanHanhSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'thiet_bi', 'thiet_bi_ten', 'thiet_bi_ma_day_du', 'ma_thong_so', 'ten_thong_so', 'gia_tri',
             'don_vi', 'gia_tri_toi_thieu', 'gia_tri_toi_da', 'gia_tri_thiet_ke',
-            'ky_hieu_van_hanh', 'nha_may', 'ghi_chu', 'thoi_diem_nhap', 'ngay_nhap'
+            'ky_hieu_van_hanh', 'nha_may', 'ghi_chu', 'thoi_diem_nhap', 'ngay_nhap', 'nguoi_nhap'
         ]
         # Set read_only cho các field khóa duy nhất khi update
-        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap']
+        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap', 'nguoi_nhap']
 
 
 class ThongSoVanHanhCreateSerializer(serializers.ModelSerializer):
@@ -349,10 +349,10 @@ class ThongSoToMaySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'thiet_bi', 'thiet_bi_ten', 'thiet_bi_ma_day_du', 'ten_thong_so', 'ma_thong_so',
             'don_vi', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh',
-            'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at'
+            'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at', 'nguoi_nhap'
         ]
         # Set read_only cho các field khóa duy nhất khi update
-        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at']
+        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at', 'nguoi_nhap']
 
 
 class ThongSoToMayCreateSerializer(serializers.ModelSerializer):
@@ -419,9 +419,9 @@ class ThongSoTram110KVSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'thiet_bi', 'thiet_bi_ten', 'thiet_bi_ma_day_du', 'ten_thong_so', 'ma_thong_so',
             'don_vi', 'gia_tri', 'ghi_chu', 'nha_may', 'ky_hieu_van_hanh',
-            'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at'
+            'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at', 'nguoi_nhap'
         ]
-        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at']
+        read_only_fields = ['thiet_bi', 'ten_thong_so', 'thoi_diem_nhap', 'ngay_nhap', 'created_at', 'updated_at', 'nguoi_nhap']
 
 
 class ThongSoTram110KVCreateSerializer(serializers.ModelSerializer):

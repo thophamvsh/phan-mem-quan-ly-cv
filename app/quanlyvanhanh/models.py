@@ -125,6 +125,10 @@ class ThongSoVanHanh(models.Model):
     # Thời điểm nhập thông số
     thoi_diem_nhap = models.DateTimeField(verbose_name="Thời điểm nhập thông số")
     ngay_nhap = models.DateField(verbose_name="Ngày nhập thông số")
+    nguoi_nhap = models.ForeignKey(
+        'core.User', on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name="Người nhập", related_name="thongsovanhanh_nhap"
+    )
 
     class Meta:
         db_table = "thong_so_van_hanh"
@@ -189,6 +193,10 @@ class ThongSoToMay(models.Model):
     # Thời gian
     thoi_diem_nhap = models.DateTimeField(verbose_name="Thời điểm nhập")
     ngay_nhap = models.DateField(verbose_name="Ngày nhập")
+    nguoi_nhap = models.ForeignKey(
+        'core.User', on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name="Người nhập", related_name="thongsotomay_nhap"
+    )
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ngày tạo")
@@ -230,6 +238,10 @@ class ThongSoTram110KV(models.Model):
     # Thời gian
     thoi_diem_nhap = models.DateTimeField(verbose_name="Thời điểm nhập")
     ngay_nhap = models.DateField(verbose_name="Ngày nhập")
+    nguoi_nhap = models.ForeignKey(
+        'core.User', on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name="Người nhập", related_name="thongsotram_nhap"
+    )
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ngày tạo")

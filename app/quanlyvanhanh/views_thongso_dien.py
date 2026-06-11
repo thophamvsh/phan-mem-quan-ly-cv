@@ -124,6 +124,7 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         _ensure_thiet_bi_access(self.request.user, serializer.validated_data.get("thiet_bi"))
         serializer.save(
+            nguoi_nhap=self.request.user,
             **apply_request_factory_to_serializer(
                 self.request.user,
                 serializer,
@@ -133,11 +134,14 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
+        if not self.request.user.is_superuser and serializer.instance.nguoi_nhap and serializer.instance.nguoi_nhap != self.request.user:
+            raise PermissionDenied("Bạn không có quyền sửa thông số này vì nó được nhập bởi người dùng khác.")
         _ensure_thiet_bi_access(
             self.request.user,
             serializer.validated_data.get("thiet_bi", serializer.instance.thiet_bi),
         )
         serializer.save(
+            nguoi_nhap=self.request.user,
             **apply_request_factory_to_serializer(
                 self.request.user,
                 serializer,
@@ -145,6 +149,11 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                 "string",
             )
         )
+
+    def perform_destroy(self, instance):
+        if not self.request.user.is_superuser and instance.nguoi_nhap and instance.nguoi_nhap != self.request.user:
+            raise PermissionDenied("Bạn không có quyền xóa thông số này vì nó được nhập bởi người dùng khác.")
+        instance.delete()
 
     @action(detail=False, methods=["get"])
     def by_thiet_bi(self, request):
@@ -266,6 +275,12 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                 if obj_id not in instances:
                     continue
 
+                instance = instances[obj_id]
+                if not request.user.is_superuser and instance.nguoi_nhap and instance.nguoi_nhap != request.user:
+                    raise PermissionDenied(
+                        f"Bạn không có quyền cập nhật thông số ID {obj_id} vì nó được nhập bởi người dùng khác."
+                    )
+
                 thiet_bi_id = item.get("thiet_bi") or item.get("thiet_bi_id")
                 if thiet_bi_id:
                     thiet_bi_obj = get_scoped_thiet_bi(request.user, thiet_bi_id)
@@ -279,7 +294,7 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                     item["nha_may"] = get_user_factory_name(request.user)
 
                 serializer = self.get_serializer(
-                    instances[obj_id],
+                    instance,
                     data=item,
                     partial=True,
                 )
@@ -290,6 +305,7 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                     )
 
                 serializer.save(
+                    nguoi_nhap=request.user,
                     **apply_request_factory_to_serializer(
                         request.user,
                         serializer,
@@ -310,14 +326,13 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["delete"])
     def bulk_delete(self, request):
-        ids = request.data.get("ids", [])
-        if not ids:
-            return Response(
-                {"error": "Can cung cap danh sach ID can xoa"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        queryset = self.get_queryset().filter(id__in=ids)
+        if not request.user.is_superuser:
+            forbidden_exists = queryset.filter(nguoi_nhap__isnull=False).exclude(nguoi_nhap=request.user).exists()
+            if forbidden_exists:
+                raise PermissionDenied("Bạn không có quyền xóa một số thông số vận hành trong danh sách này vì chúng được nhập bởi người dùng khác.")
 
-        deleted_count = self.get_queryset().filter(id__in=ids).delete()[0]
+        deleted_count = queryset.delete()[0]
         return Response(
             {
                 "message": f"Da xoa {deleted_count} thong so van hanh",
@@ -342,6 +357,11 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(thiet_bi_id=thiet_bi_id)
         elif thiet_bi_ma:
             queryset = queryset.filter(thiet_bi__ma_day_du=thiet_bi_ma)
+
+        if not request.user.is_superuser:
+            forbidden_exists = queryset.filter(nguoi_nhap__isnull=False).exclude(nguoi_nhap=request.user).exists()
+            if forbidden_exists:
+                raise PermissionDenied("Bạn không có quyền xóa các thông số vận hành của ngày này vì có một số bản ghi được nhập bởi người dùng khác.")
 
         deleted_count = queryset.delete()[0]
         return Response(

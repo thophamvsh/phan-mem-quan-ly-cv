@@ -54,13 +54,31 @@ def bulk_upsert_thong_so_tram_110kv(user, data_list):
         validated_data = serializer.validated_data
 
         if should_delete:
-            deleted_count += ThongSoTram110KV.objects.filter(
+            delete_qs = ThongSoTram110KV.objects.filter(
                 thiet_bi=validated_data["thiet_bi"],
                 ten_thong_so=validated_data["ten_thong_so"],
                 thoi_diem_nhap=validated_data["thoi_diem_nhap"],
                 ngay_nhap=validated_data["ngay_nhap"],
-            ).delete()[0]
+            )
+            if not user.is_superuser:
+                forbidden_exists = delete_qs.filter(nguoi_nhap__isnull=False).exclude(nguoi_nhap=user).exists()
+                if forbidden_exists:
+                    raise PermissionDenied("Bạn không có quyền xóa thông số này vì nó được nhập bởi người dùng khác.")
+            deleted_count += delete_qs.delete()[0]
             continue
+
+        existing_obj = ThongSoTram110KV.objects.filter(
+            thiet_bi=validated_data["thiet_bi"],
+            ten_thong_so=validated_data["ten_thong_so"],
+            thoi_diem_nhap=validated_data["thoi_diem_nhap"],
+            ngay_nhap=validated_data["ngay_nhap"],
+        ).first()
+
+        if existing_obj:
+            if not user.is_superuser and existing_obj.nguoi_nhap and existing_obj.nguoi_nhap != user:
+                raise PermissionDenied("Bạn không có quyền sửa thông số này vì nó được nhập bởi người dùng khác.")
+
+        validated_data["nguoi_nhap"] = user
 
         _, created = ThongSoTram110KV.objects.update_or_create(
             thiet_bi=validated_data["thiet_bi"],

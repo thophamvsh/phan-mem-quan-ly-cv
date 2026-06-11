@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import os
+import re
 import time
 import unicodedata
 import uuid
@@ -25,6 +26,10 @@ DEFAULT_PROVIDER = "openai"
 DEFAULT_OPENAI_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_MODEL = getattr(settings, "AI_TOOLS_ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 OPENAI_MODELS = (DEFAULT_OPENAI_MODEL,)
+MODEL_HISTORY_LIMIT = 8
+MODEL_HISTORY_CHAR_BUDGET = 12000
+MODEL_USER_HISTORY_MAX_CHARS = 1200
+MODEL_ASSISTANT_HISTORY_MAX_CHARS = 2600
 ANTHROPIC_MODELS = tuple(
     getattr(
         settings,
@@ -40,18 +45,134 @@ ANTHROPIC_MODELS = tuple(
 SYSTEM_PROMPT = """Ban la Nami, tro ly AI cho Bang dieu khien van hanh thuy dien.
 Ban ho tro tra cuu muc nuoc, dung tich, luu luong, du lieu van hanh va phan tich.
 Khi nguoi dung hoi ve cac quy trinh, quy dinh, van ban huong dan, bao cao hoac tai lieu noi bo, ban hay luon su dung cong cu search_internal_documents de tim kiem thong tin tham chieu truoc khi tra loi.
+Khi nguoi dung hoi ve mot thong so van hanh cua to may (vd: nhiet do o huong tuabin, nhiet do o do, luu luong chen truc, cong suat) hoac hoi ve tinh bat thuong/canh bao, ban can dung cong cu get_unit_state_profile de lay ho so trang thai tich hop cua to may do.
+Khi goi get_unit_state_profile, phai chon dung parameter_code theo bo phan nguoi dung hoi:
+- "nhiet do o huong tuabin", "o huong tuabine", "o huong turbine" -> parameter_code="nhiet_do_o_huong_tuabin".
+- "luu luong o huong tuabin" -> parameter_code="luu_luong_o_huong_tuabin".
+- "nhiet do o huong may phat" -> parameter_code="nhiet_do_o_huong_may_phat".
+- "nhiet do o do", "o do may phat" -> parameter_code="nhiet_do_o_do".
+Khong duoc tra loi nham "o huong tuabin" thanh "o do".
+
+Khi tra loi nguoi van hanh, ban bat buoc phai tuan thu nghiem ngat cac quy tac chan doan sau:
+1. Đánh giá Cảnh báo theo Cấu trúc 4 phần ro rang:
+   - Mức cảnh báo: Bình thường / Tiệm cận / Cao (Cảnh báo) / Khẩn cấp (Sự cố).
+   - Hiện trạng: Trình bày ngắn gọn các thông số chính bị vượt ngưỡng hoặc lệch lớn.
+   - Nhận định: Giải thích mối liên hệ vật lý giữa công suất phát, lưu lượng nước làm mát và nhiệt độ. Đánh giá xu hướng tăng nhiệt nhanh hay chậm (dT/dt), nhiệt độ kỳ vọng và độ lệch (Residual).
+   - Khuyến nghị hành động: Đề xuất kiểm tra các thiết bị cụ thể (van, bơm, dầu bôi trơn) một cách thiết thực.
+2. Thận trọng kỹ thuật: Tuyệt đối không khẳng định chắc chắn 100% nguyên nhân duy nhất nếu chỉ có dữ liệu snapshot. Hãy dùng các từ ngữ chẩn đoán kỹ thuật như: 'Có khả năng cao góp phần vào...', 'Nguyên nhân khả nghi hàng đầu...', 'Cần theo dõi thêm rung/dầu để khẳng định...'.
+3. Bản đồ quan hệ vật lý: Chỉ liên kết chéo nhiệt độ của bộ phận với lưu lượng nước làm mát cấp cho chính bộ phận đó (tranh lay rau ong no cam cam ba kia).
+
+Hay phan tich tu duy nhiet dong luc hoc chuyen sau thay vi chi so sanh don le:
+- Nhiet do cuon day/o do duoc quyet dinh boi su can bang giua cong suat tai sinh nhiet (cong_suat_tac_dung, dong_dien) va kha nang lam mat (luu_luong_chen_truc, luu_luong_o_huong_tuabin).
+- Neu tai rat thap, luu luong lam mat giam thap duoi nguong Alarm van an toan cho nhiet do hien tai, nhung la mot rui ro tiem an rat lon (mat tinh du phong). Neu tang tai dot ngot se gay qua nhiet ngay lap tuc.
+- Neu tai on dinh/giam ma nhiet do tang, day la dau hieu bat thuong co hoc hoac boi tron (ma sat Tang, thieu dau).
 Tra loi ngan gon, ro rang, chuyen nghiep bang tieng Viet.
 Khong neu ten he thong luu tru hoac nguon ky thuat noi bo nhu Supabase, Google Sheets, spreadsheet, worksheet."""
+
 
 
 class AiToolsError(Exception):
     pass
 
 
+def _strip_large_markdown_blocks(value):
+    text = str(value or "")
+    text = re.sub(r"<!-- NAMI_THERMO_DATA_START.*?NAMI_THERMO_DATA_END -->", "", text, flags=re.DOTALL)
+    text = re.sub(r"```(?:chart|json-chart|excel|excel-report)\n.*?\n```", "[Đã lược bỏ bảng/biểu đồ lớn từ lượt trước]", text, flags=re.DOTALL)
+    return text.strip()
+
+
+def _truncate_text(value, max_chars):
+    text = _strip_large_markdown_blocks(value)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "\n...[đã rút gọn nội dung cũ để tránh vượt giới hạn token]"
+
+
+def _compact_history_for_model(history):
+    compacted = []
+    total_chars = 0
+    for item in reversed(history or []):
+        role = item.get("role")
+        if role not in {"user", "assistant"}:
+            continue
+        max_chars = MODEL_USER_HISTORY_MAX_CHARS if role == "user" else MODEL_ASSISTANT_HISTORY_MAX_CHARS
+        content = _truncate_text(item.get("content", ""), max_chars)
+        if not content:
+            continue
+        if total_chars + len(content) > MODEL_HISTORY_CHAR_BUDGET and compacted:
+            break
+        compacted.append({"role": role, "content": content})
+        total_chars += len(content)
+    return list(reversed(compacted))
+
+
+def _as_ai_provider_error(exc):
+    message = str(exc)
+    lower = message.lower()
+    if "rate_limit" in lower or "request too large" in lower or "tokens per min" in lower:
+        return AiToolsError(
+            "Nội dung hội thoại hoặc dữ liệu trả về đang quá dài so với giới hạn token hiện tại. "
+            "Tôi đã rút gọn ngữ cảnh cho các lượt sau; bạn hãy gửi lại câu hỏi hoặc mở phiên trò chuyện mới nếu vẫn gặp lỗi."
+        )
+    return None
+
+
 def _normalize_text(value):
     text = unicodedata.normalize("NFKD", value or "")
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return text.lower()
+
+
+def _clean_display_text(value):
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _is_nami_greeting(value):
+    normalized = _normalize_text(value)
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    words = tuple(word for word in normalized.split() if word)
+    return words in {
+        ("hi", "nami"),
+        ("hello", "nami"),
+        ("hey", "nami"),
+        ("chao", "nami"),
+        ("xin", "chao", "nami"),
+        ("nami",),
+        ("nami", "oi"),
+    }
+
+
+def _user_profile(user):
+    try:
+        return getattr(user, "profile", None)
+    except Exception:
+        return None
+
+
+def _user_display_name(user):
+    profile = _user_profile(user)
+    if profile:
+        name = _clean_display_text(getattr(profile, "full_name", ""))
+        if name:
+            return name
+
+    first_name = _clean_display_text(getattr(user, "first_name", ""))
+    last_name = _clean_display_text(getattr(user, "last_name", ""))
+    full_name = _clean_display_text(f"{first_name} {last_name}")
+    if full_name:
+        return full_name
+    return _clean_display_text(getattr(user, "username", "") or getattr(user, "email", ""))
+
+
+def _build_nami_greeting(user):
+    profile = _user_profile(user)
+    title = _clean_display_text(getattr(profile, "chuc_danh", "") if profile else "")
+    name = _user_display_name(user)
+    recipient = _clean_display_text(f"{title} {name}")
+    if recipient:
+        return f"Xin chào {recipient}, tôi có thể giúp gì cho ngài?"
+    return "Xin chào, tôi là Nami. Tôi có thể giúp gì cho ngài?"
 
 
 def _tool_name(tool_call):
@@ -322,7 +443,7 @@ def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_son
         return handle_songhinh_tool_calls(tool_call)
     if "vinhson" in tool_name.lower():
         return handle_vinhson_tool_calls(tool_call)
-    if tool_name.lower() in {"analyze_hydro_data", "compare_hydro_periods"}:
+    if tool_name.lower() in {"analyze_hydro_data", "compare_hydro_periods", "get_unit_state_profile"}:
         return handle_analysis_tool_call(tool_call)
     return handle_water_tool_call(tool_call)
 
@@ -361,15 +482,21 @@ def _run_openai_chat(*, user, content, session_id, model):
     messages.extend(content["history"])
     messages.append({"role": "user", "content": content["text"]})
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=[{"type": "function", "function": tool["function"]} for tool in _agent_tools(all_tools)],
-        tool_choice="auto",
-        parallel_tool_calls=False,
-        temperature=0.4,
-        max_tokens=4096,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=[{"type": "function", "function": tool["function"]} for tool in _agent_tools(all_tools)],
+            tool_choice="auto",
+            parallel_tool_calls=False,
+            temperature=0.4,
+            max_tokens=2048,
+        )
+    except Exception as exc:
+        provider_error = _as_ai_provider_error(exc)
+        if provider_error:
+            raise provider_error from exc
+        raise
 
     assistant_message = response.choices[0].message.content or ""
     tools_called = 0
@@ -389,7 +516,7 @@ def _run_openai_chat(*, user, content, session_id, model):
                     tool_results.append(handle_songhinh_tool_calls(tool_call))
                 elif "vinhson" in tool_call.function.name.lower():
                     tool_results.append(handle_vinhson_tool_calls(tool_call))
-                elif tool_call.function.name.lower() in {"analyze_hydro_data", "compare_hydro_periods"}:
+                elif tool_call.function.name.lower() in {"analyze_hydro_data", "compare_hydro_periods", "get_unit_state_profile"}:
                     tool_results.append(handle_analysis_tool_call(tool_call))
                 else:
                     tool_results.append(handle_water_tool_call(tool_call))
@@ -414,12 +541,18 @@ def _run_openai_chat(*, user, content, session_id, model):
                 "Tránh giải thích dài. KHI TRẢ LỜI, HAY LUÔN CUNG CẤP TRÍCH DẪN VÀ CHÈN TÊN TÀI LIỆU PDF VÀ SỐ TRANG "
                 )
             })
-            second_response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.4,
-                max_tokens=4096,
-            )
+            try:
+                second_response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.4,
+                    max_tokens=2048,
+                )
+            except Exception as exc:
+                provider_error = _as_ai_provider_error(exc)
+                if provider_error:
+                    raise provider_error from exc
+                raise
             assistant_message = second_response.choices[0].message.content or ""
             usage = response.usage
             usage2 = second_response.usage
@@ -510,14 +643,20 @@ def _run_anthropic_chat(*, user, content, session_id, model):
     messages = list(content["history"])
     messages.append({"role": "user", "content": content["text"]})
 
-    response = client.messages.create(
-        model=model,
-        system=SYSTEM_PROMPT,
-        messages=messages,
-        max_tokens=4096,
-        temperature=0.4,
-        tools=_anthropic_tools(all_tools),
-    )
+    try:
+        response = client.messages.create(
+            model=model,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+            max_tokens=2048,
+            temperature=0.4,
+            tools=_anthropic_tools(all_tools),
+        )
+    except Exception as exc:
+        provider_error = _as_ai_provider_error(exc)
+        if provider_error:
+            raise provider_error from exc
+        raise
 
     tool_uses = [
         block
@@ -582,13 +721,19 @@ def _run_anthropic_chat(*, user, content, session_id, model):
             "role": "user",
             "content": tool_results_content
         })
-        second_response = client.messages.create(
-            model=model,
-            system=SYSTEM_PROMPT,
-            messages=messages,
-            max_tokens=4096,
-            temperature=0.4,
-        )
+        try:
+            second_response = client.messages.create(
+                model=model,
+                system=SYSTEM_PROMPT,
+                messages=messages,
+                max_tokens=2048,
+                temperature=0.4,
+            )
+        except Exception as exc:
+            provider_error = _as_ai_provider_error(exc)
+            if provider_error:
+                raise provider_error from exc
+            raise
         assistant_message = _anthropic_text(second_response)
         usage = response.usage
         usage2 = second_response.usage
@@ -612,6 +757,37 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
     provider, selected_model = _resolve_model(provider, model)
     session_id = session_id or str(uuid.uuid4())
     start_time = time.time()
+
+    if _is_nami_greeting(content):
+        assistant_message = _build_nami_greeting(user)
+        latency_ms = int((time.time() - start_time) * 1000)
+        save_exchange(
+            user=user,
+            session_id=session_id,
+            user_message=content,
+            assistant_message=assistant_message,
+            model=selected_model,
+            total_tokens=0,
+            cost_usd=0,
+            tools_called=0,
+            latency_ms=latency_ms,
+            meta={
+                "reservoir_detected": False,
+                "tools_called": 0,
+                "provider": provider,
+                "greeting": True,
+            },
+        )
+        return {
+            "session_id": session_id,
+            "response": assistant_message,
+            "provider": provider,
+            "model": selected_model,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+            "latency_ms": latency_ms,
+            "tools_called": 0,
+        }
 
     denial_message = get_ai_tool_scope_denial_message(user, content)
     if denial_message:
@@ -646,7 +822,9 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
 
     chat_content = {
         "text": content,
-        "history": get_conversation(user, session_id, limit=20),
+        "history": _compact_history_for_model(
+            get_conversation(user, session_id, limit=MODEL_HISTORY_LIMIT)
+        ),
     }
 
     if provider == "anthropic":
@@ -666,6 +844,15 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
 
     if not total_tokens:
         total_tokens = prompt_tokens + completion_tokens
+        
+    # Loại bỏ payload JSON ẩn khỏi câu trả lời hiển thị cho người dùng
+    assistant_message = re.sub(
+        r"<!-- NAMI_THERMO_DATA_START.*?NAMI_THERMO_DATA_END -->",
+        "",
+        assistant_message,
+        flags=re.DOTALL
+    ).strip()
+
     assistant_message = sanitize_tool_content(assistant_message)
     cost_usd = _estimate_cost_usd(provider, selected_model, prompt_tokens, completion_tokens)
     latency_ms = int((time.time() - start_time) * 1000)

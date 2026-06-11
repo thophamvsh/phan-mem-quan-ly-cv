@@ -636,6 +636,15 @@ def _import_excel_tomay(request, device_type=None):
         existing_records = ThongSoToMay.objects.filter(
             thiet_bi__ma_day_du__startswith=prefix, ngay_nhap=target_date
         )
+
+        if not request.user.is_superuser:
+            for rec in existing_records:
+                if rec.nguoi_nhap and rec.nguoi_nhap != request.user:
+                    return JsonResponse({
+                        'error': f'Bạn không có quyền cập nhật thông số ngày {target_date} vì một số bản ghi đã được nhập bởi người dùng khác ({rec.nguoi_nhap.username or rec.nguoi_nhap.email}).',
+                        'status': 'error'
+                    }, status=403)
+
         existing_lookup = {
             (rec.ma_thong_so or rec.ten_thong_so, rec.thoi_diem_nhap): rec for rec in existing_records
         }
@@ -686,12 +695,14 @@ def _import_excel_tomay(request, device_type=None):
                             obj.nha_may != nha_may_val or 
                             obj.thiet_bi_id != target_tb.id or 
                             obj.ten_thong_so != mapping["ten"] or 
-                            obj.ma_thong_so != mapping["ma"]):
+                            obj.ma_thong_so != mapping["ma"] or
+                            obj.nguoi_nhap != request.user):
                             obj.gia_tri = store_value
                             obj.nha_may = nha_may_val
                             obj.thiet_bi = target_tb
                             obj.ten_thong_so = mapping["ten"]
                             obj.ma_thong_so = mapping["ma"]
+                            obj.nguoi_nhap = request.user
                             to_update.append(obj)
                     else:
                         obj = ThongSoToMay(
@@ -705,6 +716,7 @@ def _import_excel_tomay(request, device_type=None):
                             nha_may=nha_may_val,
                             ky_hieu_van_hanh=f'{detected_type}_{mapping["ma"]}',
                             ghi_chu=f"Import từ Excel - {target_date}",
+                            nguoi_nhap=request.user
                         )
                         to_create.append(obj)
                         existing_lookup[lookup_key] = obj
@@ -716,7 +728,7 @@ def _import_excel_tomay(request, device_type=None):
         if to_create:
             ThongSoToMay.objects.bulk_create(to_create)
         if to_update:
-            ThongSoToMay.objects.bulk_update(to_update, ["gia_tri", "nha_may", "thiet_bi", "ten_thong_so", "ma_thong_so"])
+            ThongSoToMay.objects.bulk_update(to_update, ["gia_tri", "nha_may", "thiet_bi", "ten_thong_so", "ma_thong_so", "nguoi_nhap"])
 
         return JsonResponse(
             {
