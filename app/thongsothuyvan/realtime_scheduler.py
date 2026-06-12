@@ -44,6 +44,11 @@ def _env_int(name, default):
 
 
 def should_start_realtime_scheduler():
+    # Disable the custom background thread scheduler if Celery is enabled,
+    # as Celery Beat will handle the periodic snapshots instead.
+    if getattr(settings, "DOCUMENTS_USE_CELERY", False):
+        return False
+
     if not _env_bool("REALTIME_SNAPSHOT_SCHEDULER_ENABLED", True):
         return False
 

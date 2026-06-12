@@ -61,6 +61,38 @@ def _fake_query_rainfall_data(*args, **kwargs):
 class RainfallServicesTests(TestCase):
     databases = {"default"}
 
+    def test_history_compaction_shortens_long_markdown_tables_from_tools(self):
+        from ai_tools.services import _strip_large_markdown_blocks
+
+        rows = [
+            "### Báo cáo thống kê mưa Sông Hinh",
+            "Nhận xét chính vẫn cần giữ lại.",
+            "#### Bảng số liệu chi tiết",
+            "| Ngày | Mưa |",
+            "|---|---:|",
+        ]
+        rows.extend(f"| 2026-04-{day:02d} | {day}.0 |" for day in range(1, 18))
+        rows.extend(
+            [
+                "```chart",
+                '{"type":"line","data":[{"x":1,"y":2}]}',
+                "```",
+                "Kết luận sau bảng.",
+            ]
+        )
+
+        compacted = _strip_large_markdown_blocks("\n".join(rows))
+
+        self.assertIn("### Báo cáo thống kê mưa Sông Hinh", compacted)
+        self.assertIn("Nhận xét chính vẫn cần giữ lại.", compacted)
+        self.assertIn("#### Bảng số liệu chi tiết", compacted)
+        self.assertIn("| Ngày | Mưa |", compacted)
+        self.assertIn("| 2026-04-01 | 1.0 |", compacted)
+        self.assertIn("[Đã lược bỏ", compacted)
+        self.assertNotIn("| 2026-04-17 | 17.0 |", compacted)
+        self.assertNotIn("```chart", compacted)
+        self.assertNotIn('"type":"line"', compacted)
+
     @patch("thuyvan_data_client.query_rainfall_data", side_effect=_fake_query_rainfall_data)
     def test_songhinh_rainfall_statistics_year(self, _mock_rain):
         service = RainfallServiceSH()

@@ -1,7 +1,9 @@
+from datetime import datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -20,6 +22,7 @@ from ai_tools.permissions import (
 from ai_tools.services import _get_tools_and_handlers, run_ai_chat
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
+from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
 
 
 def _tool(name):
@@ -196,16 +199,187 @@ class AiToolFactoryScopeTests(TestCase):
         run_openai.assert_not_called()
         self.assertEqual(
             response["response"],
-            "Xin chào Giám đốc Nguyễn Văn An, tôi có thể giúp gì cho ngài?",
+            (
+                "Xin chào Giám đốc Nguyễn Văn An! Hôm nay ngài có khỏe không? "
+                "Ngài muốn được báo cáo thông tin gì trước?\n"
+                "1. Báo cáo tình hình sản xuất của 3 nhà máy ngày hôm qua."
+            ),
         )
         self.assertEqual(response["tools_called"], 0)
-
         assistant_message = AiConversationMessage.objects.filter(
             user=self.songhinh_user,
             role=AiConversationMessage.ROLE_ASSISTANT,
         ).latest("id")
         self.assertTrue(assistant_message.meta["greeting"])
         self.assertEqual(assistant_message.content, response["response"])
+
+    def test_run_ai_chat_non_leadership_greeting_keeps_standard_response(self):
+        self.songhinh_user.profile.chuc_danh = "Trưởng ca"
+        self.songhinh_user.profile.ho_ten = "Nguyễn Văn An"
+        self.songhinh_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Hi Nami",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(
+            response["response"],
+            "Xin chào Trưởng ca Nguyễn Văn An, tôi có thể giúp gì cho ngài?",
+        )
+        self.assertEqual(response["tools_called"], 0)
+
+    def test_run_ai_chat_short_hi_greets_with_user_profile_without_provider_call(self):
+        self.songhinh_user.profile.chuc_danh = "Trưởng ca"
+        self.songhinh_user.profile.ho_ten = "Nguyễn Văn An"
+        self.songhinh_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Hi!",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(
+            response["response"],
+            "Xin chào Trưởng ca Nguyễn Văn An, tôi có thể giúp gì cho ngài?",
+        )
+        self.assertEqual(response["tools_called"], 0)
+
+    def test_run_ai_chat_typo_hi_with_digit_greets_with_user_profile_without_provider_call(self):
+        self.songhinh_user.profile.chuc_danh = "Trưởng ca"
+        self.songhinh_user.profile.ho_ten = "Nguyễn Văn An"
+        self.songhinh_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Hi1",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(
+            response["response"],
+            "Xin chào Trưởng ca Nguyễn Văn An, tôi có thể giúp gì cho ngài?",
+        )
+        self.assertEqual(response["tools_called"], 0)
+
+    def test_leadership_menu_choice_one_returns_three_plant_production_report(self):
+        self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
+        self.all_factories_user.profile.ho_ten = "Dương Tấn Tưởng"
+        self.all_factories_user.profile.save()
+        report_date = timezone.localdate() - timedelta(days=1)
+        report_time = timezone.make_aware(datetime.combine(report_date, time(hour=7)))
+
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=report_time,
+            cot_l=100,
+            cot_n=90,
+            cot_p=1000,
+            cot_r=900,
+            cot_w=12000,
+            cot_v=9000,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="vinhson",
+            thoi_gian=report_time,
+            cot_c="Vinh Son -A",
+            cot_l=50,
+            cot_n=45,
+            cot_p=500,
+            cot_r=450,
+            cot_w=6000,
+            cot_v=4500,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="vinhson",
+            thoi_gian=report_time + timedelta(minutes=1),
+            cot_c="Vinh Son -B",
+            cot_l=50,
+            cot_n=45,
+            cot_p=500,
+            cot_r=450,
+            cot_w=6000,
+            cot_v=4500,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="thuongkontum",
+            thoi_gian=report_time,
+            cot_l=200,
+            cot_n=160,
+            cot_p=2000,
+            cot_r=1500,
+            cot_w=20000,
+            cot_v=10000,
+        )
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=report_date.year,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=report_date.month,
+            sanluong_kehoach_thang=1200,
+        )
+
+        greeting = run_ai_chat(
+            user=self.all_factories_user,
+            content="Hi Nami",
+            provider="openai",
+            model="",
+        )
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="1",
+                session_id=greeting["session_id"],
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn(f"**Ngày báo cáo:** {report_date.strftime('%d/%m/%Y')}", response["response"])
+        self.assertIn("| Sông Hinh | 90 | 100 | 90.00% | 900 | 1.200 | 75.00% | 9.000 | 12.000 | 75.00% |", response["response"])
+        self.assertIn("| Vĩnh Sơn | 90 | 100 | 90.00% | 900 | 1.000 | 90.00% | 9.000 | 12.000 | 75.00% |", response["response"])
+        self.assertIn("| Thượng Kon Tum | 160 | 200 | 80.00% | 1.500 | 2.000 | 75.00% | 10.000 | 20.000 | 50.00% |", response["response"])
+        self.assertIn("| Tổng cộng | 340 | 400 | 85.00% | 3.300 | 4.200 | 78.57% | 28.000 | 44.000 | 63.64% |", response["response"])
+
+    def test_direct_three_plant_yesterday_production_request_uses_current_date(self):
+        report_date = timezone.localdate() - timedelta(days=1)
+        report_time = timezone.make_aware(datetime.combine(report_date, time(hour=7)))
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=report_time,
+            cot_l=100,
+            cot_n=90,
+            cot_p=1000,
+            cot_r=900,
+            cot_w=12000,
+            cot_v=9000,
+        )
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Báo cáo tình hình sản xuất của 3 nhà máy ngày hôm qua",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn(f"**Ngày báo cáo:** {report_date.strftime('%d/%m/%Y')}", response["response"])
+        self.assertNotIn("04/10/2023", response["response"])
 
     def test_run_ai_chat_does_not_treat_greeting_with_request_as_simple_greeting(self):
         with patch("ai_tools.services._run_openai_chat") as run_openai:
@@ -238,3 +412,49 @@ class AiToolsApiPermissionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_chat_stream_returns_sse_events(self):
+        user = get_user_model().objects.create_user(
+            username="streamuser",
+            email="stream@example.com",
+            password="testpass123",
+        )
+        UserProfile.objects.create(
+            user=user,
+            can_use_ai_tools=True,
+            chuc_danh="Trưởng ca",
+            ho_ten="Nguyễn Văn An",
+        )
+
+        self.client.force_authenticate(user=user)
+        response = self.client.post(
+            reverse("ai-tools-chat-stream"),
+            {"content": "Hi!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/event-stream")
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("event: status", body)
+        self.assertIn("event: delta", body)
+        self.assertIn("Xin chào Trưởng ca Nguyễn Văn An", body)
+        self.assertIn("event: done", body)
+
+    def test_chat_endpoint_supports_stream_flag(self):
+        user = get_user_model().objects.create_user(
+            username="streamflag",
+            email="streamflag@example.com",
+            password="testpass123",
+        )
+        UserProfile.objects.create(user=user, can_use_ai_tools=True)
+
+        self.client.force_authenticate(user=user)
+        response = self.client.post(
+            reverse("ai-tools-chat"),
+            {"content": "Hi!", "stream": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/event-stream")

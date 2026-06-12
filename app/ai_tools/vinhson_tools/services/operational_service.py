@@ -78,14 +78,15 @@ Xem console log để biết chi tiết lỗi."""
             data_rows = all_data[2:]
 
             filtered_data = []
-            filtered_data_last_year = []
 
             if start_date and end_date:
                 try:
-                    start_obj = datetime.strptime(start_date, '%d/%m/%Y')
-                    end_obj = datetime.strptime(end_date, '%d/%m/%Y')
-                    start_date_obj = start_obj.date()
-                    end_date_obj = end_obj.date()
+                    start_date_obj = normalize_date(start_date)
+                    end_date_obj = normalize_date(end_date)
+                    if not start_date_obj or not end_date_obj:
+                        raise ValueError
+                    start_date = start_date_obj.strftime("%d/%m/%Y")
+                    end_date = end_date_obj.strftime("%d/%m/%Y")
                     print(f"[INFO] Looking for date range: {start_date} to {end_date}", flush=True)
                 except ValueError:
                     return f"Lỗi định dạng ngày. Vui lòng dùng format DD/MM/YYYY (ví dụ: 01/01/2026)"
@@ -106,15 +107,14 @@ Xem console log để biết chi tiết lỗi."""
 
             elif date:
                 try:
-                    date_obj = datetime.strptime(date, '%d/%m/%Y')
-                    date_last_year_obj = date_obj.replace(year=date_obj.year - 1)
-                    date_last_year = date_last_year_obj.strftime('%d/%m/%Y')
-                    print(f"[INFO] Looking for date: {date} and last year: {date_last_year}", flush=True)
+                    target_date = normalize_date(date)
+                    if not target_date:
+                        raise ValueError
+                    date = target_date.strftime("%d/%m/%Y")
+                    date_obj = datetime.combine(target_date, datetime.min.time())
+                    print(f"[INFO] Looking for date: {date}", flush=True)
                 except ValueError:
                     return f"Lỗi định dạng ngày. Vui lòng dùng format DD/MM/YYYY (ví dụ: 27/04/2020)"
-
-                target_date = date_obj.date()
-                target_date_last_year = date_last_year_obj.date()
 
                 for row in data_rows:
                     if len(row) > COL_RESERVOIR:
@@ -128,8 +128,6 @@ Xem console log để biết chi tiết lỗi."""
                             if row_date_normalized:
                                 if row_date_normalized == target_date:
                                     filtered_data.append(row)
-                                elif row_date_normalized == target_date_last_year:
-                                    filtered_data_last_year.append(row)
 
             else:
                 for row in reversed(data_rows):
@@ -403,12 +401,6 @@ Xem console log để biết chi tiết lỗi."""
                 for current_row in filtered_data:
                     reservoir_name = current_row[COL_RESERVOIR] if len(current_row) > COL_RESERVOIR else ""
 
-                    last_year_row = None
-                    for row in filtered_data_last_year:
-                        if len(row) > COL_RESERVOIR and row[COL_RESERVOIR] == reservoir_name:
-                            last_year_row = row
-                            break
-
                     date_current = current_row[COL_DATE] if len(current_row) > COL_DATE else ""
                     water_level_current = current_row[COL_WATER_LEVEL] if len(current_row) > COL_WATER_LEVEL else ""
                     volume_current = current_row[COL_VOLUME] if len(current_row) > COL_VOLUME else ""
@@ -428,72 +420,28 @@ Xem console log để biết chi tiết lỗi."""
                     commercial_year_current = current_row[COL_COMMERCIAL_YEAR] if len(current_row) > COL_COMMERCIAL_YEAR else ""
                     plan_year_current = current_row[COL_PLAN_YEAR] if len(current_row) > COL_PLAN_YEAR else ""
                     self_use_current = current_row[COL_SELF_USE] if len(current_row) > COL_SELF_USE else ""
+                    qc_day_current = current_row[COL_QC_DAY] if len(current_row) > COL_QC_DAY else ""
+                    qc_month_current = (
+                        qc_day_current
+                        if target_date.day == 1
+                        else current_row[COL_QC_MONTH_ACC] if len(current_row) > COL_QC_MONTH_ACC else ""
+                    )
+                    qc_year_current = current_row[COL_QC_YEAR_ACC] if len(current_row) > COL_QC_YEAR_ACC else ""
 
-                    if last_year_row:
-                        def safe_cell(row, col_idx, default=""):
-                            """Safely get cell value, return default if empty or out of range"""
-                            if len(row) <= col_idx:
-                                return default
-                            val = row[col_idx]
-                            if val is None or (isinstance(val, str) and val.strip() == ""):
-                                return default
-                            return str(val).strip() if isinstance(val, str) else str(val)
+                    def pct_complete(plan_s: str, commercial_s: str) -> str:
+                        plan_val = parse_number(plan_s)
+                        commercial_val = parse_number(commercial_s)
+                        if plan_val is None or commercial_val is None or plan_val <= 0:
+                            return "-"
+                        return f"{(commercial_val / plan_val * 100):.2f}%"
 
-                        date_last_year = safe_cell(last_year_row, COL_DATE, "N/A")
-                        water_level_last_year = safe_cell(last_year_row, COL_WATER_LEVEL, "-")
-                        volume_last_year = safe_cell(last_year_row, COL_VOLUME, "-")
-                        inflow_last_year = safe_cell(last_year_row, COL_INFLOW, "-")
-                        turbine_last_year = safe_cell(last_year_row, COL_TURBINE, "-")
-                        spillway_last_year = safe_cell(last_year_row, COL_SPILLWAY, "-")
-                        output_day_last_year = safe_cell(last_year_row, COL_OUTPUT_DAY, "-")
-                        commercial_day_last_year = safe_cell(last_year_row, COL_COMMERCIAL_DAY, "-")
-                        output_month_last_year = safe_cell(last_year_row, COL_OUTPUT_MONTH, "-")
-                        commercial_month_last_year = safe_cell(last_year_row, COL_COMMERCIAL_MONTH, "-")
-                        output_year_last_year = safe_cell(last_year_row, COL_OUTPUT_YEAR, "-")
-                        commercial_year_last_year = safe_cell(last_year_row, COL_COMMERCIAL_YEAR, "-")
-                        plan_year_last_year = safe_cell(last_year_row, COL_PLAN_YEAR, "-")
-                        self_use_last_year = safe_cell(last_year_row, COL_SELF_USE, "-")
-
-                        print(f"[DEBUG] Last year data found: date={date_last_year}, output_year={output_year_last_year}, commercial_year={commercial_year_last_year}, plan_year={plan_year_last_year}", flush=True)
-                    else:
-                        date_last_year = "N/A"
-                        water_level_last_year = volume_last_year = inflow_last_year = turbine_last_year = spillway_last_year = "-"
-                        output_day_last_year = commercial_day_last_year = output_month_last_year = commercial_month_last_year = "-"
-                        output_year_last_year = commercial_year_last_year = plan_year_last_year = self_use_last_year = "-"
-                        print(f"[DEBUG] Last year row NOT found for reservoir '{reservoir_name}'", flush=True)
-
-                    percent_complete_current = ""
-                    if plan_year_current and commercial_year_current:
-                        try:
-                            plan_val = float(str(plan_year_current).replace(',', '').replace('.', ''))
-                            commercial_val = float(str(commercial_year_current).replace(',', '').replace('.', ''))
-                            if plan_val > 0:
-                                percent_complete_current = f"{(commercial_val / plan_val * 100):.2f}%"
-                        except (ValueError, ZeroDivisionError):
-                            percent_complete_current = "-"
-                    else:
-                        percent_complete_current = "-"
-
-                    # Parse last year values - check for valid non-empty values
-                    plan_val_ly = None
-                    commercial_val_ly = None
-                    if plan_year_last_year and plan_year_last_year != "-" and plan_year_last_year.strip():
-                        plan_val_ly = parse_number(plan_year_last_year)
-                    if commercial_year_last_year and commercial_year_last_year != "-" and commercial_year_last_year.strip():
-                        commercial_val_ly = parse_number(commercial_year_last_year)
-
-                    percent_complete_last_year = "-"
-                    if plan_val_ly is not None and commercial_val_ly is not None and plan_val_ly > 0:
-                        percent_complete_last_year = f"{(commercial_val_ly / plan_val_ly * 100):.2f}%"
-
-                    print(f"[DEBUG] Last year percent calculation: plan_year_last_year='{plan_year_last_year}', commercial_year_last_year='{commercial_year_last_year}', plan_val_ly={plan_val_ly}, commercial_val_ly={commercial_val_ly}, result={percent_complete_last_year}", flush=True)
+                    plan_year_for_report = plan_year_current or qc_year_current
+                    percent_day_current = pct_complete(qc_day_current, commercial_day_current)
+                    percent_month_current = pct_complete(qc_month_current, commercial_month_current)
+                    percent_complete_current = pct_complete(plan_year_for_report, commercial_year_current)
 
                     hours_current = self.hours_service.get_hours_data(date_obj, reservoir_name, worksheet_hours)
-                    units_current = hours_current['units']
-
-                    hours_last_year = self.hours_service.get_hours_data(date_last_year_obj, reservoir_name, worksheet_hours)
-                    units_last_year = hours_last_year['units']
-
+                    units_current = hours_current.get('units', [])
                     h1_operating_current = "-"
                     h1_stopped_current = "-"
                     h1_ytd_current = "-"
@@ -501,91 +449,57 @@ Xem console log để biết chi tiết lỗi."""
                     h2_stopped_current = "-"
                     h2_ytd_current = "-"
 
-                    if units_current:
-                        for unit in units_current:
-                            if unit['unit'] == 'H1':
-                                h1_operating_current = unit['hours_operating']
-                                h1_stopped_current = unit['hours_stopped']
-                                h1_ytd_current = unit.get('ytd', '-')
-                            elif unit['unit'] == 'H2':
-                                h2_operating_current = unit['hours_operating']
-                                h2_stopped_current = unit['hours_stopped']
-                                h2_ytd_current = unit.get('ytd', '-')
-
-                    h1_operating_last_year = "-"
-                    h1_stopped_last_year = "-"
-                    h1_ytd_last_year = "-"
-                    h2_operating_last_year = "-"
-                    h2_stopped_last_year = "-"
-                    h2_ytd_last_year = "-"
-
-                    if units_last_year:
-                        for unit in units_last_year:
-                            if unit['unit'] == 'H1':
-                                h1_operating_last_year = unit['hours_operating']
-                                h1_stopped_last_year = unit['hours_stopped']
-                                h1_ytd_last_year = unit.get('ytd', '-')
-                            elif unit['unit'] == 'H2':
-                                h2_operating_last_year = unit['hours_operating']
-                                h2_stopped_last_year = unit['hours_stopped']
-                                h2_ytd_last_year = unit.get('ytd', '-')
+                    for unit in units_current:
+                        if unit.get('unit') == 'H1':
+                            h1_operating_current = unit.get('hours_operating', '-')
+                            h1_stopped_current = unit.get('hours_stopped', '-')
+                            h1_ytd_current = unit.get('ytd', '-')
+                        elif unit.get('unit') == 'H2':
+                            h2_operating_current = unit.get('hours_operating', '-')
+                            h2_stopped_current = unit.get('hours_stopped', '-')
+                            h2_ytd_current = unit.get('ytd', '-')
 
                     self_use_ratio_current = "-"
-                    if output_year_current and commercial_year_current:
-                        try:
-                            output_year_val = float(str(output_year_current).replace(',', '').replace('.', ''))
-                            commercial_year_val = float(str(commercial_year_current).replace(',', '').replace('.', ''))
-                            if output_year_val > 0:
-                                loss = output_year_val - commercial_year_val
-                                self_use_ratio_current = f"{(loss / output_year_val * 100):.3f}"
-                        except (ValueError, ZeroDivisionError):
-                            self_use_ratio_current = "-"
-
-                    # Parse last year values - check for valid non-empty values
-                    out_year_val_ly = None
-                    com_year_val_ly = None
-                    if output_year_last_year and output_year_last_year != "-" and output_year_last_year.strip():
-                        out_year_val_ly = parse_number(output_year_last_year)
-                    if commercial_year_last_year and commercial_year_last_year != "-" and commercial_year_last_year.strip():
-                        com_year_val_ly = parse_number(commercial_year_last_year)
-
-                    self_use_ratio_last_year = "-"
-                    if out_year_val_ly is not None and com_year_val_ly is not None and out_year_val_ly > 0:
-                        self_use_ratio_last_year = f"{((out_year_val_ly - com_year_val_ly) / out_year_val_ly * 100):.3f}"
-
-                    # print(f"[DEBUG] Last year self-use ratio calculation: output_year_last_year='{output_year_last_year}', commercial_year_last_year='{commercial_year_last_year}', out_year_val_ly={out_year_val_ly}, com_year_val_ly={com_year_val_ly}, result={self_use_ratio_last_year}", flush=True)
+                    output_year_val = parse_number(output_year_current)
+                    commercial_year_val = parse_number(commercial_year_current)
+                    if output_year_val is not None and commercial_year_val is not None and output_year_val > 0:
+                        self_use_ratio_current = f"{((output_year_val - commercial_year_val) / output_year_val * 100):.3f}"
 
                     result = f"""
 ### Dữ liệu vận hành Thủy điện Vĩnh Sơn - {reservoir_name}
 
 **Nguồn:** CSDL thongsothuyvan (Dữ liệu thực tế)
-**So sánh:** {date_current} vs. {date_last_year}
+**Ngày báo cáo:** {date_current}
 
 ---
 
-| Thông số | {date_current} | {date_last_year} |
-|:----------|:---------------|:----------------|
-| **Mực nước thượng lưu (m)** | {water_level_current} | {water_level_last_year} |
-| **Dung tích hữu ích (tr.m³)** | {volume_current} | {volume_last_year} |
-| **Lưu lượng về - Qve (m³/s)** | {inflow_current} | {inflow_last_year} |
-| **Lưu lượng chạy máy - Qcm (m³/s)** | {turbine_current} | {turbine_last_year} |
-| **Lưu lượng xả lũ - Qxl (m³/s)** | {spillway_current} | {spillway_last_year} |
-| **Sản lượng đầu cực ngày (kWh)** | {output_day_current} | {output_day_last_year} |
-| **Sản lượng thương phẩm ngày (kWh)** | {commercial_day_current} | {commercial_day_last_year} |
-| **Sản lượng đầu cực tháng (kWh)** | {output_month_current} | {output_month_last_year} |
-| **Sản lượng thương phẩm tháng (kWh)** | {commercial_month_current} | {commercial_month_last_year} |
-| **Sản lượng đầu cực năm (kWh)** | {output_year_current} | {output_year_last_year} |
-| **Sản lượng thương phẩm năm (kWh)** | {commercial_year_current} | {commercial_year_last_year} |
-| **Sản lượng kế hoạch năm (kWh)** | {plan_year_current} | {plan_year_last_year} |
-| **Sản lượng tự dùng ngày (kWh)** | {self_use_current} | {self_use_last_year} |
-| **Tỷ lệ tự dùng: tôn thất (năm) (%)** | {self_use_ratio_current} | {self_use_ratio_last_year} |
-| **Phần trăm thực hiện (%)** | {percent_complete_current} | {percent_complete_last_year} |
-| **Số giờ phát điện H1 (h)** | {h1_operating_current} | {h1_operating_last_year} |
-| **Số giờ phát điện H2 (h)** | {h2_operating_current} | {h2_operating_last_year} |
-| **Số giờ ngừng H1 (h)** | {h1_stopped_current} | {h1_stopped_last_year} |
-| **Số giờ ngừng H2 (h)** | {h2_stopped_current} | {h2_stopped_last_year} |
-| **Lũy kế thời gian chạy máy H1 (h)** | {h1_ytd_current} | {h1_ytd_last_year} |
-| **Lũy kế thời gian chạy máy H2 (h)** | {h2_ytd_current} | {h2_ytd_last_year} |
+#### Sản lượng điện và mức đạt kế hoạch
+
+| Chu kỳ | Sản lượng đầu cực (kWh) | Sản lượng thương phẩm (kWh) | Kế hoạch/Qc (kWh) | % đạt kế hoạch |
+|--------|--------------------------|------------------------------|-------------------|----------------|
+| Ngày | {output_day_current} | {commercial_day_current} | {qc_day_current} | {percent_day_current} |
+| Tháng | {output_month_current} | {commercial_month_current} | {qc_month_current} | {percent_month_current} |
+| Năm | {output_year_current} | {commercial_year_current} | {plan_year_for_report} | {percent_complete_current} |
+
+---
+
+#### Thông tin vận hành chính
+
+| Thông số | Giá trị |
+|:----------|:--------|
+| **Mực nước thượng lưu (m)** | {water_level_current} |
+| **Dung tích hữu ích (tr.m³)** | {volume_current} |
+| **Lưu lượng về - Qve (m³/s)** | {inflow_current} |
+| **Lưu lượng chạy máy - Qcm (m³/s)** | {turbine_current} |
+| **Lưu lượng xả lũ - Qxl (m³/s)** | {spillway_current} |
+| **Sản lượng tự dùng ngày (kWh)** | {self_use_current} |
+| **Tỷ lệ tự dùng/tổn thất năm (%)** | {self_use_ratio_current} |
+| **Số giờ phát điện H1 (h)** | {h1_operating_current} |
+| **Số giờ phát điện H2 (h)** | {h2_operating_current} |
+| **Số giờ ngừng H1 (h)** | {h1_stopped_current} |
+| **Số giờ ngừng H2 (h)** | {h2_stopped_current} |
+| **Lũy kế thời gian chạy máy H1 (h)** | {h1_ytd_current} |
+| **Lũy kế thời gian chạy máy H2 (h)** | {h2_ytd_current} |
 
 ---
 

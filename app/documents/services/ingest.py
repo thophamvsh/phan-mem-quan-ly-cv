@@ -6,7 +6,7 @@ from django.utils import timezone
 from documents.models import Document, DocumentChunk
 from documents.services.chunking import chunk_markdown
 from documents.services.docling_convert import convert_file_to_markdown
-from documents.services.embeddings import get_embedding
+from documents.services.embeddings import get_embedding, get_embeddings_batch
 
 
 logger = logging.getLogger(__name__)
@@ -21,19 +21,20 @@ def process_document(document):
         logger.info("Processing document %s started.", document.id)
         markdown = convert_file_to_markdown(document.original_file.path)
         chunks = chunk_markdown(markdown)
+        contents = [chunk["content"] for chunk in chunks]
+        embeddings = get_embeddings_batch(contents)
         prepared_chunks = []
         for index, chunk in enumerate(chunks):
-            content = chunk["content"]
             prepared_chunks.append(
                 {
                     "chunk_index": index,
                     "heading_path": chunk.get("heading_path", ""),
-                    "content": content,
+                    "content": chunk["content"],
                     "token_count": chunk.get("token_count", 0),
                     "page_from": chunk.get("page_from"),
                     "page_to": chunk.get("page_to"),
                     "metadata": chunk.get("metadata", {}),
-                    "embedding": get_embedding(content),
+                    "embedding": embeddings[index],
                 }
             )
 

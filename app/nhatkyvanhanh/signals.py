@@ -48,36 +48,10 @@ def get_user_display_name(user):
 
 def send_telegram_notification(text):
     """
-    Sends a message to the configured Telegram chat using a background daemon thread
-    to prevent blocking the main request/response lifecycle.
+    Sends a message to the configured Telegram chat using Celery tasks.
     """
-    token = getattr(settings, "TELEGRAM_BOT_TOKEN", None)
-    chat_id = getattr(settings, "TELEGRAM_CHAT_ID", None)
-
-    if not token or not chat_id:
-        logger.warning("Telegram Bot Token or Chat ID is not configured in Django settings.")
-        return
-
-    def run():
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-        try:
-            response = requests.post(url, json=payload, timeout=10)
-            if not response.ok:
-                logger.error(
-                    f"Telegram API error (status {response.status_code}): {response.text}"
-                )
-            else:
-                logger.info("Telegram notification sent successfully.")
-        except Exception as e:
-            logger.exception("Failed to send Telegram notification due to connection error.")
-
-    # Start the network request in a daemon thread so it runs in the background
-    threading.Thread(target=run, daemon=True).start()
+    from .tasks import send_telegram_notification_task
+    send_telegram_notification_task.delay(text)
 
 
 @receiver(post_save, sender=SuKien)

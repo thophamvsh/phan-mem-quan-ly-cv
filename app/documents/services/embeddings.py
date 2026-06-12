@@ -59,3 +59,28 @@ def _hash_embedding(text):
     if not norm:
         return vector
     return [value / norm for value in vector]
+
+
+def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
+    if not api_key:
+        return [_hash_embedding(t or "") for t in texts]
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+
+        batch_size = 256
+        embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = [t[:8000] if t else "" for t in texts[i : i + batch_size]]
+            response = client.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=batch,
+            )
+            for item in response.data:
+                embeddings.append(list(item.embedding))
+        return embeddings
+    except Exception:
+        logger.exception("OpenAI batch embedding request failed. Falling back to local hash embedding.")
+        return [_hash_embedding(t or "") for t in texts]

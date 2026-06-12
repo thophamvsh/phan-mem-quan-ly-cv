@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from pgvector.django import VectorField
 
 
 class Document(models.Model):
@@ -66,7 +67,7 @@ class DocumentChunk(models.Model):
     page_from = models.PositiveIntegerField(null=True, blank=True)
     page_to = models.PositiveIntegerField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    embedding = models.JSONField(default=list, blank=True)
+    embedding = VectorField(dimensions=1536, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -4,9 +4,12 @@ import datetime
 import pytz
 import json
 import re
+from types import SimpleNamespace
 
-from quanlyvanhanh.models import ThietBi, ThongSoToMay, ThongSoVanHanh, NguongThongSo
+from quanlyvanhanh.models import ThietBi, ThongSoToMay, ThongSoTram110KV, ThongSoVanHanh, NguongThongSo
 from ai_tools.analysis_tools.services import get_unit_state_profile
+from ai_tools.services import _normalize_analysis_tool_call, _strip_large_markdown_blocks
+from ai_tools.tool_format import make_tool_response, render_markdown
 
 
 class OperationalProfileTests(TestCase):
@@ -440,3 +443,331 @@ class OperationalProfileTests(TestCase):
         self.assertIn("Lưu lượng ổ hướng tuabin", report)
         self.assertIn("nhiet_do_o_huong_tuabin", report)
         self.assertNotIn("nhiet_do_o_do", report)
+
+    def test_transformer_question_overrides_wrong_h1_tool_arguments(self):
+        tool_call = SimpleNamespace(
+            id="call_1",
+            function=SimpleNamespace(
+                name="get_unit_state_profile",
+                arguments=json.dumps(
+                    {
+                        "device_code": "SH.TB.H1",
+                        "parameter_code": "nhiet_do_o_huong_tuabin",
+                    }
+                ),
+            ),
+        )
+
+        fixed_call = _normalize_analysis_tool_call("Phân tích nhiệt độ Máy biến áp T1 của Sông Hinh", tool_call)
+        fixed_args = json.loads(fixed_call.function.arguments)
+
+        self.assertEqual(fixed_args["device_code"], "SH.TB.TPP.110.T1")
+        self.assertEqual(fixed_args["parameter_code"], "nhiet_do_mba_t1")
+
+    def test_get_unit_state_profile_supports_song_hinh_transformer_t1(self):
+        transformer = ThietBi.objects.create(
+            ten="MBA T1",
+            ma="SH.TB.TPP.110.T1",
+            ma_day_du="SH.TB.TPP.110.T1",
+            nha_may="Sông Hinh",
+        )
+
+        NguongThongSo.objects.create(
+            nha_may="Sông Hinh",
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_mba_t1",
+            ten_thong_so="Nhiệt độ MBA T1",
+            don_vi="°C",
+            alarm=80.0,
+            trip=90.0,
+        )
+        ThongSoVanHanh.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_mba_t1",
+            ten_thong_so="Nhiệt độ MBA T1",
+            don_vi="°C",
+            gia_tri="62.5",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Sông Hinh",
+        )
+
+        report = get_unit_state_profile(
+            "SH.TB.TPP.110.T1",
+            date="2026-06-10",
+            time="08:00",
+            parameter_code="nhiet_do_mba_t1",
+        )
+
+        self.assertIn("Hồ sơ trạng thái vận hành Thiết bị: MBA T1 (SH.TB.TPP.110.T1)", report)
+        self.assertIn("Nhiệt độ MBA T1", report)
+        self.assertIn("nhiet_do_mba_t1", report)
+        self.assertIn("**62.50 °C**", report)
+        self.assertNotIn("SH.TB.H1", report)
+        self.assertNotIn("nhiet_do_o_huong_tuabin", report)
+
+    def test_get_unit_state_profile_reads_song_hinh_transformer_t2_tram_data(self):
+        transformer = ThietBi.objects.create(
+            ten="MBA T2",
+            ma="SH.TB.TPP.110.T2",
+            ma_day_du="SH.TB.TPP.110.T2",
+            nha_may="Sông Hinh",
+        )
+
+        NguongThongSo.objects.create(
+            nha_may="Sông Hinh",
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_mba_t2",
+            ten_thong_so="Nhiệt độ MBA T2",
+            don_vi="°C",
+            alarm=80.0,
+            trip=90.0,
+        )
+        ThongSoTram110KV.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_mba_t2",
+            ten_thong_so="Nhiệt độ MBA T2",
+            don_vi="°C",
+            gia_tri="60",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Sông Hinh",
+        )
+        ThongSoTram110KV.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nac_phan_ap_mba_t2",
+            ten_thong_so="Nấc phân áp MBA T2",
+            don_vi="",
+            gia_tri="9",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Sông Hinh",
+        )
+
+        report = get_unit_state_profile(
+            "SH.TB.TPP.110.T2",
+            date="2026-06-10",
+            time="08:00",
+            parameter_code="nhiet_do_mba_t2",
+        )
+
+        self.assertIn("Hồ sơ trạng thái vận hành Thiết bị: MBA T2 (SH.TB.TPP.110.T2)", report)
+        self.assertIn("Nhiệt độ MBA T2", report)
+        self.assertIn("nhiet_do_mba_t2", report)
+        self.assertIn("**60.00 °C**", report)
+        self.assertIn('"source": "tram"', report)
+        self.assertNotIn("Không tìm thấy dữ liệu vận hành", report)
+
+    def test_get_unit_state_profile_reads_vinh_son_transformer_t2_when_names_change(self):
+        transformer = ThietBi.objects.create(
+            ten="Máy biến áp T2",
+            ma="VS.TB.TPP.T2",
+            ma_day_du="VS.TB.TPP.T2",
+            nha_may="Vĩnh Sơn",
+        )
+        vn_tz = pytz.timezone('Asia/Ho_Chi_Minh')
+        older_date = datetime.date(2026, 6, 8)
+        newer_date = datetime.date(2026, 6, 9)
+        older_dt = vn_tz.localize(datetime.datetime(2026, 6, 8, 8, 0))
+        newer_dt = vn_tz.localize(datetime.datetime(2026, 6, 9, 8, 0))
+
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_cuon_day_t2",
+            ten_thong_so="Nhiệt độ cuộn dây T2",
+            don_vi="°C",
+            alarm=80.0,
+            trip=90.0,
+        )
+        ThongSoVanHanh.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_cuon_day_t2",
+            ten_thong_so="Nđ\nổ T2",
+            don_vi="°C",
+            gia_tri="62",
+            thoi_diem_nhap=older_dt,
+            ngay_nhap=older_date,
+            nha_may="Vĩnh Sơn",
+        )
+        ThongSoVanHanh.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_cuon_day_t2",
+            ten_thong_so="Nđ\nø T2",
+            don_vi="°C",
+            gia_tri="68",
+            thoi_diem_nhap=newer_dt,
+            ngay_nhap=newer_date,
+            nha_may="Vĩnh Sơn",
+        )
+
+        report = get_unit_state_profile("VS.TB.TPP.T2", parameter_code="nhiet_do_cuon_day_t2")
+
+        self.assertIn("09/06/2026", report)
+        self.assertIn("nhiet_do_cuon_day_t2", report)
+        self.assertIn("**68.00 °C**", report)
+        self.assertIn('"source": "dien"', report)
+        self.assertNotIn("Không tìm thấy dữ liệu vận hành", report)
+
+    def test_rendered_operational_profile_does_not_leak_hidden_json_payload(self):
+        transformer = ThietBi.objects.create(
+            ten="MBA T2",
+            ma="SH.TB.TPP.110.T2",
+            ma_day_du="SH.TB.TPP.110.T2",
+            nha_may="Sông Hinh",
+        )
+        ThongSoTram110KV.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_mba_t2",
+            ten_thong_so="Nhiệt độ MBA T2",
+            don_vi="°C",
+            gia_tri="60",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Sông Hinh",
+        )
+
+        raw_report = get_unit_state_profile(
+            "SH.TB.TPP.110.T2",
+            date="2026-06-10",
+            time="08:00",
+            parameter_code="nhiet_do_mba_t2",
+        )
+        rendered = render_markdown(make_tool_response("get_unit_state_profile", raw_report, None))
+
+        self.assertIn("Bảng diễn biến thông số trong các ngày so sánh", rendered)
+        self.assertIn("Nhiệt độ MBA T2", rendered)
+        self.assertNotIn("NAMI_THERMO_DATA_START", rendered)
+        self.assertNotIn("NAMI_THERMO_DATA_END", rendered)
+        self.assertNotIn('"SH.TB.TPP.110.T2|nhiet_do_mba_t2"', rendered)
+        self.assertNotIn('"signals"', rendered)
+
+    def test_history_compaction_removes_long_operational_trend_table(self):
+        transformer = ThietBi.objects.create(
+            ten="MBA T2",
+            ma="SH.TB.TPP.110.T2",
+            ma_day_du="SH.TB.TPP.110.T2",
+            nha_may="Sông Hinh",
+        )
+        ThongSoTram110KV.objects.create(
+            thiet_bi=transformer,
+            ma_thong_so="nhiet_do_mba_t2",
+            ten_thong_so="Nhiệt độ MBA T2",
+            don_vi="°C",
+            gia_tri="60",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Sông Hinh",
+        )
+
+        raw_report = get_unit_state_profile(
+            "SH.TB.TPP.110.T2",
+            date="2026-06-10",
+            time="08:00",
+            parameter_code="nhiet_do_mba_t2",
+        )
+        compacted = _strip_large_markdown_blocks(raw_report)
+
+        self.assertIn("Hồ sơ trạng thái vận hành Thiết bị: MBA T2", compacted)
+        self.assertIn("Nhiệt độ MBA T2", compacted)
+        self.assertIn("Dữ liệu vận hành & Chẩn đoán chuyên sâu", compacted)
+        self.assertIn("Đã lược bỏ bảng diễn biến 15 ngày", compacted)
+        self.assertNotIn("Bảng diễn biến thông số trong các ngày so sánh", compacted)
+        self.assertNotIn("```chart", compacted)
+        self.assertNotIn("NAMI_THERMO_DATA_START", compacted)
+        self.assertNotIn('"signals"', compacted)
+
+    def test_offline_expected_temperature(self):
+        ThongSoVanHanh.objects.filter(
+            thiet_bi=self.device,
+            ma_thong_so="cong_suat_tac_dung_h1",
+            thoi_diem_nhap=self.dt_0800,
+        ).update(gia_tri="0.0")
+        ThongSoToMay.objects.filter(
+            thiet_bi=self.device,
+            ma_thong_so="nhiet_do_o_do",
+            thoi_diem_nhap=self.dt_0800,
+        ).update(gia_tri="28.0")
+        
+        report = get_unit_state_profile("SH.TB.H1", date="2026-06-10", time="08:00", parameter_code="nhiet_do_o_do")
+        self.assertIn("25.00 °C", report)
+        self.assertIn("+3.00 °C", report)
+
+    def test_rated_power_map_lookup_and_online_calculation(self):
+        tkt_device = ThietBi.objects.create(
+            ten="TỔ MÁY H1 TKT",
+            ma="TKT.TB.H1",
+            ma_day_du="TKT.TB.H1",
+            nha_may="Thượng Kon Tum"
+        )
+        NguongThongSo.objects.create(
+            nha_may="Thượng Kon Tum",
+            thiet_bi=tkt_device,
+            ma_thong_so="cong_suat_tac_dung_h1",
+            ten_thong_so="Công suất tác dụng",
+            don_vi="MW",
+            rated=110.0
+        )
+        NguongThongSo.objects.create(
+            nha_may="Thượng Kon Tum",
+            thiet_bi=tkt_device,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiệt độ ổ đỡ",
+            don_vi="°C",
+            alarm=80.0,
+            trip=85.0,
+            rated=65.0
+        )
+        
+        ThongSoVanHanh.objects.create(
+            thiet_bi=tkt_device,
+            ma_thong_so="cong_suat_tac_dung_h1",
+            ten_thong_so="Công suất tác dụng",
+            don_vi="MW",
+            gia_tri="55.0",
+            thoi_diem_nhap=self.dt_0700,
+            ngay_nhap=self.target_date,
+            nha_may="Thượng Kon Tum"
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=tkt_device,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiệt độ ổ đỡ",
+            don_vi="°C",
+            gia_tri="50.0",
+            thoi_diem_nhap=self.dt_0700,
+            ngay_nhap=self.target_date,
+            nha_may="Thượng Kon Tum"
+        )
+        
+        report = get_unit_state_profile("TKT.TB.H1", date="2026-06-10", time="07:00", parameter_code="nhiet_do_o_do")
+        self.assertIn("47.00 °C", report)
+        self.assertIn("+3.00 °C", report)
+
+    def test_compare_hydro_periods_missing_data(self):
+        from ai_tools.analysis_tools.services import compare_hydro_periods
+        from thongsothuyvan.models import TramDoMuaVrain
+        
+        dt_current = self.dt_0700
+        TramDoMuaVrain.objects.create(
+            Thoi_gian=dt_current,
+            Xa_Ea_M_doan=10.0,
+            Thon_10_Xa_Ea_M_Doal=5.0,
+            UBND_xa_Song_Hinh=3.0,
+            Cu_Kroa=2.0,
+            Xa_Ea_Trang=1.0,
+            Dap_Tran=4.0
+        )
+
+        report = compare_hydro_periods(
+            data_type="rainfall",
+            current_start="2026-06-10",
+            current_end="2026-06-10",
+            compare_start="2026-06-09",
+            compare_end="2026-06-09",
+            reservoir="Song Hinh"
+        )
+
+        # TB Kỳ hiện tại (10.00 mm) có mặt, TB Kỳ so sánh và Chênh lệch/Thay đổi là "-"
+        self.assertIn("10.00 mm", report)
+        self.assertIn("-", report)

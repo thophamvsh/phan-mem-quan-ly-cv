@@ -12,6 +12,13 @@ import hydro_data_repository
 from thongsothuyvan.models import SongHinhRealtimeSnapshot, VinhSonRealtimeSnapshot
 
 
+RATED_POWER_MAP = {
+    "SH": 37.0,   # Sông Hinh: 37 MW/tổ máy
+    "VS": 33.0,   # Vĩnh Sơn: 33 MW/tổ máy
+    "TKT": 110.0, # Thượng Kon Tum: 110 MW/tổ máy
+}
+
+
 RAINFALL_STATIONS = {
     "songhinh": [
         "Xa_Ea_M_doan",
@@ -239,11 +246,21 @@ def compare_hydro_periods(data_type, current_start, current_end, compare_start, 
     ]
     for label, current_stat, row_unit in current_rows:
         compare_stat = compare_by_label.get(label, _stats([]))
-        diff = current_stat["avg"] - compare_stat["avg"]
-        pct = (diff / compare_stat["avg"] * 100) if compare_stat["avg"] else 0.0
         display_unit = row_unit or unit
+        current_avg = current_stat["avg"]
+        if compare_stat["count"] > 0:
+            compare_avg = compare_stat["avg"]
+            diff = current_avg - compare_avg
+            pct = (diff / compare_avg * 100) if compare_avg else 0.0
+            compare_avg_str = f"{_fmt(compare_avg)} {display_unit}"
+            diff_str = f"{_fmt(diff)} {display_unit}"
+            pct_str = f"{_fmt(pct, 1)}%"
+        else:
+            compare_avg_str = "-"
+            diff_str = "-"
+            pct_str = "-"
         lines.append(
-            f"| {label} | {_fmt(current_stat['avg'])} {display_unit} | {_fmt(compare_stat['avg'])} {display_unit} | {_fmt(diff)} {display_unit} | {_fmt(pct, 1)}% |"
+            f"| {label} | {_fmt(current_avg)} {display_unit} | {compare_avg_str} | {diff_str} | {pct_str} |"
         )
     lines.extend(
         [
@@ -257,10 +274,9 @@ def compare_hydro_periods(data_type, current_start, current_end, compare_start, 
 
 
 def get_unit_state_profile(device_code: str, date: str | None = None, time: str | None = None, window: str | None = "60m", parameter_code: str | None = None) -> str:
-    from quanlyvanhanh.models import ThietBi, ThongSoToMay, ThongSoVanHanh
+    from quanlyvanhanh.models import ThietBi, ThongSoToMay, ThongSoTram110KV, ThongSoVanHanh
     from quanlyvanhanh.services.thongso_history_service import get_metric_thresholds, parse_number
     from django.db.models import Max
-    import pytz
     import re
     import json
     from datetime import timedelta
@@ -288,16 +304,22 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
                 thiet_bi__ma_day_du__startswith=device_code,
                 ma_thong_so__icontains=parameter_code
             ).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
+            latest_tram = ThongSoTram110KV.objects.filter(
+                thiet_bi__ma_day_du__startswith=device_code,
+                ma_thong_so__icontains=parameter_code
+            ).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
             
             # Nếu không tìm thấy, thử tìm bất kỳ ngày nào có dữ liệu cho thiết bị
-            if not latest_tm and not latest_vh:
+            if not latest_tm and not latest_vh and not latest_tram:
                 latest_tm = ThongSoToMay.objects.filter(thiet_bi__ma_day_du__startswith=device_code).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
                 latest_vh = ThongSoVanHanh.objects.filter(thiet_bi__ma_day_du__startswith=device_code).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
+                latest_tram = ThongSoTram110KV.objects.filter(thiet_bi__ma_day_du__startswith=device_code).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
         else:
             latest_tm = ThongSoToMay.objects.filter(thiet_bi__ma_day_du__startswith=device_code).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
             latest_vh = ThongSoVanHanh.objects.filter(thiet_bi__ma_day_du__startswith=device_code).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
+            latest_tram = ThongSoTram110KV.objects.filter(thiet_bi__ma_day_du__startswith=device_code).aggregate(Max('ngay_nhap'))['ngay_nhap__max']
             
-        dates = [d for d in [latest_tm, latest_vh] if d is not None]
+        dates = [d for d in [latest_tm, latest_vh, latest_tram] if d is not None]
         target_date = max(dates) if dates else timezone.localtime(timezone.now()).date()
 
     # 3. Lấy dữ liệu của ToMay và VanHanh trong khoảng 15 ngày để so sánh
@@ -313,8 +335,13 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
         ngay_nhap__gte=comparison_start_date,
         ngay_nhap__lte=target_date,
     ).select_related('thiet_bi')
+    qs_tram = ThongSoTram110KV.objects.filter(
+        thiet_bi__ma_day_du__startswith=device_code,
+        ngay_nhap__gte=comparison_start_date,
+        ngay_nhap__lte=target_date,
+    ).select_related('thiet_bi')
 
-    if not qs_tm.exists() and not qs_vh.exists():
+    if not qs_tm.exists() and not qs_vh.exists() and not qs_tram.exists():
         return f"Không tìm thấy dữ liệu vận hành cho thiết bị {device.ten} ({device_code}) trong khoảng {comparison_start_date.strftime('%d/%m/%Y')} đến {target_date.strftime('%d/%m/%Y')}."
 
     # 4. Group dữ liệu theo ngày/thời điểm và căn chỉnh theo múi giờ Việt Nam
@@ -325,7 +352,6 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
         return "|".join([
             record.thiet_bi.ma_day_du or "",
             record.ma_thong_so or "",
-            record.ten_thong_so or "",
         ])
 
     def process_records(queryset, source):
@@ -363,6 +389,7 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
 
     process_records(qs_tm, 'tomay')
     process_records(qs_vh, 'dien')
+    process_records(qs_tram, 'tram')
 
     aligned_data = all_aligned_data.get(target_date, {})
     if not aligned_data:
@@ -612,9 +639,8 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
         prev_time_str = best_t_str
 
     # Xác định công suất định mức
-    p_rated = 37.0
-    if "VS" in device_code.upper():
-        p_rated = 33.0
+    factory_prefix = device_code.split('.')[0].upper() if '.' in device_code else device_code.upper()
+    p_rated = RATED_POWER_MAP.get(factory_prefix, 37.0)
 
     curr_power = 0.0
     if time_str and power_code:
@@ -651,8 +677,9 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
         t_inlet = aligned_data[time_str].get(t_inlet_code, 25.0) or 25.0
 
     # Xây dựng cấu trúc Markdown phản hồi
+    device_label = "Tổ máy" if re.search(r"\.H[12](\.|$)", device_code.upper()) else "Thiết bị"
     lines = []
-    lines.append(f"### Hồ sơ trạng thái vận hành Tổ máy: {device.ten} ({device_code})")
+    lines.append(f"### Hồ sơ trạng thái vận hành {device_label}: {device.ten} ({device_code})")
     lines.append(f"- **Ngày báo cáo**: {target_date.strftime('%d/%m/%Y')}")
     lines.append(f"- **Khoảng so sánh**: {comparison_start_date.strftime('%d/%m/%Y')} đến {target_date.strftime('%d/%m/%Y')} ({comparison_days} ngày)")
     if time_str:
@@ -725,23 +752,26 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
             expected = None
             residual = None
             if val is not None and meta['unit'] == "°C" and "nhiet_do" in metric_code:
-                flow_code = get_related_flow_code(code)
-                f_val = time_values.get(flow_code) if flow_code else None
-                f_rated = 50.0
-                if flow_code and flow_code in param_meta:
-                    f_rated = param_meta[flow_code].get("rated") or 50.0
-                
-                t_rated_temp = meta['rated'] or 65.0
-                if "cuon_day" in metric_code or "stato" in metric_code:
-                    t_rated_temp = meta['rated'] or 85.0
-                
-                p_ratio = curr_power / p_rated
-                f_term = 1.0
-                if f_val is not None and f_val > 0.0:
-                    f_term = (f_rated / f_val) ** 0.5
-                
-                expected = t_inlet + (t_rated_temp - t_inlet) * (0.4 + 0.6 * (p_ratio ** 2)) * f_term
-                expected = max(t_inlet, min(expected, t_rated_temp + 5.0))
+                if curr_power < 1.0:
+                    expected = t_inlet
+                else:
+                    flow_code = get_related_flow_code(code)
+                    f_val = time_values.get(flow_code) if flow_code else None
+                    f_rated = 50.0
+                    if flow_code and flow_code in param_meta:
+                        f_rated = param_meta[flow_code].get("rated") or 50.0
+                    
+                    t_rated_temp = meta['rated'] or 65.0
+                    if "cuon_day" in metric_code or "stato" in metric_code:
+                        t_rated_temp = meta['rated'] or 85.0
+                    
+                    p_ratio = curr_power / p_rated
+                    f_term = 1.0
+                    if f_val is not None and f_val > 0.0:
+                        f_term = (f_rated / f_val) ** 0.5
+                    
+                    expected = t_inlet + (t_rated_temp - t_inlet) * (0.4 + 0.6 * (p_ratio ** 2)) * f_term
+                    expected = max(t_inlet, min(expected, t_rated_temp + 5.0))
                 residual = val - expected
 
             # Tính trạng thái giới hạn cứng
@@ -793,6 +823,7 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
                 "device_name": meta.get('device_name'),
                 "metric_code": metric_code,
                 "name": meta.get('name'),
+                "source": meta.get('source'),
                 "factory": meta.get('factory'),
                 "val": val,
                 "unit": meta['unit'],

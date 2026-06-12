@@ -45,6 +45,19 @@ CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", CELERY_BROKER_UR
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "1800"))
 
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "save-realtime-snapshots-hourly": {
+        "task": "thongsothuyvan.tasks.save_all_realtime_snapshots_task",
+        "schedule": crontab(minute=5),  # Chạy vào phút thứ 5 của mỗi giờ
+    },
+    "sync-vrain-rainfall-daily": {
+        "task": "thongsothuyvan.tasks.sync_vrain_daily_rainfall_task",
+        "schedule": crontab(hour=7, minute=0),  # Chạy vào lúc 7:00 sáng hàng ngày
+    },
+}
+
 INSTALLED_APPS = [
     'corsheaders',
     'django.contrib.admin',

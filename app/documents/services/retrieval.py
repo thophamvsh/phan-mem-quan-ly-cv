@@ -14,6 +14,7 @@ AI_TOOL_SCOPE_SONGHINH = permissions.AI_TOOL_SCOPE_SONGHINH
 AI_TOOL_SCOPE_VINHSON = permissions.AI_TOOL_SCOPE_VINHSON
 get_ai_tool_scopes_for_user = permissions.get_ai_tool_scopes_for_user
 
+from pgvector.django import CosineDistance
 from ..models import Document, DocumentChunk
 from .embeddings import get_embedding
 from .normalization import normalize_doc_type, normalize_text
@@ -58,7 +59,7 @@ def search_documents(user, query, factory="", document_type="", limit=5):
         DocumentChunk.objects.select_related("document")
         .defer("document__markdown_text")
         .filter(document__status=Document.STATUS_READY, document__factory__in=allowed_factories)
-        .exclude(embedding=[])
+        .filter(embedding__isnull=False)
     )
 
     if document_type:
@@ -99,18 +100,23 @@ def _collect_candidates(base_queryset, parsed_query, query):
     query_embedding = get_embedding(query)
 
     for chunk in _semantic_candidates(base_queryset, query_embedding):
-        candidates[chunk.id] = {"chunk": chunk, "semantic_score": 0.0}
+        distance = getattr(chunk, "distance", None)
+        semantic_score = max(0.0, 1.0 - float(distance)) if distance is not None else 0.0
+        candidates[chunk.id] = {"chunk": chunk, "semantic_score": semantic_score}
 
     for chunk in _keyword_candidates(base_queryset, parsed_query):
         candidates.setdefault(chunk.id, {"chunk": chunk, "semantic_score": 0.0})
 
     if query_embedding:
-        semantic_scores = _compute_semantic_scores(
-            [item["chunk"] for item in candidates.values()],
-            query_embedding,
-        )
-        for chunk_id, semantic_score in semantic_scores.items():
-            candidates[chunk_id]["semantic_score"] = semantic_score
+        missing_chunks = [
+            item["chunk"]
+            for item in candidates.values()
+            if item["semantic_score"] == 0.0
+        ]
+        if missing_chunks:
+            semantic_scores = _compute_semantic_scores(missing_chunks, query_embedding)
+            for chunk_id, semantic_score in semantic_scores.items():
+                candidates[chunk_id]["semantic_score"] = semantic_score
 
     return list(candidates.values())
 
@@ -119,36 +125,12 @@ def _semantic_candidates(base_queryset, query_embedding):
     if not query_embedding:
         return []
 
-    # Optimize query: only fetch ID and embedding to avoid memory bloat
-    chunk_embeddings = list(
-        base_queryset.values_list("id", "embedding")[:SEMANTIC_CANDIDATE_LIMIT]
-    )
-    if not chunk_embeddings:
-        return []
-
-    class DummyChunk:
-        def __init__(self, chunk_id, embedding):
-            self.id = chunk_id
-            self.embedding = embedding
-
-    dummy_chunks = [DummyChunk(cid, emb) for cid, emb in chunk_embeddings]
-    scores = _compute_semantic_scores(dummy_chunks, query_embedding)
-
-    sorted_ids = sorted(
-        scores.keys(),
-        key=lambda chunk_id: scores.get(chunk_id, 0.0),
-        reverse=True
-    )
-    top_ids = sorted_ids[:KEYWORD_CANDIDATE_LIMIT]
-
-    # Fetch full chunks only for the top candidates
+    # Use pgvector CosineDistance query to sort directly in database
     chunks = list(
-        DocumentChunk.objects.filter(id__in=top_ids)
-        .select_related("document")
-        .defer("document__markdown_text")
+        base_queryset
+        .annotate(distance=CosineDistance("embedding", query_embedding))
+        .order_by("distance")[:KEYWORD_CANDIDATE_LIMIT]
     )
-    # Sort chunks to match the order of top_ids
-    chunks.sort(key=lambda chunk: top_ids.index(chunk.id))
     return chunks
 
 

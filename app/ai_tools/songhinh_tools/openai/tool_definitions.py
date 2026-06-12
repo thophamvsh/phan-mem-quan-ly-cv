@@ -30,10 +30,10 @@ OUTPUT FORMAT:
   * Shows data for each day from start_date to end_date in chronological order
   * Use this when user asks "báo cáo từ X đến Y" or "dữ liệu từ X đến Y"
 
-- **Specific Date** (date="DD/MM/YYYY"): Returns VERTICAL comparison table (3 columns)
-  * Column 1: Parameter names
-  * Column 2: Current year data
-  * Column 3: Same date last year (year-over-year comparison)
+- **Specific Date** (date="DD/MM/YYYY"): Returns current-day operational report, NOT a same-period comparison
+  * Includes production for day/month/year
+  * Includes % achieved against daily/monthly/yearly Qc/plan
+  * Do not add same-date-last-year comparison unless the user explicitly asks for comparison
 
 - **Multiple Days** (num_days=N): Returns HORIZONTAL table (multiple rows)
   * Shows data for N recent days in chronological order

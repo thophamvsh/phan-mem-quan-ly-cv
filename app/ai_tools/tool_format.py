@@ -27,6 +27,19 @@ def sanitize_tool_content(value: Any) -> Any:
     if not isinstance(value, str):
         return value
 
+    value = re.sub(
+        r"<!--\s*NAMI_THERMO_DATA_START.*?NAMI_THERMO_DATA_END\s*-->",
+        "",
+        value,
+        flags=re.DOTALL,
+    )
+    value = re.sub(
+        r"NAMI_THERMO_DATA_START.*?NAMI_THERMO_DATA_END",
+        "",
+        value,
+        flags=re.DOTALL,
+    )
+
     cleaned_lines = []
     for line in value.splitlines():
         normalized = line.lower()
