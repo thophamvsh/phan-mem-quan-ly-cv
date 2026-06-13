@@ -6,12 +6,24 @@ import re
 import time
 import unicodedata
 import uuid
-from datetime import timedelta
 from types import SimpleNamespace
 
 from django.conf import settings
 from django.utils import timezone
 
+from .leadership_report import (
+    expand_leadership_menu_choice,
+    get_three_plant_production_report_date,
+    has_leadership_production_menu_context,
+    has_leadership_rainfall_weather_menu_context,
+    has_leadership_weekly_limit_menu_context,
+    has_leadership_event_menu_context,
+    is_leadership_title,
+    production_report_response,
+    rainfall_weather_report_response,
+    weekly_limit_report_response,
+    event_report_response,
+)
 from .permissions import (
     can_user_use_ai_tool,
     filter_ai_tools_for_user,
@@ -26,8 +38,6 @@ SONGHINH_KEYWORDS = ("song hinh", "songhinh", "sh", "thuong kon tum", "kontum")
 VINHSON_KEYWORDS = ("vinh son", "vinhson", "vs", "vsa", "vsb", "vsc")
 DEFAULT_PROVIDER = "openai"
 DEFAULT_OPENAI_MODEL = "gpt-4o"
-DEFAULT_ANTHROPIC_MODEL = getattr(settings, "AI_TOOLS_ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
-OPENAI_MODELS = (DEFAULT_OPENAI_MODEL,)
 MODEL_HISTORY_LIMIT = 8
 MODEL_HISTORY_CHAR_BUDGET = 12000
 MODEL_USER_HISTORY_MAX_CHARS = 1200
@@ -108,18 +118,6 @@ ENTITY_CONTEXT_KEYWORDS = (
     "bien ap",
     "tram",
 )
-ANTHROPIC_MODELS = tuple(
-    getattr(
-        settings,
-        "AI_TOOLS_ANTHROPIC_MODELS",
-        (
-            DEFAULT_ANTHROPIC_MODEL,
-            "claude-opus-4-1-20250805",
-            "claude-3-7-sonnet-20250219",
-        ),
-    )
-)
-
 SYSTEM_PROMPT = """Ban la Nami, tro ly AI cho Bang dieu khien van hanh thuy dien.
 Ban ho tro tra cuu muc nuoc, dung tich, luu luong, du lieu van hanh va phan tich.
 Khi nguoi dung hoi ve cac quy trinh, quy dinh, van ban huong dan, bao cao hoac tai lieu noi bo, ban hay luon su dung cong cu search_internal_documents de tim kiem thong tin tham chieu truoc khi tra loi.
@@ -364,272 +362,14 @@ def _user_display_name(user):
     return _clean_display_text(getattr(user, "username", "") or getattr(user, "email", ""))
 
 
-LEADERSHIP_TITLES = {
-    "giam doc",
-    "gd",
-    "pho giam doc",
-    "pho gd",
-    "pgd",
-    "pho tong giam doc",
-    "pho tong gd",
-    "ptgd",
-    "tong giam doc",
-    "tong gd",
-    "tgd",
-}
 
-
-def _normalize_title(value):
-    normalized = unicodedata.normalize("NFD", str(value or "").replace("đ", "d").replace("Đ", "D"))
-    without_marks = "".join(character for character in normalized if unicodedata.category(character) != "Mn")
-    return " ".join(without_marks.casefold().split())
-
-
-def _is_leadership_title(title):
-    normalized = _normalize_title(title)
-    return normalized in LEADERSHIP_TITLES or any(
-        normalized.startswith(f"{leadership_title} ")
-        for leadership_title in LEADERSHIP_TITLES
-    )
-
-
-def _is_leadership_production_menu_response(value):
-    normalized = _normalize_text(value)
-    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
-    words = tuple(word for word in normalized.split() if word)
-    return words in {
-        ("1",),
-        ("01",),
-        ("muc", "1"),
-        ("lua", "chon", "1"),
-        ("bao", "cao", "1"),
-    }
-
-
-def _last_assistant_message(history):
-    for item in reversed(history or []):
-        if item.get("role") == "assistant":
-            return str(item.get("content") or "")
-    return ""
-
-
-def _expand_leadership_menu_choice(content, history):
-    if not _is_leadership_production_menu_response(content):
-        return content
-
-    last_assistant = _last_assistant_message(history)
-    if "Báo cáo tình hình sản xuất của 3 nhà máy ngày hôm qua" not in last_assistant:
-        return content
-
-    report_date = timezone.localdate() - timedelta(days=1)
-    report_date_str = report_date.strftime("%d/%m/%Y")
-    return (
-        f"Báo cáo tình hình sản xuất của Sông Hinh, Vĩnh Sơn và Thượng Kon Tum ngày {report_date_str}. "
-        "Báo cáo sản lượng ngày, tháng và năm; phần trăm đạt kế hoạch ngày, tháng và năm. "
-        "Không lập bảng so sánh ngày và cùng kỳ."
-    )
-
-
-LEADERSHIP_PRODUCTION_PLANTS = (
-    ("songhinh", "Sông Hinh"),
-    ("vinhson", "Vĩnh Sơn"),
-    ("thuongkontum", "Thượng Kon Tum"),
-)
-
-
-def _has_leadership_production_menu_context(content, history):
-    if not _is_leadership_production_menu_response(content):
-        return False
-    last_assistant = _last_assistant_message(history)
-    return "Báo cáo tình hình sản xuất của 3 nhà máy ngày hôm qua" in last_assistant
-
-
-def _is_three_plant_yesterday_production_request(content):
-    normalized = _normalize_text(content)
-    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
-    normalized = " ".join(normalized.split())
-    if not normalized:
-        return False
-
-    has_report = "bao cao" in normalized
-    has_production = "san xuat" in normalized or "san luong" in normalized
-    has_three_plants = (
-        "3 nha may" in normalized
-        or "ba nha may" in normalized
-        or all(name in normalized for name in ("song hinh", "vinh son", "thuong kon tum"))
-    )
-    has_yesterday = "hom qua" in normalized or "ngay hom qua" in normalized
-    return has_report and has_production and has_three_plants and has_yesterday
-
-
-def _sum_record_field(records, field):
-    values = []
-    for record in records:
-        value = getattr(record, field, None)
-        if value is not None:
-            values.append(float(value))
-    if not values:
-        return None
-    return sum(values)
-
-
-def _fmt_report_number(value):
-    if value is None:
-        return "-"
-    if abs(value - round(value)) < 0.000001:
-        return f"{round(value):,}".replace(",", ".")
-    return f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-
-
-def _fmt_report_pct(actual, plan):
-    if actual is None or plan is None or plan <= 0:
-        return "-"
-    return f"{actual / plan * 100:.2f}%"
-
-
-def _format_production_report_row(plant_name, metrics):
-    return (
-        "| {plant} | {day} | {qc_day} | {pct_day} | {month} | {qc_month} | {pct_month} | {year} | {plan_year} | {pct_year} |"
-    ).format(
-        plant=plant_name,
-        day=_fmt_report_number(metrics["commercial_day"]),
-        qc_day=_fmt_report_number(metrics["qc_day"]),
-        pct_day=_fmt_report_pct(metrics["commercial_day"], metrics["qc_day"]),
-        month=_fmt_report_number(metrics["commercial_month"]),
-        qc_month=_fmt_report_number(metrics["qc_month"]),
-        pct_month=_fmt_report_pct(metrics["commercial_month"], metrics["qc_month"]),
-        year=_fmt_report_number(metrics["commercial_year"]),
-        plan_year=_fmt_report_number(metrics["plan_year"]),
-        pct_year=_fmt_report_pct(metrics["commercial_year"], metrics["plan_year"]),
-    )
-
-
-def _add_report_totals(totals, metrics):
-    for key, value in metrics.items():
-        if value is not None:
-            totals[key] = (totals.get(key) or 0.0) + value
-
-
-def _build_leadership_production_report(report_date):
-    from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
-
-    plant_codes = [plant_code for plant_code, _ in LEADERSHIP_PRODUCTION_PLANTS]
-    monthly_settings = {
-        record.nha_may: record.sanluong_kehoach_thang
-        for record in ThongSoThuyVanCaiDat.objects.filter(
-            nha_may__in=plant_codes,
-            nam=report_date.year,
-            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
-            thang=report_date.month,
-        )
-        if record.sanluong_kehoach_thang is not None
-    }
-    annual_settings = {
-        record.nha_may: record.sanluong_kehoach_nam
-        for record in ThongSoThuyVanCaiDat.objects.filter(
-            nha_may__in=plant_codes,
-            nam=report_date.year,
-            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
-        )
-        if record.sanluong_kehoach_nam is not None
-    }
-
-    rows = []
-    totals = {
-        "commercial_day": None,
-        "qc_day": None,
-        "commercial_month": None,
-        "qc_month": None,
-        "commercial_year": None,
-        "plan_year": None,
-    }
-
-    for plant_code, plant_name in LEADERSHIP_PRODUCTION_PLANTS:
-        records = list(
-            ThongsoSanxuat.objects.filter(
-                nha_may=plant_code,
-                thoi_gian__date=report_date,
-            ).order_by("cot_c", "thoi_gian")
-        )
-
-        if not records:
-            rows.append(f"| {plant_name} | Không có dữ liệu | - | - | - | - | - | - | - | - |")
-            continue
-
-        commercial_day = _sum_record_field(records, "cot_n")
-        qc_day = _sum_record_field(records, "cot_l")
-        commercial_month = _sum_record_field(records, "cot_r")
-        qc_month = monthly_settings.get(plant_code)
-        if qc_month is None:
-            qc_month = _sum_record_field(records, "sanluong_kh_thang")
-        if qc_month is None:
-            qc_month = _sum_record_field(records, "cot_p")
-        commercial_year = _sum_record_field(records, "cot_v")
-        plan_year = annual_settings.get(plant_code)
-        if plan_year is None:
-            plan_year = _sum_record_field(records, "cot_w")
-        if plan_year is None:
-            plan_year = _sum_record_field(records, "cot_t")
-
-        metrics = {
-            "commercial_day": commercial_day,
-            "qc_day": qc_day,
-            "commercial_month": commercial_month,
-            "qc_month": qc_month,
-            "commercial_year": commercial_year,
-            "plan_year": plan_year,
-        }
-        _add_report_totals(totals, metrics)
-        rows.append(_format_production_report_row(plant_name, metrics))
-
-    rows.append(_format_production_report_row("Tổng cộng", totals))
-
-    return f"""
-### Báo cáo tình hình sản xuất 3 nhà máy
-
-**Ngày báo cáo:** {report_date.strftime("%d/%m/%Y")}
-
-| Nhà máy | TP ngày | Qc ngày | Đạt ngày | TP tháng | Qc/KH tháng | Đạt tháng | TP năm | KH năm | Đạt năm |
-|---------|---------|---------|----------|----------|-------------|-----------|--------|--------|---------|
-{chr(10).join(rows)}
-
-**Ghi chú:** Tỷ lệ ngày = TP ngày/Qc ngày; tỷ lệ tháng = TP tháng/QKH tháng trong thông số cài đặt (nếu có); tỷ lệ năm = TP năm/KH năm.
-""".strip()
-
-
-def _production_report_response(*, user, session_id, content, provider, selected_model, start_time, source):
-    report_date = timezone.localdate() - timedelta(days=1)
-    assistant_message = _build_leadership_production_report(report_date)
-    latency_ms = int((time.time() - start_time) * 1000)
-    save_exchange(
-        user=user,
-        session_id=session_id,
-        user_message=content,
-        assistant_message=assistant_message,
-        model=selected_model,
-        total_tokens=0,
-        cost_usd=0,
-        tools_called=0,
-        latency_ms=latency_ms,
-        meta={
-            "reservoir_detected": False,
-            "tools_called": 0,
-            "provider": provider,
-            "leadership_menu_choice": "production_report",
-            "production_report_source": source,
-            "report_date": report_date.isoformat(),
-        },
-    )
-    return {
-        "session_id": session_id,
-        "response": assistant_message,
-        "provider": provider,
-        "model": selected_model,
-        "total_tokens": 0,
-        "cost_usd": 0.0,
-        "latency_ms": latency_ms,
-        "tools_called": 0,
-    }
+def _time_of_day_greeting():
+    hour = timezone.localtime().hour
+    if 5 <= hour < 12:
+        return "Chào buổi sáng"
+    if 12 <= hour < 18:
+        return "Chào buổi chiều"
+    return "Chào buổi tối"
 
 
 def _build_nami_greeting(user):
@@ -637,16 +377,20 @@ def _build_nami_greeting(user):
     title = _clean_display_text(getattr(profile, "chuc_danh", "") if profile else "")
     name = _user_display_name(user)
     recipient = _clean_display_text(f"{title} {name}")
-    if _is_leadership_title(title):
+    greeting = _time_of_day_greeting()
+    if is_leadership_title(title):
         greeting_name = recipient or "ngài"
         return (
-            f"Xin chào {greeting_name}! Hôm nay ngài có khỏe không? "
+            f"{greeting} {greeting_name}! Hôm nay ngài có khỏe không? "
             "Ngài muốn được báo cáo thông tin gì trước?\n"
-            "1. Báo cáo tình hình sản xuất của 3 nhà máy ngày hôm qua."
+            "1. Báo cáo tình hình sản xuất của 3 nhà máy ngày hôm qua.\n"
+            "2. Tổng hợp lượng mưa các trạm 7 ngày gần nhất và dự báo thời tiết cho 7 ngày sắp tới.\n"
+            "3. Mực nước giới hạn tuần và phân tích.\n"
+            "4. Tình hình thiết bị sự kiện của 3 nhà máy."
         )
     if recipient:
-        return f"Xin chào {recipient}, tôi có thể giúp gì cho ngài?"
-    return "Xin chào, tôi là Nami. Tôi có thể giúp gì cho ngài?"
+        return f"{greeting} {recipient}, tôi có thể giúp gì cho ngài?"
+    return f"{greeting}, tôi là Nami. Tôi có thể giúp gì cho ngài?"
 
 
 def _tool_name(tool_call):
@@ -951,13 +695,7 @@ def _agent_tools(tools):
 
 
 def _estimate_cost_usd(provider, model, prompt_tokens, completion_tokens):
-    if provider == "anthropic":
-        if "opus" in model:
-            input_rate, output_rate = 15.0, 75.0
-        else:
-            input_rate, output_rate = 3.0, 15.0
-    else:
-        input_rate, output_rate = 0.150, 0.600
+    input_rate, output_rate = 0.150, 0.600
     return round(
         (prompt_tokens / 1_000_000) * input_rate
         + (completion_tokens / 1_000_000) * output_rate,
@@ -996,20 +734,6 @@ def _get_tools_and_handlers(user=None):
 def _ensure_tool_allowed(user, tool_name):
     if not can_user_use_ai_tool(user, tool_name):
         raise AiToolsError("Bạn không có quyền sử dụng công cụ này hoặc công cụ không tồn tại.")
-
-
-def _handle_single_tool_call(user, tool_call, handle_water_tool_call, handle_songhinh_tool_calls, handle_vinhson_tool_calls, handle_analysis_tool_call, handle_document_tool_call):
-    tool_name = tool_call.function.name
-    _ensure_tool_allowed(user, tool_name)
-    if tool_name == "search_internal_documents":
-        return handle_document_tool_call(user, tool_call)
-    if "songhinh" in tool_name.lower() or "songinh" in tool_name.lower():
-        return handle_songhinh_tool_calls(tool_call)
-    if "vinhson" in tool_name.lower():
-        return handle_vinhson_tool_calls(tool_call)
-    if tool_name.lower() in {"analyze_hydro_data", "compare_hydro_periods", "get_unit_state_profile"}:
-        return handle_analysis_tool_call(tool_call)
-    return handle_water_tool_call(tool_call)
 
 
 def _run_openai_chat(*, user, content, session_id, model):
@@ -1135,186 +859,6 @@ def _run_openai_chat(*, user, content, session_id, model):
     return assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens
 
 
-def _anthropic_tools(openai_tools):
-    tools = []
-    for tool in _agent_tools(openai_tools):
-        function = tool.get("function", {})
-        tools.append(
-            {
-                "name": function.get("name"),
-                "description": function.get("description", ""),
-                "input_schema": function.get("parameters") or {"type": "object"},
-            }
-        )
-    return tools
-
-
-def _anthropic_text(message):
-    parts = []
-    for block in getattr(message, "content", []) or []:
-        if getattr(block, "type", "") == "text":
-            parts.append(getattr(block, "text", ""))
-    return "\n".join(part for part in parts if part)
-
-
-def _anthropic_content_blocks(message):
-    blocks = []
-    for block in getattr(message, "content", []) or []:
-        block_type = getattr(block, "type", "")
-        if block_type == "text":
-            blocks.append({"type": "text", "text": getattr(block, "text", "")})
-        elif block_type == "tool_use":
-            blocks.append(
-                {
-                    "type": "tool_use",
-                    "id": getattr(block, "id", ""),
-                    "name": getattr(block, "name", ""),
-                    "input": getattr(block, "input", {}) or {},
-                }
-            )
-    return blocks
-
-
-def _run_anthropic_chat(*, user, content, session_id, model):
-    api_key = os.getenv("ANTHROPIC_API_KEY") or getattr(settings, "ANTHROPIC_API_KEY", None)
-    if not api_key:
-        raise AiToolsError("Backend chua cau hinh ANTHROPIC_API_KEY.")
-
-    try:
-        import anthropic
-    except ImportError as exc:
-        raise AiToolsError("Backend chua cai goi anthropic. Hay them anthropic vao requirements va cai lai moi truong.") from exc
-
-    (
-        all_tools,
-        handle_water_tool_call,
-        _handle_water_tool_calls,
-        handle_songhinh_tool_calls,
-        handle_vinhson_tool_calls,
-        handle_analysis_tool_call,
-        handle_document_tool_call,
-    ) = _get_tools_and_handlers(user)
-
-    # Dynamic tool filtering based on query keywords to optimize token usage
-    msg_normalized = _normalize_text(content["text"])
-    has_sh = any(k in msg_normalized for k in SONGHINH_KEYWORDS)
-    has_vs = any(k in msg_normalized for k in VINHSON_KEYWORDS)
-    if has_sh and not has_vs:
-        all_tools = [t for t in all_tools if "vinhson" not in t["function"]["name"].lower() and "vinh_son" not in t["function"]["name"].lower()]
-    elif has_vs and not has_sh:
-        all_tools = [t for t in all_tools if "songhinh" not in t["function"]["name"].lower() and "songinh" not in t["function"]["name"].lower()]
-
-    client = anthropic.Anthropic(api_key=api_key)
-    messages = list(content["history"])
-    messages.append({"role": "user", "content": content["text"]})
-
-    try:
-        response = client.messages.create(
-            model=model,
-            system=SYSTEM_PROMPT,
-            messages=messages,
-            max_tokens=2048,
-            temperature=0.4,
-            tools=_anthropic_tools(all_tools),
-        )
-    except Exception as exc:
-        provider_error = _as_ai_provider_error(exc)
-        if provider_error:
-            raise provider_error from exc
-        raise
-
-    tool_uses = [
-        block
-        for block in getattr(response, "content", []) or []
-        if getattr(block, "type", "") == "tool_use"
-    ]
-    tool_calls = []
-    for tool_use in tool_uses:
-        arguments = json.dumps(getattr(tool_use, "input", {}) or {}, ensure_ascii=False)
-        tool_calls.append(
-            SimpleNamespace(
-                id=getattr(tool_use, "id", ""),
-                function=SimpleNamespace(name=getattr(tool_use, "name", ""), arguments=arguments),
-            )
-        )
-
-    tool_calls = _filter_tool_calls(content["text"], tool_calls)
-    tool_calls = [_normalize_analysis_tool_call(content["text"], tool_call) for tool_call in tool_calls]
-    tool_results = []
-    tool_result_by_id = {}
-    for tool_call in tool_calls:
-        try:
-            result = _handle_single_tool_call(
-                user,
-                tool_call,
-                handle_water_tool_call,
-                handle_songhinh_tool_calls,
-                handle_vinhson_tool_calls,
-                handle_analysis_tool_call,
-                handle_document_tool_call,
-            )
-            tool_results.append(result)
-            tool_result_by_id[tool_call.id] = result["content"] if isinstance(result, dict) else str(result)
-        except Exception as exc:
-            logger.exception("AI tool execution failed: %s", tool_call.function.name)
-            result = f"Loi khi chay tool {tool_call.function.name}: {exc}"
-            tool_results.append(result)
-            tool_result_by_id[tool_call.id] = result
-
-    assistant_message = ""
-    has_rag_call = any(tool_call.function.name == "search_internal_documents" for tool_call in tool_calls)
-
-    if has_rag_call and tool_calls:
-        messages.append({
-            "role": "assistant",
-            "content": _anthropic_content_blocks(response)
-        })
-        tool_results_content = []
-        for tool_call in tool_calls:
-            tool_results_content.append({
-                "type": "tool_result",
-                "tool_use_id": tool_call.id,
-                "content": tool_result_by_id.get(tool_call.id, "")
-            })
-        tool_results_content.append({
-            "type": "text",
-            "text": (
-                "Hãy trả lời ngan gon, tập trung vào trọng tâm câu hỏi dựa trên nguồn tài liệu được cung cấp. "
-                "Tránh giải thích dài. KHI TRẢ LỜI, HAY LUÔN CUNG CẤP TRÍCH DẪN VÀ CHÈN TÊN TÀI LIỆU PDF VÀ SỐ TRANG "
-            )
-        })
-        messages.append({
-            "role": "user",
-            "content": tool_results_content
-        })
-        try:
-            second_response = client.messages.create(
-                model=model,
-                system=SYSTEM_PROMPT,
-                messages=messages,
-                max_tokens=2048,
-                temperature=0.4,
-            )
-        except Exception as exc:
-            provider_error = _as_ai_provider_error(exc)
-            if provider_error:
-                raise provider_error from exc
-            raise
-        assistant_message = _anthropic_text(second_response)
-        usage = response.usage
-        usage2 = second_response.usage
-        prompt_tokens = (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage2, "input_tokens", 0) or 0)
-        completion_tokens = (getattr(usage, "output_tokens", 0) or 0) + (getattr(usage2, "output_tokens", 0) or 0)
-        total_tokens = prompt_tokens + completion_tokens
-        return assistant_message, len(tool_calls), prompt_tokens, completion_tokens, total_tokens
-    else:
-        assistant_message = _format_tool_results(tool_results) if tool_results else _anthropic_text(response)
-        usage = response.usage
-        prompt_tokens = getattr(usage, "input_tokens", 0) if usage else 0
-        completion_tokens = getattr(usage, "output_tokens", 0) if usage else 0
-        total_tokens = prompt_tokens + completion_tokens
-        return assistant_message, len(tool_calls), prompt_tokens, completion_tokens, total_tokens
-
 
 def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
     if not content or not content.strip():
@@ -1355,29 +899,66 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
             "tools_called": 0,
         }
 
-    menu_history = get_conversation(user, session_id, limit=MODEL_HISTORY_LIMIT)
-    if _has_leadership_production_menu_context(content, menu_history):
-        return _production_report_response(
-            user=user,
-            session_id=session_id,
-            content=content,
-            provider=provider,
-            selected_model=selected_model,
-            start_time=start_time,
-            source="menu_choice",
-        )
-    if _is_three_plant_yesterday_production_request(content):
-        return _production_report_response(
-            user=user,
-            session_id=session_id,
-            content=content,
-            provider=provider,
-            selected_model=selected_model,
-            start_time=start_time,
-            source="direct_request",
-        )
+    profile = _user_profile(user)
+    title = _clean_display_text(getattr(profile, "chuc_danh", "") if profile else "")
+    is_leader = is_leadership_title(title)
 
-    content_for_model = _expand_leadership_menu_choice(content, menu_history)
+    menu_history = get_conversation(user, session_id, limit=MODEL_HISTORY_LIMIT)
+    if is_leader:
+        direct_report_date = get_three_plant_production_report_date(content)
+        if direct_report_date:
+            return production_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="direct_request",
+                report_date=direct_report_date,
+            )
+        if has_leadership_production_menu_context(content, menu_history):
+            return production_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="menu_choice",
+            )
+        if has_leadership_rainfall_weather_menu_context(content, menu_history):
+            return rainfall_weather_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="menu_choice",
+            )
+        if has_leadership_weekly_limit_menu_context(content, menu_history):
+            return weekly_limit_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="menu_choice",
+            )
+        if has_leadership_event_menu_context(content, menu_history):
+            return event_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="menu_choice",
+            )
+
+    content_for_model = expand_leadership_menu_choice(content, menu_history) if is_leader else content
 
     denial_message = get_ai_tool_scope_denial_message(user, content_for_model)
     if denial_message:
@@ -1416,20 +997,12 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
         "history": _history_for_model(user, session_id, content_for_model),
     }
 
-    if provider == "anthropic":
-        assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens = _run_anthropic_chat(
-            user=user,
-            content=chat_content,
-            session_id=session_id,
-            model=selected_model,
-        )
-    else:
-        assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens = _run_openai_chat(
-            user=user,
-            content=chat_content,
-            session_id=session_id,
-            model=selected_model,
-        )
+    assistant_message, tools_called, prompt_tokens, completion_tokens, total_tokens = _run_openai_chat(
+        user=user,
+        content=chat_content,
+        session_id=session_id,
+        model=selected_model,
+    )
 
     if not total_tokens:
         total_tokens = prompt_tokens + completion_tokens

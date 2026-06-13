@@ -186,31 +186,42 @@ def get_operating_capacity_range_for_reservoir(reservoir_key):
 
 
 def get_settings_week_number(target_date):
-    current = target_date.replace(month=1, day=1)
-    end_of_year = target_date.replace(month=12, day=31)
-    week_number = 1
+    # 1. Thử tìm trong DB trước
+    from .models import ThongSoThuyVanCaiDat
+    record = ThongSoThuyVanCaiDat.objects.filter(
+        loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+        tuan_bat_dau__lte=target_date,
+        tuan_ket_thuc__gte=target_date,
+    ).first()
+    if record:
+        return record.tuan
 
-    while current <= end_of_year:
-        if week_number == 1:
-            week_start = current
-        else:
-            week_start = current + timedelta(days=(7 - current.weekday()) % 7)
-        if week_start > end_of_year:
-            break
-        week_end = min(week_start + timedelta(days=6), end_of_year)
-        if week_start <= target_date <= week_end:
-            return week_number
-        current = week_end + timedelta(days=1)
-        week_number += 1
-
-    return 0
+    # 2. Fallback sang tính theo ISO week calendar
+    monday = target_date - timedelta(days=target_date.weekday())
+    _, iso_week, _ = monday.isocalendar()
+    return iso_week
 
 
 def get_setting_value(nha_may, target_date, loai, field, thang=0, tuan=0):
+    nam = target_date.year
+    if loai == ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN:
+        record = ThongSoThuyVanCaiDat.objects.filter(
+            nha_may=nha_may,
+            loai=loai,
+            tuan_bat_dau__lte=target_date,
+            tuan_ket_thuc__gte=target_date,
+        ).only(field).first()
+        if record:
+            return getattr(record, field, None)
+        
+        # Fallback sang năm ISO của tuần
+        monday = target_date - timedelta(days=target_date.weekday())
+        nam = monday.isocalendar()[0]
+
     record = (
         ThongSoThuyVanCaiDat.objects.filter(
             nha_may=nha_may,
-            nam=target_date.year,
+            nam=nam,
             loai=loai,
             thang=thang,
             tuan=tuan,

@@ -190,8 +190,15 @@ class VinhSonRealtimeSnapshotViewSet(viewsets.ModelViewSet):
         queryset = VinhSonRealtimeSnapshot.objects.all().order_by("-time_stamp")
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
+        limit = self.request.query_params.get("limit")
         if date_from:
             queryset = queryset.filter(time_stamp__date__gte=date_from)
         if date_to:
             queryset = queryset.filter(time_stamp__date__lte=date_to)
+        if limit:
+            try:
+                limit_value = max(1, min(int(limit), 500))
+                queryset = queryset[:limit_value]
+            except (TypeError, ValueError):
+                pass
         return queryset
