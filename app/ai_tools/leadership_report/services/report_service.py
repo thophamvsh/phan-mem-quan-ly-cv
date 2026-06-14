@@ -323,8 +323,24 @@ def _operating_level_by_capacity(reservoir_key, target_capacity):
 
 def _forecast_weekly_limit_status(forecast_level, weekly_limit):
     if forecast_level is None or weekly_limit is None:
-        return "Chưa đủ dữ liệu"
-    return "Có nguy cơ vi phạm" if forecast_level > weekly_limit else "Không vi phạm"
+        return "Chưa đủ dữ liệu dự báo"
+    gap = forecast_level - weekly_limit
+    if gap > 0:
+        return f"Dự báo cuối tuần cao hơn MNGH {fmt_report_decimal(gap, 2)} m"
+    if gap < 0:
+        return f"Dự báo cuối tuần thấp hơn MNGH {fmt_report_decimal(abs(gap), 2)} m"
+    return "Dự báo cuối tuần bằng MNGH"
+
+
+def _current_weekly_limit_status(current_level, weekly_limit):
+    if current_level is None or weekly_limit is None:
+        return "Chưa đủ dữ liệu hiện trạng"
+    gap = current_level - weekly_limit
+    if gap > 0:
+        return f"Hiện tại cao hơn MNGH {fmt_report_decimal(gap, 2)} m"
+    if gap < 0:
+        return f"Hiện tại thấp hơn MNGH {fmt_report_decimal(abs(gap), 2)} m"
+    return "Hiện tại bằng MNGH"
 
 
 def _format_weekly_limit_row(config, record, setting, week_start_date, reference_date, week_end_date):
@@ -367,15 +383,16 @@ def _format_weekly_limit_row(config, record, setting, week_start_date, reference
 
     forecast_capacity = None
     forecast_level = None
-    forecast_note = "Chưa đủ dữ liệu Qcm/điều tiết"
+    current_status = _current_weekly_limit_status(current_level, weekly_limit)
+    forecast_note = "Chưa đủ dữ liệu Qcm/điều tiết để dự báo"
     if current_capacity is not None and qve is not None and qcm is not None:
         remaining_seconds = _remaining_seconds_to_week_end(record.thoi_gian, week_end_date)
         delta_capacity = (qve - qcm) * remaining_seconds / 1_000_000
         forecast_capacity = current_capacity + delta_capacity
         forecast_level = _operating_level_by_capacity(config["reservoir_key"], forecast_capacity)
         forecast_note = _forecast_weekly_limit_status(forecast_level, weekly_limit)
-    elif config["name"] == "Vĩnh Sơn C" and weekly_limit is None:
-        forecast_note = "Chưa cấu hình MNGH tuần hồ C"
+
+    status = forecast_note if weekly_limit is None else f"{current_status}; {forecast_note}"
 
     return (
         "| {reservoir} | {time} | {current_level} | {weekly_limit} | {level_gap} | {current_capacity} | "
@@ -392,7 +409,7 @@ def _format_weekly_limit_row(config, record, setting, week_start_date, reference
         qcm=fmt_report_decimal(qcm, 2),
         forecast_level=fmt_report_decimal(forecast_level, 2),
         forecast_capacity=fmt_report_decimal(forecast_capacity, 3),
-        status=forecast_note if forecast_level is None else _forecast_weekly_limit_status(forecast_level, weekly_limit),
+        status=status,
     )
 
 
@@ -420,13 +437,13 @@ def build_leadership_weekly_limit_report(reference_date=None):
     return f"""
 ### Mực nước giới hạn tuần và phân tích
 
-**Tuần:** {week_number} ({_fmt_report_date(reference_date)} - {_fmt_report_date(week_end_date)})
+**Tuần:** {week_number} ({_fmt_report_date(week_start_date)} - {_fmt_report_date(week_end_date)})
 
 | Hồ | Thời điểm số liệu | MN hiện tại (m) | MNGH tuần (m) | Chênh MN hiện tại-GH (m) | DT hiện tại (tr.m³) | Dung tích còn tới GH (tr.m³) | Qve (m³/s) | Qcm (m³/s) | MN dự báo cuối tuần (m) | DT dự báo cuối tuần (tr.m³) | Đánh giá |
 |----|-------------------|-----------------|---------------|--------------------------|---------------------|------------------------------|------------|------------|-------------------------|------------------------------|----------|
 {chr(10).join(rows)}
 
-**Ghi chú:** MN dự báo cuối tuần = dung tích hiện tại + (Qve - Qcm) * thời gian còn lại đến cuối tuần / 1.000.000. Vĩnh Sơn B/C hiện chưa có Qcm riêng trong dữ liệu; B điều tiết qua A và C điều tiết qua B nên chỉ phân tích hiện trạng khi thiếu dữ liệu điều tiết ra.
+**Ghi chú:** MN dự báo cuối tuần = dung tích hiện tại + (Qve - Qcm) * thời gian còn lại đến cuối tuần / 1.000.000. Vĩnh Sơn B hiện chưa có Qcm riêng trong dữ liệu nên chỉ phân tích hiện trạng khi thiếu dữ liệu điều tiết ra.
 """.strip()
 
 

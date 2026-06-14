@@ -165,6 +165,22 @@ def get_three_plant_production_report_date(content):
     return _extract_report_date(content)
 
 
+def is_weekly_limit_report_request(content):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return False
+
+    has_report_intent = "bao cao" in normalized or "phan tich" in normalized or "danh gia" in normalized
+    has_weekly_limit = (
+        "muc nuoc gioi han tuan" in normalized
+        or "mngh tuan" in normalized
+        or ("gioi han tuan" in normalized and "muc nuoc" in normalized)
+    )
+    return has_report_intent and has_weekly_limit
+
+
 def _is_leadership_event_menu_response(value):
     normalized = normalize_text(value)
     normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)

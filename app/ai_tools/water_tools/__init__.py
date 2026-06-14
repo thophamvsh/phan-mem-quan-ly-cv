@@ -18,6 +18,7 @@ __all__ = [
     'calculate_spillway_discharge',
     'calculate_spillway_ramping',
     'create_detailed_spillway_schedule',
+    'get_weekly_limit_levels',
 
     # From tooldefs
     'TOOLS',

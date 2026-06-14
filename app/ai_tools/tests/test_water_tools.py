@@ -1,9 +1,18 @@
-from django.test import SimpleTestCase
+import json
+from datetime import date
+from types import SimpleNamespace
+
+from django.test import SimpleTestCase, TestCase
 from unittest.mock import patch
 
 from ai_tools.water_tools.core.interpolation import interpolate_water_level_from_volume
 from ai_tools.water_tools.core.spillway import create_detailed_spillway_schedule
 from ai_tools.water_tools.core.flow import calculate_flow_rate
+from ai_tools.water_tools.core.weekly_limit import get_weekly_limit_levels
+from ai_tools.water_tools.runtime.handler import handle_water_tool_call
+from ai_tools.water_tools.tooldefs.registry import TOOL_REGISTRY
+from ai_tools.water_tools.tooldefs.schemas import TOOLS
+from thongsothuyvan.models import ThongSoThuyVanCaiDat
 
 class WaterToolsTests(SimpleTestCase):
     databases = {"default"}
@@ -124,3 +133,107 @@ class WaterToolsTests(SimpleTestCase):
         self.assertIn("```chart", report)
         self.assertIn("So sánh lưu lượng xả giữa các phương án đề xuất", report)
 
+
+class WeeklyLimitLevelsToolTests(TestCase):
+    databases = {"default"}
+
+    def setUp(self):
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=24,
+            tuan_bat_dau=date(2026, 6, 8),
+            tuan_ket_thuc=date(2026, 6, 14),
+            mucnuoc_gioihan_tuan=205.5,
+        )
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="vinhson",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=24,
+            tuan_bat_dau=date(2026, 6, 8),
+            tuan_ket_thuc=date(2026, 6, 14),
+            mucnuoc_gioihan_tuan_ho_a=768.6,
+            mucnuoc_gioihan_tuan_ho_b=822.0,
+        )
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="thuongkontum",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=24,
+            tuan_bat_dau=date(2026, 6, 8),
+            tuan_ket_thuc=date(2026, 6, 14),
+            mucnuoc_gioihan_tuan=1144.15,
+        )
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=25,
+            tuan_bat_dau=date(2026, 6, 15),
+            tuan_ket_thuc=date(2026, 6, 21),
+            mucnuoc_gioihan_tuan=206.0,
+        )
+
+    def test_get_weekly_limit_levels_current_week_by_target_date(self):
+        report = get_weekly_limit_levels(
+            week_selector="current",
+            reservoir="Sông Hinh",
+            target_date="2026-06-13",
+        )
+
+        self.assertIn("**Kỳ tra cứu:** tuần này - tuần 24/2026", report)
+        self.assertIn("| Sông Hinh | 24/2026 | 08/06/2026 - 14/06/2026 | 205,50 |", report)
+
+    def test_get_weekly_limit_levels_next_week(self):
+        report = get_weekly_limit_levels(
+            week_selector="next",
+            reservoir="Sông Hinh",
+            target_date="2026-06-13",
+        )
+
+        self.assertIn("**Kỳ tra cứu:** tuần sau - tuần 25/2026", report)
+        self.assertIn("| Sông Hinh | 25/2026 | 15/06/2026 - 21/06/2026 | 206,00 |", report)
+
+    def test_get_weekly_limit_levels_specific_week_for_vinhson_returns_a_and_b_only(self):
+        report = get_weekly_limit_levels(
+            week_selector="specific",
+            reservoir="Vĩnh Sơn",
+            week_number=24,
+            year=2026,
+        )
+
+        self.assertIn("| Vĩnh Sơn A | 24/2026 | 08/06/2026 - 14/06/2026 | 768,60 |", report)
+        self.assertIn("| Vĩnh Sơn B | 24/2026 | 08/06/2026 - 14/06/2026 | 822,00 |", report)
+        self.assertNotIn("Vĩnh Sơn C", report.split("**Ghi chú:**")[0])
+
+    def test_weekly_limit_tool_registered_and_schema_exposed(self):
+        self.assertIn("get_weekly_limit_levels", TOOL_REGISTRY)
+        self.assertIn(
+            "get_weekly_limit_levels",
+            [tool["function"]["name"] for tool in TOOLS],
+        )
+
+    def test_handle_weekly_limit_tool_call(self):
+        tool_call = SimpleNamespace(
+            id="call_weekly_limit",
+            function=SimpleNamespace(
+                name="get_weekly_limit_levels",
+                arguments=json.dumps(
+                    {
+                        "week_selector": "specific",
+                        "reservoir": "TKT",
+                        "week_number": 24,
+                        "year": 2026,
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        response = handle_water_tool_call(tool_call)
+
+        self.assertEqual(response["role"], "tool")
+        self.assertEqual(response["tool_call_id"], "call_weekly_limit")
+        self.assertIn("| Thượng Kon Tum | 24/2026 | 08/06/2026 - 14/06/2026 | 1.144,15 |", response["content"])

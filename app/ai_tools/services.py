@@ -19,6 +19,7 @@ from .leadership_report import (
     has_leadership_weekly_limit_menu_context,
     has_leadership_event_menu_context,
     is_leadership_title,
+    is_weekly_limit_report_request,
     production_report_response,
     rainfall_weather_report_response,
     weekly_limit_report_response,
@@ -916,6 +917,16 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
                 start_time=start_time,
                 source="direct_request",
                 report_date=direct_report_date,
+            )
+        if is_weekly_limit_report_request(content):
+            return weekly_limit_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="direct_request",
             )
         if has_leadership_production_menu_context(content, menu_history):
             return production_report_response(

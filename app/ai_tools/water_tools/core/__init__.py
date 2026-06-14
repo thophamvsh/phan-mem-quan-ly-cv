@@ -15,6 +15,7 @@ from .spillway import (
     calculate_spillway_ramping,
     create_detailed_spillway_schedule
 )
+from .weekly_limit import get_weekly_limit_levels
 
 __all__ = [
     # Interpolation
@@ -40,4 +41,7 @@ __all__ = [
     'calculate_spillway_discharge',
     'calculate_spillway_ramping',
     'create_detailed_spillway_schedule',
+
+    # Weekly limits
+    'get_weekly_limit_levels',
 ]

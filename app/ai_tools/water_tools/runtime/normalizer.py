@@ -21,6 +21,7 @@ PRACTICAL_RAMPING = "calculate_practical_ramping"
 SPILLWAY_DISCHARGE = "calculate_spillway_discharge"
 SPILLWAY_RAMPING = "calculate_spillway_ramping"
 DETAILED_SCHEDULE = "create_detailed_spillway_schedule"
+WEEKLY_LIMIT_LEVELS = "get_weekly_limit_levels"
 
 
 def _to_schema(tool_name: str, raw: str, blocks: Dict[str, Any]) -> Dict[str, Any]:
@@ -69,6 +70,7 @@ _NORMALIZERS = {
     SPILLWAY_DISCHARGE: lambda raw: _normalize(SPILLWAY_DISCHARGE, raw),
     SPILLWAY_RAMPING: lambda raw: _normalize(SPILLWAY_RAMPING, raw),
     DETAILED_SCHEDULE: lambda raw: _normalize(DETAILED_SCHEDULE, raw),
+    WEEKLY_LIMIT_LEVELS: lambda raw: _normalize(WEEKLY_LIMIT_LEVELS, raw),
 }
 
 

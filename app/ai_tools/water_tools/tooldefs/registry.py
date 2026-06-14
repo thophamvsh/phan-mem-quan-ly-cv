@@ -16,6 +16,7 @@ from ..core import (
     calculate_spillway_discharge,
     calculate_spillway_ramping,
     create_detailed_spillway_schedule,
+    get_weekly_limit_levels,
 )
 from .schemas import TOOLS
 
@@ -35,6 +36,7 @@ TOOL_REGISTRY = {
     "calculate_ramping_from_max": calculate_ramping_from_max,
     "calculate_practical_ramping": calculate_practical_ramping,
     "calculate_time_needed": calculate_time_needed,
+    "get_weekly_limit_levels": get_weekly_limit_levels,
 }
 
 

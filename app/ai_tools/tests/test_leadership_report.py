@@ -211,16 +211,72 @@ class LeadershipWeeklyLimitReportTests(TestCase):
         report = build_leadership_weekly_limit_report(reference_date)
 
         self.assertIn("### Mực nước giới hạn tuần và phân tích", report)
-        self.assertIn(f"**Tuần:** {week_number} (13/06/2026 - 13/06/2026)", report)
+        self.assertIn(f"**Tuần:** {week_number} (07/06/2026 - 13/06/2026)", report)
         self.assertIn("| Sông Hinh |", report)
         self.assertIn("| Vĩnh Sơn A |", report)
         self.assertIn("| Vĩnh Sơn B |", report)
-        self.assertIn("| Vĩnh Sơn C |", report)
+        self.assertNotIn("| Vĩnh Sơn C |", report)
         self.assertIn("202,50 | 205,00 | -2,50 | 50,000 | 19,231", report)
         self.assertIn("30,00 | 30,00", report)  # Kiểm tra Qve và Qcm trung bình ((20+40)/2 = 30)
-        self.assertIn("202,50 | 50,000 | Không vi phạm |", report)
-        self.assertIn("Chưa đủ dữ liệu Qcm/điều tiết", report)
-        self.assertIn("Chưa cấu hình MNGH tuần hồ C", report)
+        self.assertIn("202,50 | 50,000 | Hiện tại thấp hơn MNGH 2,50 m; Dự báo cuối tuần thấp hơn MNGH 2,50 m |", report)
+        self.assertIn("Hiện tại thấp hơn MNGH 2,20 m; Chưa đủ dữ liệu Qcm/điều tiết để dự báo", report)
+        self.assertIn("Vĩnh Sơn B hiện chưa có Qcm riêng", report)
+
+    def test_weekly_limit_report_describes_current_above_limit_but_forecast_below_limit(self):
+        reference_date = date(2026, 6, 13)
+        week_number = get_settings_week_number(reference_date)
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="vinhson",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=week_number,
+            tuan_bat_dau=date(2026, 6, 7),
+            tuan_ket_thuc=date(2026, 6, 14),
+            mucnuoc_gioihan_tuan_ho_a=768.6,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="vinhson",
+            thoi_gian=datetime(2026, 6, 13, 0, 0, tzinfo=timezone.utc),
+            cot_g=768.73,
+            cot_i=0.57,
+            cot_j=7.89,
+        )
+
+        report = build_leadership_weekly_limit_report(reference_date)
+
+        self.assertIn("| Vĩnh Sơn A | 13/06/2026 07:00 | 768,73 | 768,60 | 0,13 |", report)
+        self.assertIn("Hiện tại cao hơn MNGH 0,13 m; Dự báo cuối tuần thấp hơn MNGH", report)
+        self.assertNotIn("Đang vượt giới hạn; Dự báo không vi phạm", report)
+
+    def test_weekly_limit_report_warns_current_violation_even_without_forecast_data(self):
+        reference_date = date(2026, 6, 13)
+        week_number = get_settings_week_number(reference_date)
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="vinhson",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=week_number,
+            tuan_bat_dau=date(2026, 6, 7),
+            tuan_ket_thuc=date(2026, 6, 13),
+            mucnuoc_gioihan_tuan_ho_b=822.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="vinhson",
+            thoi_gian=datetime(2026, 6, 13, 0, 0, tzinfo=timezone.utc),
+            mucnuoc_thuongluu_ho_b=823.5,
+            luuluong_ve_ho_b=5.0,
+        )
+
+        report = build_leadership_weekly_limit_report(reference_date)
+
+        self.assertIn(
+            "| Vĩnh Sơn B | 13/06/2026 07:00 | 823,50 | 822,00 | 1,50 |",
+            report,
+        )
+        self.assertIn(
+            "Hiện tại cao hơn MNGH 1,50 m; Chưa đủ dữ liệu Qcm/điều tiết để dự báo",
+            report,
+        )
 
     def test_get_settings_week_number_calculates_correct_week_2026(self):
         # 13/06/2026 nằm trong tuần 24 (08/06/2026 - 14/06/2026) theo lịch ISO

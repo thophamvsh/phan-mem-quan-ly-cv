@@ -689,6 +689,61 @@ EXTRACTION EXAMPLES:
     }
 }
 
+weekly_limit_levels_function = {
+    "name": "get_weekly_limit_levels",
+    "description": """REQUIRED: Tra cứu MNGH tuần (mực nước giới hạn tuần) đã cấu hình trong database.
+
+WHEN TO USE:
+- User hỏi "MNGH tuần này bao nhiêu?"
+- User hỏi "Mực nước giới hạn tuần sau của hồ A Vĩnh Sơn?"
+- User hỏi "MNGH tuần 24 năm 2026 của Sông Hinh/Thượng Kon Tum/Vĩnh Sơn A/B?"
+- User hỏi "tuần cố định", "tuần X", "week X" liên quan MNGH.
+
+RESERVOIRS:
+- "Sông Hinh"
+- "Vĩnh Sơn A" / "hồ A Vĩnh Sơn"
+- "Vĩnh Sơn B" / "hồ B Vĩnh Sơn"
+- "Vĩnh Sơn" means return A and B only.
+- "Thượng Kon Tum" / "TKT"
+- Do NOT query Vĩnh Sơn C for MNGH because hồ C is not configured.
+
+PARAMETER RULES:
+- "tuần này" → week_selector="current"
+- "tuần sau" → week_selector="next"
+- "tuần 24", "tuần 24 năm 2026" → week_selector="specific", week_number=24, year=2026 if mentioned
+- If user asks all reservoirs or does not specify reservoir, use reservoir="all".
+- target_date is optional ISO date YYYY-MM-DD; use only when user gives an explicit date.""",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "week_selector": {
+                "type": "string",
+                "description": "Which week to query: current=tuần này, next=tuần sau, specific=tuần cố định.",
+                "enum": ["current", "next", "specific"],
+            },
+            "reservoir": {
+                "type": "string",
+                "description": "Reservoir to query. Use 'all' if unspecified. Options: 'all', 'Sông Hinh', 'Vĩnh Sơn', 'Vĩnh Sơn A', 'Vĩnh Sơn B', 'Thượng Kon Tum', 'TKT'.",
+                "enum": ["all", "Sông Hinh", "Song Hinh", "Vĩnh Sơn", "Vinh Son", "Vĩnh Sơn A", "Vinh Son A", "Vĩnh Sơn B", "Vinh Son B", "VS A", "VS B", "Thượng Kon Tum", "Thuong Kon Tum", "TKT"],
+            },
+            "week_number": {
+                "type": "integer",
+                "description": "Required only for week_selector='specific'. ISO/settings week number, e.g. 24.",
+            },
+            "year": {
+                "type": "integer",
+                "description": "Optional year for week_selector='specific'. If omitted, use current ISO year.",
+            },
+            "target_date": {
+                "type": "string",
+                "description": "Optional explicit date in YYYY-MM-DD to determine current/next week.",
+            },
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+}
+
 
 
 # Tools list for OpenAI
@@ -705,5 +760,6 @@ TOOLS = [
     {"type": "function", "function": ramping_discharge_function},
     {"type": "function", "function": ramping_from_max_function},
     {"type": "function", "function": practical_ramping_function},
-    {"type": "function", "function": time_calculation_function}
+    {"type": "function", "function": time_calculation_function},
+    {"type": "function", "function": weekly_limit_levels_function}
 ]

@@ -450,7 +450,27 @@ class AiToolFactoryScopeTests(TestCase):
         run_openai.assert_not_called()
         self.assertEqual(response["tools_called"], 0)
         self.assertIn("### Mực nước giới hạn tuần và phân tích", response["response"])
-        self.assertIn("Vĩnh Sơn B/C hiện chưa có Qcm riêng", response["response"])
+        self.assertIn("Vĩnh Sơn B hiện chưa có Qcm riêng", response["response"])
+        self.assertNotIn("| Vĩnh Sơn C |", response["response"])
+
+    def test_direct_weekly_limit_report_request_does_not_call_model(self):
+        self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
+        self.all_factories_user.profile.save()
+
+        with (
+            patch("ai_tools.leadership_report.services.report_service.timezone.localdate", return_value=date(2026, 6, 13)),
+            patch("ai_tools.services._run_openai_chat") as run_openai,
+        ):
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Báo cáo mực nước giới hạn tuần và phân tích",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("### Mực nước giới hạn tuần và phân tích", response["response"])
 
     def test_direct_three_plant_yesterday_production_request_uses_current_date(self):
         self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"

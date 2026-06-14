@@ -108,15 +108,6 @@ LEADERSHIP_WEEKLY_LIMIT_RESERVOIRS = (
         "qcm_field": None,
     },
     {
-        "plant_code": "vinhson",
-        "reservoir_key": "vinhson_c",
-        "name": "Vĩnh Sơn C",
-        "limit_field": None,
-        "level_field": "mucnuoc_thuongluu_ho_c",
-        "qve_field": "luuluong_ve_ho_c",
-        "qcm_field": None,
-    },
-    {
         "plant_code": "thuongkontum",
         "reservoir_key": "thuongkontum",
         "name": "Thượng Kon Tum",

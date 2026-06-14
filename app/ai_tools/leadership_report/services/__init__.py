@@ -6,6 +6,7 @@ from .intent_service import (
     has_leadership_weekly_limit_menu_context,
     is_leadership_title,
     is_three_plant_yesterday_production_request,
+    is_weekly_limit_report_request,
 )
 from .report_service import (
     build_leadership_hydrology_report,
@@ -31,6 +32,7 @@ __all__ = [
     "has_leadership_weekly_limit_menu_context",
     "is_leadership_title",
     "is_three_plant_yesterday_production_request",
+    "is_weekly_limit_report_request",
     "production_report_response",
     "rainfall_weather_report_response",
     "weekly_limit_report_response",
