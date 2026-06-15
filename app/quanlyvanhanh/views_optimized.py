@@ -556,6 +556,7 @@ class ThongSoActiveAlertsView(APIView):
                 target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
             except ValueError:
                 target_date = timezone.localtime(timezone.now()).date()
+            target_dates = [target_date]
         else:
             today = timezone.localtime(timezone.now()).date()
             has_today = (
@@ -565,6 +566,7 @@ class ThongSoActiveAlertsView(APIView):
             )
             if has_today:
                 target_date = today
+                target_dates = [today, today - timedelta(days=1)]
             else:
                 from django.db.models import Max
                 latest_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
@@ -572,11 +574,12 @@ class ThongSoActiveAlertsView(APIView):
                 latest_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
                 dates = [d for d in [latest_vh, latest_tm, latest_tr] if d is not None]
                 target_date = max(dates) if dates else today
+                target_dates = [target_date]
 
-        # 1. Query parameter records from all 3 models for the target date
-        qs_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=target_date)
-        qs_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=target_date)
-        qs_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=target_date)
+        # 1. Query parameter records from all 3 models for the selected dates.
+        qs_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap__in=target_dates)
+        qs_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap__in=target_dates)
+        qs_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap__in=target_dates)
 
         records = []
         for r in qs_vh.select_related("thiet_bi"):
@@ -736,6 +739,7 @@ class ThongSoActiveAlertsView(APIView):
                     "max_value": max_val,
                     "thoi_diem_nhap": local_time.isoformat(),
                     "alert_type": alert_type,
+                    "source": r["source"],
                     "direction": "low" if is_low_limit else "high",
                     "nha_may": r["thiet_bi"].nha_may or ("Sông Hinh" if r["thiet_bi"].ma_day_du.startswith("SH") else ("Vĩnh Sơn" if r["thiet_bi"].ma_day_du.startswith("VS") else "")),
                 }

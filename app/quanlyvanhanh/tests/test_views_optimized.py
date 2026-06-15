@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import pytz
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
@@ -404,3 +404,138 @@ class OptimizedViewsTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         alert = response.data[0]
         self.assertEqual(alert["alert_type"], "alarm")
+
+    def test_thong_so_active_alerts_endpoint_detects_to_may_near_high_alarm(self):
+        ge_device = ThietBi.objects.create(
+            ten="May phat",
+            ma="GE",
+            cha=self.device,
+            nha_may="Song Hinh",
+        )
+        bearing_device = ThietBi.objects.create(
+            ten="O do huong",
+            ma="OD",
+            cha=ge_device,
+            nha_may="Song Hinh",
+        )
+        NguongThongSo.objects.create(
+            nha_may="Song Hinh",
+            thiet_bi=bearing_device,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiet do o do",
+            alarm=80.0,
+            trip=90.0,
+            rated=60.0,
+        )
+
+        today = timezone.localtime(timezone.now()).date()
+        yesterday = today - timedelta(days=1)
+        dt_now = timezone.localtime(timezone.now())
+        ThongSoToMay.objects.create(
+            thiet_bi=bearing_device,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiet do o do",
+            don_vi="C",
+            gia_tri=77.0,
+            thoi_diem_nhap=dt_now - timedelta(days=1, hours=1),
+            ngay_nhap=yesterday,
+            nha_may="Song Hinh",
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=bearing_device,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiet do o do",
+            don_vi="C",
+            gia_tri=None,
+            thoi_diem_nhap=dt_now,
+            ngay_nhap=today,
+            nha_may="Song Hinh",
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thong-so-active-alerts')
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        alert = next(
+            item for item in response.data
+            if item["ma_thong_so"] == "nhiet_do_o_do"
+        )
+        self.assertEqual(alert["alert_type"], "near_alarm")
+        self.assertEqual(alert["direction"], "high")
+        self.assertEqual(alert["gia_tri"], 77.0)
+        self.assertEqual(alert["alarm"], 80.0)
+        self.assertEqual(alert["thiet_bi_ma"], "SH.TB.H1.GE.OD")
+        self.assertEqual(alert["source"], "tomay")
+
+    def test_thong_so_active_alerts_endpoint_keeps_latest_alert_when_later_value_is_normal(self):
+        turbine_device = ThietBi.objects.create(
+            ten="Tua bin",
+            ma="TuB",
+            cha=self.device,
+            nha_may="Song Hinh",
+        )
+        shaft_seal_device = ThietBi.objects.create(
+            ten="Shaft seal",
+            ma="SH",
+            cha=turbine_device,
+            nha_may="Song Hinh",
+        )
+        NguongThongSo.objects.create(
+            nha_may="Song Hinh",
+            thiet_bi=shaft_seal_device,
+            ma_thong_so="luu_luong_chen_truc",
+            ten_thong_so="Luu luong chen truc",
+            alarm=8.0,
+            trip=4.4,
+        )
+
+        today = timezone.localtime(timezone.now()).date()
+        yesterday = today - timedelta(days=1)
+        dt_now = timezone.localtime(timezone.now())
+        ThongSoToMay.objects.create(
+            thiet_bi=shaft_seal_device,
+            ma_thong_so="luu_luong_chen_truc",
+            ten_thong_so="Luu luong chen truc",
+            don_vi="l/p",
+            gia_tri=5.0,
+            thoi_diem_nhap=dt_now - timedelta(days=1, hours=2),
+            ngay_nhap=yesterday,
+            nha_may="Song Hinh",
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=shaft_seal_device,
+            ma_thong_so="luu_luong_chen_truc",
+            ten_thong_so="Luu luong chen truc",
+            don_vi="l/p",
+            gia_tri=10.0,
+            thoi_diem_nhap=dt_now - timedelta(days=1, hours=1),
+            ngay_nhap=yesterday,
+            nha_may="Song Hinh",
+        )
+        ThongSoTram110KV.objects.create(
+            thiet_bi=self.device,
+            ma_thong_so="dien_ap_tram",
+            ten_thong_so="Dien ap tram",
+            don_vi="kV",
+            gia_tri=110.0,
+            thoi_diem_nhap=dt_now,
+            ngay_nhap=today,
+            nha_may="Song Hinh",
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse('quanlyvanhanh:thong-so-active-alerts')
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        alert = next(
+            item for item in response.data
+            if item["ma_thong_so"] == "luu_luong_chen_truc"
+        )
+        self.assertEqual(alert["alert_type"], "alarm")
+        self.assertEqual(alert["direction"], "low")
+        self.assertEqual(alert["gia_tri"], 5.0)
+        self.assertEqual(alert["alarm"], 8.0)
+        self.assertEqual(alert["thiet_bi_ma"], "SH.TB.H1.TuB.SH")
+        self.assertEqual(alert["source"], "tomay")
