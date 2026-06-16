@@ -6,10 +6,10 @@ from .models import User, UserProfile
 
 
 OPEN_PROFILE_FIELDSETS = {
-    'ThÃ´ng tin há»“ sÆ¡',
-    'ThÃ´ng tin cÆ¡ báº£n',
-    'PhÃ¢n quyá»n nhÃ  mÃ¡y',
-    'HÃ¬nh áº£nh',
+    'Thông tin hồ sơ',
+    'Thông tin cơ bản',
+    'Phân quyền nhà máy',
+    'Hình ảnh',
 }
 
 
@@ -119,7 +119,7 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
-        ('Quyen so chuyen doi thiet bi tuan', {
+        ('Quyền sổ chuyển đổi thiết bị tuần', {
             'fields': (
                 'can_view_weekly_equipment_switch_logs',
                 'can_create_weekly_equipment_switch_logs',
@@ -180,6 +180,15 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
         }),
+        ('Quyền ngưỡng thông số vận hành', {
+            'fields': (
+                'can_view_operation_thresholds',
+                'can_create_operation_thresholds',
+                'can_edit_operation_thresholds',
+                'can_delete_operation_thresholds',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa ngưỡng thông số vận hành.'
+        }),
         ('Quyền Excel', {
             'fields': ('can_import_excel', 'can_export_excel'),
             'description': 'Quyền import và export dữ liệu Excel'
@@ -200,24 +209,24 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem trang realtime và bật/tắt/cập nhật tay dữ liệu realtime.'
         }),
-        ('Quyen cai dat thong so ke hoach', {
+        ('Quyền cài đặt thông số kế hoạch', {
             'fields': (
                 'can_view_hydrology_settings',
                 'can_edit_hydrology_settings',
             ),
             'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
         }),
-        ('Quyen Tro ly AI Nami', {
+        ('Quyền Trợ lý AI Nami', {
             'fields': (
                 'can_use_ai_tools',
             ),
-            'description': 'Quyen xem icon va su dung chatbot AI Nami.'
+            'description': 'Quyền xem icon và sử dụng chatbot AI Nami.'
         }),
-        ('Quyen kho tai lieu AI', {
+        ('Quyền kho tài liệu AI', {
             'fields': (
                 'can_use_ai_documents',
             ),
-            'description': 'Quyen su dung kho tai lieu AI, tim kiem RAG va xem tai lieu.'
+            'description': 'Quyền sử dụng kho tài liệu AI, tìm kiếm RAG và xem tài liệu.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
@@ -263,7 +272,7 @@ class UserAdmin(BaseUserAdmin):
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin configuration for UserProfile model"""
     list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'can_use_ai_documents', 'created_at')
-    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'can_use_ai_documents', 'nha_may', 'created_at', 'updated_at')
+    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_view_operation_thresholds', 'can_create_operation_thresholds', 'can_edit_operation_thresholds', 'can_delete_operation_thresholds', 'can_use_ai_tools', 'can_use_ai_documents', 'nha_may', 'created_at', 'updated_at')
     search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 'phone', 'chuc_danh', 'nha_may__ma_nha_may', 'nha_may__ten_nha_may')
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
@@ -412,6 +421,15 @@ class UserProfileAdmin(admin.ModelAdmin):
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
         }),
+        ('Quyền ngưỡng thông số vận hành', {
+            'fields': (
+                'can_view_operation_thresholds',
+                'can_create_operation_thresholds',
+                'can_edit_operation_thresholds',
+                'can_delete_operation_thresholds',
+            ),
+            'description': 'Quyền xem, thêm, sửa và xóa ngưỡng thông số vận hành.'
+        }),
         ('Quyền thủy văn và sản xuất', {
             'fields': (
                 'can_view_hydrology_data',
@@ -435,17 +453,17 @@ class UserProfileAdmin(admin.ModelAdmin):
             ),
             'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
         }),
-        ('Quyen Tro ly AI Nami', {
+        ('Quyền Trợ lý AI Nami', {
             'fields': (
                 'can_use_ai_tools',
             ),
-            'description': 'Quyen xem icon va su dung chatbot AI Nami.'
+            'description': 'Quyền xem icon và sử dụng chatbot AI Nami.'
         }),
-        ('Quyen kho tai lieu AI', {
+        ('Quyền kho tài liệu AI', {
             'fields': (
                 'can_use_ai_documents',
             ),
-            'description': 'Quyen su dung kho tai lieu AI, tim kiem RAG va xem tai lieu.'
+            'description': 'Quyền sử dụng kho tài liệu AI, tìm kiếm RAG và xem tài liệu.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

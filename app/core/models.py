@@ -494,6 +494,22 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa thong so van hanh"
     )
+    can_view_operation_thresholds = models.BooleanField(
+        default=False,
+        help_text="Co quyen xem nguong thong so van hanh"
+    )
+    can_create_operation_thresholds = models.BooleanField(
+        default=False,
+        help_text="Co quyen them nguong thong so van hanh"
+    )
+    can_edit_operation_thresholds = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua nguong thong so van hanh"
+    )
+    can_delete_operation_thresholds = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa nguong thong so van hanh"
+    )
     can_view_hydrology_data = models.BooleanField(
         default=True,
         help_text="Co quyen xem du lieu thuy van va san xuat"

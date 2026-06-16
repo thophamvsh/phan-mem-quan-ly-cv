@@ -1,13 +1,34 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
 import tablib
 
+from core.factory_scope import (
+    apply_request_factory_to_serializer,
+    filter_queryset_by_factory,
+    has_profile_permission,
+)
 from .models import NguongThongSo, ThietBi
 from .serializers import NguongThongSoSerializer
 from .admin import NguongThongSoResource
+
+
+def _ensure_thiet_bi_access(user, thiet_bi):
+    if not thiet_bi:
+        return
+
+    allowed = filter_queryset_by_factory(
+        ThietBi.objects.filter(pk=thiet_bi.pk),
+        user,
+        "nha_may",
+        "string",
+    ).exists()
+    if not allowed:
+        raise PermissionDenied("Ban khong co quyen thao tac voi thiet bi cua nha may nay.")
+
 
 class NguongThongSoViewSet(viewsets.ModelViewSet):
     """ViewSet xử lý cấu hình ngưỡng thông số (alarm, trip, rated)"""
@@ -15,8 +36,49 @@ class NguongThongSoViewSet(viewsets.ModelViewSet):
     serializer_class = NguongThongSoSerializer
     permission_classes = [IsAuthenticated]
 
+    def check_permissions(self, request):
+        super().check_permissions(request)
+
+        if self.action in ["list", "retrieve", "excel_export"]:
+            if not has_profile_permission(request.user, "can_view_operation_thresholds"):
+                self.permission_denied(
+                    request,
+                    message="Tai khoan cua ban chua duoc cap quyen xem nguong thong so.",
+                )
+        elif self.action in ["create", "excel_template"]:
+            if not has_profile_permission(request.user, "can_create_operation_thresholds"):
+                self.permission_denied(
+                    request,
+                    message="Tai khoan cua ban chua duoc cap quyen them nguong thong so.",
+                )
+        elif self.action in ["update", "partial_update"]:
+            if not has_profile_permission(request.user, "can_edit_operation_thresholds"):
+                self.permission_denied(
+                    request,
+                    message="Tai khoan cua ban chua duoc cap quyen sua nguong thong so.",
+                )
+        elif self.action == "excel_import":
+            can_create = has_profile_permission(request.user, "can_create_operation_thresholds")
+            can_edit = has_profile_permission(request.user, "can_edit_operation_thresholds")
+            if not (can_create and can_edit):
+                self.permission_denied(
+                    request,
+                    message="Tai khoan cua ban chua duoc cap quyen import nguong thong so.",
+                )
+        elif self.action == "destroy":
+            if not has_profile_permission(request.user, "can_delete_operation_thresholds"):
+                self.permission_denied(
+                    request,
+                    message="Tai khoan cua ban chua duoc cap quyen xoa nguong thong so.",
+                )
+
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = filter_queryset_by_factory(
+            super().get_queryset(),
+            self.request.user,
+            "nha_may",
+            "string",
+        )
         
         # Lọc theo nhà máy
         nha_may = self.request.query_params.get('nha_may')
@@ -38,6 +100,29 @@ class NguongThongSoViewSet(viewsets.ModelViewSet):
                 Q(thiet_bi__ma_day_du__icontains=q)
             )
         return queryset
+
+    def perform_create(self, serializer):
+        _ensure_thiet_bi_access(self.request.user, serializer.validated_data.get("thiet_bi"))
+        serializer.save(
+            **apply_request_factory_to_serializer(
+                self.request.user,
+                serializer,
+                "nha_may",
+                "string",
+            )
+        )
+
+    def perform_update(self, serializer):
+        thiet_bi = serializer.validated_data.get("thiet_bi", serializer.instance.thiet_bi)
+        _ensure_thiet_bi_access(self.request.user, thiet_bi)
+        serializer.save(
+            **apply_request_factory_to_serializer(
+                self.request.user,
+                serializer,
+                "nha_may",
+                "string",
+            )
+        )
 
     @action(detail=False, methods=['get'])
     def excel_template(self, request):

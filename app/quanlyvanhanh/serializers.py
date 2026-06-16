@@ -458,6 +458,11 @@ class ThongSoTram110KVCreateSerializer(serializers.ModelSerializer):
 
 class NguongThongSoSerializer(serializers.ModelSerializer):
     """Serializer cho model NguongThongSo"""
+    thiet_bi = serializers.PrimaryKeyRelatedField(
+        queryset=ThietBi.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     thiet_bi_ten = serializers.CharField(source='thiet_bi.ten', read_only=True)
     thiet_bi_ma = serializers.CharField(source='thiet_bi.ma_day_du', read_only=True)
 
@@ -469,4 +474,7 @@ class NguongThongSoSerializer(serializers.ModelSerializer):
             'min_value', 'max_value', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
-
+        extra_kwargs = {
+            'thiet_bi': {'required': False, 'allow_null': True},
+        }
+        validators = []

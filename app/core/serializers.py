@@ -274,6 +274,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_view_equipment', 'can_create_equipment', 'can_edit_equipment', 'can_delete_equipment',
                  'can_view_operation_parameters', 'can_create_operation_parameters',
                  'can_edit_operation_parameters', 'can_delete_operation_parameters',
+                 'can_view_operation_thresholds', 'can_create_operation_thresholds',
+                 'can_edit_operation_thresholds', 'can_delete_operation_thresholds',
                  'can_view_hydrology_data', 'can_create_hydrology_data',
                  'can_edit_hydrology_data', 'can_delete_hydrology_data',
                  'can_view_realtime_hydrology', 'can_update_realtime_hydrology',
