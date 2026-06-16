@@ -22,6 +22,7 @@ class DocumentRetrievalPermissionTests(TestCase):
             user=self.songhinh_user,
             nha_may=self.songhinh,
             can_use_ai_tools=True,
+            can_use_ai_documents=True,
         )
 
         self.vinhson_user = User.objects.create_user(
@@ -33,6 +34,7 @@ class DocumentRetrievalPermissionTests(TestCase):
             user=self.vinhson_user,
             nha_may=self.vinhson,
             can_use_ai_tools=True,
+            can_use_ai_documents=True,
         )
 
         self.general_doc = Document.objects.create(

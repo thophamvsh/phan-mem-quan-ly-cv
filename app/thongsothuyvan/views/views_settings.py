@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 
 from ..models import ThongSoThuyVanCaiDat
 from ..plants import HYDROLOGY_PLANTS, get_hydrology_plants, normalize_plant_code
@@ -42,7 +43,8 @@ def get_setting_field_value(nhamay, nam, loai, field, thang=0, tuan=0):
 
 
 def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
-    from .views_sanxuat import parse_float_or_none
+    from .views_sanxuat import parse_float_or_none, user_can_modify_hydrology_object
+
     numeric_defaults = {
         field: parse_float_or_none(value)
         for field, value in values.items()
@@ -51,6 +53,8 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
     existing = get_setting_record(nhamay, nam, loai, thang=thang, tuan=tuan)
     if existing is None and not any(value is not None for value in numeric_defaults.values()):
         return None, False
+    if existing is not None and not user_can_modify_hydrology_object(user, existing):
+        raise PermissionDenied("Ban chi duoc sua thong so cai dat do chinh ban cap nhat.")
 
     defaults = {**numeric_defaults}
     defaults["updated_by"] = user
@@ -59,18 +63,27 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
     if "tuan_ket_thuc" in values:
         defaults["tuan_ket_thuc"] = values["tuan_ket_thuc"]
 
-    obj, created = ThongSoThuyVanCaiDat.objects.update_or_create(
+    if existing is not None:
+        for field, value in defaults.items():
+            setattr(existing, field, value)
+
+        update_fields = [*defaults.keys(), "updated_at"]
+        if existing.created_by_id is None:
+            existing.created_by = user
+            update_fields.append("created_by")
+        existing.save(update_fields=update_fields)
+        return existing, False
+
+    obj = ThongSoThuyVanCaiDat.objects.create(
         nha_may=nhamay,
         nam=nam,
         loai=loai,
         thang=thang,
         tuan=tuan,
-        defaults=defaults,
+        created_by=user,
+        **defaults,
     )
-    if created:
-        obj.created_by = user
-        obj.save(update_fields=["created_by"])
-    return obj, created
+    return obj, True
 
 
 def build_hydrology_settings_payload(year, plant_codes):
@@ -187,8 +200,11 @@ class HydrologySettingsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from .views_sanxuat import user_can_view_hydrology, user_can_access_plant
-        if not user_can_view_hydrology(request.user):
+        from .views_sanxuat import (
+            user_can_view_hydrology_settings,
+            user_can_access_plant,
+        )
+        if not user_can_view_hydrology_settings(request.user):
             return Response(
                 {"error": "Ban khong co quyen xem thong so thuy van."},
                 status=status.HTTP_403_FORBIDDEN,

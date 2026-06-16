@@ -99,6 +99,22 @@ def user_can_view_hydrology(user):
     )
 
 
+def user_can_view_hydrology_settings(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    profile = getattr(user, "profile", None)
+    return bool(
+        profile
+        and (
+            profile.can_view_hydrology_settings
+            or profile.can_edit_hydrology_settings
+        )
+    )
+
+
 def user_can_edit_hydrology_settings(user):
     if not user or not user.is_authenticated:
         return False

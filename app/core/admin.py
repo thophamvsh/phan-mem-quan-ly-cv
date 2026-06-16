@@ -207,14 +207,20 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
         }),
-        ('Hình ảnh', {
-            'fields': ('avatar', 'chu_ky')
-        }),
-        ('Quyen Tro ly AI', {
+        ('Quyen Tro ly AI Nami', {
             'fields': (
                 'can_use_ai_tools',
             ),
-            'description': 'Quyen xem icon va su dung Tro ly AI Nami.'
+            'description': 'Quyen xem icon va su dung chatbot AI Nami.'
+        }),
+        ('Quyen kho tai lieu AI', {
+            'fields': (
+                'can_use_ai_documents',
+            ),
+            'description': 'Quyen su dung kho tai lieu AI, tim kiem RAG va xem tai lieu.'
+        }),
+        ('Hình ảnh', {
+            'fields': ('avatar', 'chu_ky')
         }),
         ('Thời gian', {
             'fields': ('created_at', 'updated_at'),
@@ -256,8 +262,8 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin configuration for UserProfile model"""
-    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'created_at')
-    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'nha_may', 'created_at', 'updated_at')
+    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'can_use_ai_documents', 'created_at')
+    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'can_use_ai_documents', 'nha_may', 'created_at', 'updated_at')
     search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 'phone', 'chuc_danh', 'nha_may__ma_nha_may', 'nha_may__ten_nha_may')
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
@@ -426,9 +432,20 @@ class UserProfileAdmin(admin.ModelAdmin):
             'fields': (
                 'can_view_hydrology_settings',
                 'can_edit_hydrology_settings',
-                'can_use_ai_tools',
             ),
             'description': 'Quyền xem và sửa thông số kế hoạch thủy văn.'
+        }),
+        ('Quyen Tro ly AI Nami', {
+            'fields': (
+                'can_use_ai_tools',
+            ),
+            'description': 'Quyen xem icon va su dung chatbot AI Nami.'
+        }),
+        ('Quyen kho tai lieu AI', {
+            'fields': (
+                'can_use_ai_documents',
+            ),
+            'description': 'Quyen su dung kho tai lieu AI, tim kiem RAG va xem tai lieu.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

@@ -718,7 +718,14 @@ def _get_tools_and_handlers(user=None):
         DOCUMENT_TOOLS,
         handle_document_tool_call,
     ) = _lazy_import_tools()
-    all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS + ANALYSIS_TOOLS + DOCUMENT_TOOLS
+    document_tools = DOCUMENT_TOOLS
+    if user is not None:
+        from documents.permissions import has_ai_documents_permission
+
+        if not has_ai_documents_permission(user):
+            document_tools = []
+
+    all_tools = WATER_TOOLS + SONGHINH_TOOLS + VINHSON_TOOLS + ANALYSIS_TOOLS + document_tools
     if user is not None:
         all_tools = filter_ai_tools_for_user(user, all_tools)
     return (

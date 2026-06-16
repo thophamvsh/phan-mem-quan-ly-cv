@@ -150,6 +150,52 @@ class AiToolFactoryScopeTests(TestCase):
             ["calculate_reservoir_volume", "get_vinhson_operational_data"],
         )
 
+    def test_service_hides_document_tool_without_document_permission(self):
+        fake_import = (
+            [_tool("calculate_reservoir_volume")],
+            object(),
+            object(),
+            [],
+            object(),
+            [],
+            object(),
+            [],
+            object(),
+            [_tool("search_internal_documents")],
+            object(),
+        )
+        with patch("ai_tools.services._lazy_import_tools", return_value=fake_import):
+            tools, *_ = _get_tools_and_handlers(self.all_factories_user)
+
+        self.assertEqual(
+            [tool["function"]["name"] for tool in tools],
+            ["calculate_reservoir_volume"],
+        )
+
+    def test_service_includes_document_tool_with_document_permission(self):
+        self.all_factories_user.profile.can_use_ai_documents = True
+        self.all_factories_user.profile.save()
+        fake_import = (
+            [_tool("calculate_reservoir_volume")],
+            object(),
+            object(),
+            [],
+            object(),
+            [],
+            object(),
+            [],
+            object(),
+            [_tool("search_internal_documents")],
+            object(),
+        )
+        with patch("ai_tools.services._lazy_import_tools", return_value=fake_import):
+            tools, *_ = _get_tools_and_handlers(self.all_factories_user)
+
+        self.assertEqual(
+            [tool["function"]["name"] for tool in tools],
+            ["calculate_reservoir_volume", "search_internal_documents"],
+        )
+
     def test_detects_accented_vinhson_request(self):
         self.assertEqual(
             get_requested_ai_tool_scope_from_text("Cho tôi xem dữ liệu nhà máy Vĩnh Sơn"),

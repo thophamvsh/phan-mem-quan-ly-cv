@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from ..models import ThongsoSanxuat, ThongsoGioPhat
+from ..models import ThongSoThuyVanCaiDat, ThongsoSanxuat, ThongsoGioPhat
 from ..hydrology_services import (
     get_capacity_points_for_reservoir,
     get_capacity_bounds_for_reservoir,
@@ -179,6 +179,116 @@ class ThongSoThuyVanAPITests(APITestCase):
 
         self.assertEqual(list_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hydrology_settings_requires_view_permission(self):
+        url = reverse("thongsothuyvan:settings")
+
+        self.client.force_authenticate(user=self.unprivileged_user)
+        response = self.client.get(url, {"year": 2026})
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hydrology_settings_requires_edit_permission(self):
+        url = reverse("thongsothuyvan:settings")
+
+        self.client.force_authenticate(user=self.unprivileged_user)
+        response = self.client.post(
+            url,
+            {
+                "year": 2026,
+                "annual": {"songhinh": 1200},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hydrology_settings_create_sets_created_and_updated_user(self):
+        url = reverse("thongsothuyvan:settings")
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.post(
+            url,
+            {
+                "year": 2026,
+                "annual": {"songhinh": 1200},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        setting = ThongSoThuyVanCaiDat.objects.get(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
+        )
+        self.assertEqual(setting.created_by, self.sh_user)
+        self.assertEqual(setting.updated_by, self.sh_user)
+
+    def test_hydrology_settings_creator_can_update_record(self):
+        url = reverse("thongsothuyvan:settings")
+        setting = ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
+            sanluong_kehoach_nam=1200,
+            created_by=self.sh_user,
+            updated_by=self.sh_user,
+        )
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.post(
+            url,
+            {
+                "year": 2026,
+                "annual": {"songhinh": 1300},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        setting.refresh_from_db()
+        self.assertEqual(setting.sanluong_kehoach_nam, 1300)
+        self.assertEqual(setting.created_by, self.sh_user)
+        self.assertEqual(setting.updated_by, self.sh_user)
+
+    def test_hydrology_settings_other_user_cannot_update_existing_record(self):
+        url = reverse("thongsothuyvan:settings")
+        other_user = User.objects.create_user(
+            email="sh_other@example.com",
+            password="testpassword123!",
+            username="sh_other",
+        )
+        UserProfile.objects.create(
+            user=other_user,
+            ho_ten="Nhan vien Song Hinh khac",
+            nha_may=self.nha_may_sh,
+            can_view_hydrology_settings=True,
+            can_edit_hydrology_settings=True,
+        )
+        setting = ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_NAM,
+            sanluong_kehoach_nam=1200,
+            created_by=self.sh_user,
+            updated_by=self.sh_user,
+        )
+
+        self.client.force_authenticate(user=other_user)
+        response = self.client.post(
+            url,
+            {
+                "year": 2026,
+                "annual": {"songhinh": 1300},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        setting.refresh_from_db()
+        self.assertEqual(setting.sanluong_kehoach_nam, 1200)
+        self.assertEqual(setting.updated_by, self.sh_user)
 
     def test_google_sheet_preview_factory_scoping(self):
         url = reverse("thongsothuyvan:sync-preview")

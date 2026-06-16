@@ -530,6 +530,10 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen su dung tro ly AI va cac cong cu phan tich"
     )
+    can_use_ai_documents = models.BooleanField(
+        default=False,
+        help_text="Co quyen su dung kho tai lieu AI va tim kiem RAG"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

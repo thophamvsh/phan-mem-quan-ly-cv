@@ -1,6 +1,7 @@
 import json
 
 from documents.models import Document
+from documents.permissions import has_ai_documents_permission
 from documents.services.retrieval import search_documents
 
 
@@ -47,6 +48,9 @@ DOCUMENT_TOOLS = [
 
 
 def handle_document_tool_call(user, tool_call):
+    if not has_ai_documents_permission(user):
+        return {"content": "Ban khong co quyen tra cuu kho tai lieu noi bo."}
+
     args = json.loads(getattr(tool_call.function, "arguments", "") or "{}")
     results = search_documents(
         user,

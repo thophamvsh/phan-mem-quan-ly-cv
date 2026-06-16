@@ -5,6 +5,7 @@ import threading
 
 from django.conf import settings
 from django.db import close_old_connections
+from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
@@ -12,18 +13,23 @@ from rest_framework import generics, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
-from ai_tools.permissions import CanUseAiTools, has_ai_tools_permission
 from documents.models import Document
+from documents.permissions import CanUseAiDocuments, has_ai_documents_permission
 from documents.serializers import (
     DocumentSearchSerializer,
     DocumentSerializer,
     DocumentUploadSerializer,
 )
 from documents.services.ingest import process_document
-from documents.services.retrieval import filter_documents_for_user, search_documents
+from documents.services.retrieval import (
+    filter_documents_for_user,
+    get_allowed_factories_for_user,
+    search_documents,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -67,7 +73,7 @@ def _enqueue_process_document(document_id):
 
 
 class DocumentListCreateAPIView(generics.ListCreateAPIView):
-    permission_classes = [CanUseAiTools]
+    permission_classes = [CanUseAiDocuments]
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
@@ -86,6 +92,10 @@ class DocumentListCreateAPIView(generics.ListCreateAPIView):
         return DocumentSerializer
 
     def perform_create(self, serializer):
+        factory = serializer.validated_data.get("factory") or Document.FACTORY_GENERAL
+        if factory not in get_allowed_factories_for_user(self.request.user):
+            raise PermissionDenied("Ban khong co quyen tai tai lieu len pham vi nha may nay.")
+
         document = serializer.save(created_by=self.request.user)
         _enqueue_process_document(document.id)
 
@@ -99,7 +109,7 @@ class DocumentListCreateAPIView(generics.ListCreateAPIView):
 
 
 class DocumentDetailAPIView(generics.RetrieveDestroyAPIView):
-    permission_classes = [CanUseAiTools]
+    permission_classes = [CanUseAiDocuments]
     serializer_class = DocumentSerializer
 
     def get_queryset(self):
@@ -107,10 +117,10 @@ class DocumentDetailAPIView(generics.RetrieveDestroyAPIView):
 
 
 class DocumentReprocessAPIView(APIView):
-    permission_classes = [CanUseAiTools]
+    permission_classes = [CanUseAiDocuments]
 
     def post(self, request, pk):
-        document = filter_documents_for_user(request.user).get(pk=pk)
+        document = get_object_or_404(filter_documents_for_user(request.user), pk=pk)
         document.status = Document.STATUS_PROCESSING
         document.error_message = ""
         document.save(update_fields=["status", "error_message", "updated_at"])
@@ -122,7 +132,7 @@ class DocumentReprocessAPIView(APIView):
 
 
 class DocumentSearchAPIView(APIView):
-    permission_classes = [CanUseAiTools]
+    permission_classes = [CanUseAiDocuments]
 
     def post(self, request):
         serializer = DocumentSearchSerializer(data=request.data)
@@ -156,7 +166,7 @@ class DocumentViewAPIView(APIView):
             if request.user and request.user.is_authenticated:
                 user = request.user
 
-        if not user or not has_ai_tools_permission(user):
+        if not user or not has_ai_documents_permission(user):
             raise Http404("Tài liệu không tồn tại hoặc bạn không có quyền xem.")
 
         try:
