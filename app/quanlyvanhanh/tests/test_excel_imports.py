@@ -283,3 +283,144 @@ class ExcelImportTests(APITestCase):
         )
         self.assertEqual(first_record.gia_tri, "0")
         self.assertEqual(first_record.nha_may, "Song Hinh")
+
+    def test_device_import_excel_standard(self):
+        self.client.force_authenticate(user=self.user)
+        profile = self.user.profile
+        profile.can_create_equipment = True
+        profile.save()
+
+        # Standard template import
+        headers = [
+            "Mã thiết bị (*)",
+            "Mã đầy đủ thiết bị chi tiết cha",
+            "Tên thiết bị (*)",
+            "Loại/Phân loại",
+            "Trạng thái",
+            "Nhà chế tạo",
+            "Nhà cung cấp",
+            "Nước sản xuất",
+            "Nhà máy (*)",
+            "Mã vận hành",
+            "Bộ phận quản lý",
+            "Bảng vẽ",
+            "Thông số kỹ thuật",
+            "Ngày lắp đặt (YYYY-MM-DD)",
+            "Ngày vận hành (YYYY-MM-DD)"
+        ]
+        row_data = [
+            "PD.02",
+            "SH.TB.H1",
+            "Phân phối dầu tổ máy 02",
+            "Thiết bị phụ",
+            "Hoạt động",
+            "Alstom",
+            "Alstom Vietnam",
+            "Pháp",
+            "SH",
+            "2-OPD",
+            "Phân xưởng vận hành",
+            "SH-H1-GE-02",
+            "Áp lực định mức 40 bar",
+            "2026-01-15",
+            "2026-02-01"
+        ]
+        excel_buf = self._create_excel_file([headers, row_data])
+
+        url = reverse("quanlyvanhanh:thietbi-import-excel")
+        response = self.client.post(url, {'file': excel_buf}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify device was created
+        device = ThietBi.objects.filter(ma_day_du="SH.TB.H1.PD.02").first()
+        self.assertIsNotNone(device)
+        self.assertEqual(device.ten, "Phân phối dầu tổ máy 02")
+        self.assertEqual(device.nha_may, "SH")
+
+    def test_device_import_excel_legacy(self):
+        self.client.force_authenticate(user=self.user)
+        profile = self.user.profile
+        profile.can_create_equipment = True
+        profile.save()
+
+        # Legacy format import
+        headers = [
+            "Mã đầy đủ",
+            "Mã cấp hiện tại",
+            "Mã đầy đủ thiết bị cha",
+            "Tên thiết bị",
+            "Loại/Phân loại",
+            "Trạng thái",
+            "Nhà chế tạo",
+            "Nhà cung cấp",
+            "Nước sản xuất",
+            "Nhà máy",
+            "Cấp",
+            "Mã vận hành",
+            "Bộ phận quản lý",
+            "Bảng vẽ",
+            "Thông số kỹ thuật",
+            "Ngày lắp đặt",
+            "Ngày vận hành"
+        ]
+        row_data = [
+            "SH.TB.H1.PD.03",
+            "PD.03",
+            "SH.TB.H1",
+            "Phân phối dầu tổ máy 03",
+            "Thiết bị phụ",
+            "Hoạt động",
+            "Alstom",
+            "Alstom Vietnam",
+            "Pháp",
+            "SH",
+            "4",
+            "3-OPD",
+            "Phân xưởng vận hành",
+            "SH-H1-GE-03",
+            "Áp lực định mức 40 bar",
+            "2026-01-15",
+            "2026-02-01"
+        ]
+        excel_buf = self._create_excel_file([headers, row_data])
+
+        url = reverse("quanlyvanhanh:thietbi-import-excel")
+        response = self.client.post(url, {'file': excel_buf}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify device was created
+        device = ThietBi.objects.filter(ma_day_du="SH.TB.H1.PD.03").first()
+        self.assertIsNotNone(device)
+        self.assertEqual(device.ten, "Phân phối dầu tổ máy 03")
+        self.assertEqual(device.nha_may, "SH")
+
+    def test_device_import_excel_fallback_ma_day_du(self):
+        self.client.force_authenticate(user=self.user)
+        profile = self.user.profile
+        profile.can_create_equipment = True
+        profile.save()
+
+        # Fallback to Mã đầy đủ (missing Mã thiết bị (*) or Mã cấp hiện tại)
+        headers = [
+            "Mã đầy đủ",
+            "Tên thiết bị",
+            "Nhà máy",
+        ]
+        row_data = [
+            "SH.TB.H1.PD.04",
+            "Phân phối dầu tổ máy 04",
+            "SH",
+        ]
+        excel_buf = self._create_excel_file([headers, row_data])
+
+        url = reverse("quanlyvanhanh:thietbi-import-excel")
+        response = self.client.post(url, {'file': excel_buf}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify device was created and hierarchy resolved
+        device = ThietBi.objects.filter(ma_day_du="SH.TB.H1.PD.04").first()
+        self.assertIsNotNone(device)
+        self.assertEqual(device.ma, "PD.04")
+        self.assertEqual(device.cha_id, self.h1_device.id)
+        self.assertEqual(device.ten, "Phân phối dầu tổ máy 04")
+
