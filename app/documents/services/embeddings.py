@@ -28,7 +28,7 @@ def get_embedding(text):
 
 
 def cosine_similarity(left, right):
-    if not left or not right:
+    if left is None or right is None or len(left) == 0 or len(right) == 0:
         return 0.0
     if len(left) != len(right):
         logger.warning(

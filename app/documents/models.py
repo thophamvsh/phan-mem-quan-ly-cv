@@ -1,6 +1,26 @@
 from django.conf import settings
 from django.db import models
+from django.utils.text import slugify
 from pgvector.django import VectorField
+
+
+class DocumentFolder(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=120, unique=True, blank=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+            if not self.slug:
+                import uuid
+                self.slug = uuid.uuid4().hex[:8]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
 
 
 class Document(models.Model):
@@ -19,11 +39,19 @@ class Document(models.Model):
     FACTORY_SONGHINH = "songhinh"
     FACTORY_VINHSON = "vinhson"
     FACTORY_THUONGKONTUM = "thuongkontum"
+    FACTORY_TCKT = "tckt"
+    FACTORY_KHDT = "khdt"
+    FACTORY_TH = "th"
+    FACTORY_KT = "kt"
     FACTORY_CHOICES = (
         (FACTORY_GENERAL, "Chung"),
         (FACTORY_SONGHINH, "Song Hinh"),
         (FACTORY_VINHSON, "Vinh Son"),
         (FACTORY_THUONGKONTUM, "Thuong Kon Tum"),
+        (FACTORY_TCKT, "Phong TCKT"),
+        (FACTORY_KHDT, "Phong KHDT"),
+        (FACTORY_TH, "Phong TH"),
+        (FACTORY_KT, "Phong KT"),
     )
 
     title = models.CharField(max_length=255)
@@ -33,6 +61,7 @@ class Document(models.Model):
     document_type = models.CharField(max_length=80, blank=True, default="")
     factory = models.CharField(max_length=40, choices=FACTORY_CHOICES, default=FACTORY_GENERAL)
     visibility = models.CharField(max_length=30, default="internal")
+    folders = models.ManyToManyField(DocumentFolder, related_name="documents", blank=True)
     version = models.PositiveIntegerField(default=1)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

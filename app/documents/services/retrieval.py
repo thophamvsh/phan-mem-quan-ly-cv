@@ -31,13 +31,16 @@ MAX_CONTEXT_CHARS = 6500
 
 
 def get_allowed_factories_for_user(user):
-    scopes = get_ai_tool_scopes_for_user(user)
-    factories = {Document.FACTORY_GENERAL}
-    if AI_TOOL_SCOPE_SONGHINH in scopes:
-        factories.update({Document.FACTORY_SONGHINH, Document.FACTORY_THUONGKONTUM})
-    if AI_TOOL_SCOPE_VINHSON in scopes:
-        factories.add(Document.FACTORY_VINHSON)
-    return factories
+    return {
+        Document.FACTORY_GENERAL,
+        Document.FACTORY_SONGHINH,
+        Document.FACTORY_VINHSON,
+        Document.FACTORY_THUONGKONTUM,
+        Document.FACTORY_TCKT,
+        Document.FACTORY_KHDT,
+        Document.FACTORY_TH,
+        Document.FACTORY_KT,
+    }
 
 
 def filter_documents_for_user(user, queryset=None):
@@ -45,7 +48,7 @@ def filter_documents_for_user(user, queryset=None):
     return queryset.filter(factory__in=get_allowed_factories_for_user(user))
 
 
-def search_documents(user, query, factory="", document_type="", limit=5):
+def search_documents(user, query, factory="", document_type="", folder_id=None, limit=5):
     parsed_query = parse_query(query)
     query = (query or "").strip()
     if not query:
@@ -61,6 +64,9 @@ def search_documents(user, query, factory="", document_type="", limit=5):
         .filter(document__status=Document.STATUS_READY, document__factory__in=allowed_factories)
         .filter(embedding__isnull=False)
     )
+
+    if folder_id:
+        base_queryset = base_queryset.filter(document__folders__id=folder_id)
 
     if document_type:
         matching_doc_ids = [
@@ -107,7 +113,7 @@ def _collect_candidates(base_queryset, parsed_query, query):
     for chunk in _keyword_candidates(base_queryset, parsed_query):
         candidates.setdefault(chunk.id, {"chunk": chunk, "semantic_score": 0.0})
 
-    if query_embedding:
+    if query_embedding is not None and len(query_embedding) > 0:
         missing_chunks = [
             item["chunk"]
             for item in candidates.values()
@@ -122,7 +128,7 @@ def _collect_candidates(base_queryset, parsed_query, query):
 
 
 def _semantic_candidates(base_queryset, query_embedding):
-    if not query_embedding:
+    if query_embedding is None or len(query_embedding) == 0:
         return []
 
     # Use pgvector CosineDistance query to sort directly in database
@@ -211,10 +217,10 @@ def _compute_semantic_scores(chunks, query_embedding):
     valid_embeddings = []
 
     for chunk in chunks:
-        if chunk.embedding and len(chunk.embedding) == query_len:
+        if chunk.embedding is not None and len(chunk.embedding) == query_len:
             valid_chunks.append(chunk)
             valid_embeddings.append(chunk.embedding)
-        elif chunk.embedding:
+        elif chunk.embedding is not None:
             logger.warning(
                 "Skipping chunk %s due to embedding dimension mismatch (expected %d, got %s)",
                 chunk.id,

@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,12 +17,14 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
-from documents.models import Document
+from documents.models import Document, DocumentFolder
 from documents.permissions import CanUseAiDocuments, has_ai_documents_permission
 from documents.serializers import (
     DocumentSearchSerializer,
     DocumentSerializer,
     DocumentUploadSerializer,
+    DocumentFolderSerializer,
+    DocumentUpdateSerializer,
 )
 from documents.services.ingest import process_document
 from documents.services.retrieval import (
@@ -80,10 +82,13 @@ class DocumentListCreateAPIView(generics.ListCreateAPIView):
         queryset = filter_documents_for_user(self.request.user).prefetch_related("chunks")
         factory = self.request.query_params.get("factory")
         status_value = self.request.query_params.get("status")
+        folder_id = self.request.query_params.get("folder_id")
         if factory:
             queryset = queryset.filter(factory=factory)
         if status_value:
             queryset = queryset.filter(status=status_value)
+        if folder_id:
+            queryset = queryset.filter(folders__id=folder_id)
         return queryset
 
     def get_serializer_class(self):
@@ -108,12 +113,17 @@ class DocumentListCreateAPIView(generics.ListCreateAPIView):
         return Response(output.data, status=status.HTTP_201_CREATED)
 
 
-class DocumentDetailAPIView(generics.RetrieveDestroyAPIView):
+class DocumentDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [CanUseAiDocuments]
     serializer_class = DocumentSerializer
 
     def get_queryset(self):
         return filter_documents_for_user(self.request.user).prefetch_related("chunks")
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return DocumentUpdateSerializer
+        return DocumentSerializer
 
 
 class DocumentReprocessAPIView(APIView):
@@ -188,3 +198,9 @@ class DocumentViewAPIView(APIView):
             content_type=content_type,
             filename=os.path.basename(file_path),
         )
+
+
+class DocumentFolderViewSet(viewsets.ModelViewSet):
+    permission_classes = [CanUseAiDocuments]
+    serializer_class = DocumentFolderSerializer
+    queryset = DocumentFolder.objects.all().order_by("name")

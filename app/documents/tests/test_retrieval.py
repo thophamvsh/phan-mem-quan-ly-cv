@@ -70,12 +70,33 @@ class DocumentRetrievalPermissionTests(TestCase):
                 Document.FACTORY_GENERAL,
                 Document.FACTORY_SONGHINH,
                 Document.FACTORY_THUONGKONTUM,
+                Document.FACTORY_VINHSON,
+                Document.FACTORY_TCKT,
+                Document.FACTORY_KHDT,
+                Document.FACTORY_TH,
+                Document.FACTORY_KT,
             },
         )
 
         ids = set(filter_documents_for_user(self.songhinh_user).values_list("id", flat=True))
-        self.assertEqual(ids, {self.general_doc.id, self.songhinh_doc.id, self.tkt_doc.id})
+        self.assertEqual(
+            ids,
+            {
+                self.general_doc.id,
+                self.songhinh_doc.id,
+                self.tkt_doc.id,
+                self.vinhson_doc.id,
+            },
+        )
 
     def test_vinhson_user_can_access_general_and_vinhson_documents(self):
         ids = set(filter_documents_for_user(self.vinhson_user).values_list("id", flat=True))
-        self.assertEqual(ids, {self.general_doc.id, self.vinhson_doc.id})
+        self.assertEqual(
+            ids,
+            {
+                self.general_doc.id,
+                self.songhinh_doc.id,
+                self.tkt_doc.id,
+                self.vinhson_doc.id,
+            },
+        )

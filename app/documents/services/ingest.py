@@ -40,8 +40,8 @@ def process_document(document):
 
         with transaction.atomic():
             DocumentChunk.objects.filter(document=document).delete()
-            for chunk in prepared_chunks:
-                DocumentChunk.objects.create(
+            chunk_objects = [
+                DocumentChunk(
                     document=document,
                     chunk_index=chunk["chunk_index"],
                     heading_path=chunk["heading_path"],
@@ -52,6 +52,9 @@ def process_document(document):
                     metadata=chunk["metadata"],
                     embedding=chunk["embedding"],
                 )
+                for chunk in prepared_chunks
+            ]
+            DocumentChunk.objects.bulk_create(chunk_objects)
             document.markdown_text = markdown
             document.status = Document.STATUS_READY
             document.processed_at = timezone.now()

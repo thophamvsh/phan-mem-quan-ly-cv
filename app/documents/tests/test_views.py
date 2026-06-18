@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
-from documents.models import Document
+from documents.models import Document, DocumentFolder
 from khovattu.models import Bang_nha_may
 
 
@@ -95,7 +95,7 @@ class DocumentViewApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch("documents.views._enqueue_process_document")
-    def test_upload_document_rejects_factory_outside_user_scope(self, enqueue_mock):
+    def test_upload_document_allows_factory_within_expanded_scope(self, enqueue_mock):
         self.client.force_authenticate(self.songhinh_user)
         upload = SimpleUploadedFile(
             "vinhson.txt",
@@ -115,9 +115,9 @@ class DocumentViewApiTests(APITestCase):
             format="multipart",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertFalse(Document.objects.filter(title="Tai lieu Vinh Son").exists())
-        enqueue_mock.assert_not_called()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Document.objects.filter(title="Tai lieu Vinh Son").exists())
+        enqueue_mock.assert_called_once()
 
     @patch("documents.views._enqueue_process_document")
     def test_upload_document_allows_factory_in_user_scope(self, enqueue_mock):
@@ -150,7 +150,8 @@ class DocumentViewApiTests(APITestCase):
         )
         enqueue_mock.assert_called_once()
 
-    def test_reprocess_document_outside_user_scope_returns_404(self):
+    @patch("documents.views._enqueue_process_document")
+    def test_reprocess_document_within_expanded_scope_returns_200(self, enqueue_mock):
         vinhson_doc = Document.objects.create(
             title="Tai lieu Vinh Son",
             original_file="ai_documents/vinhson.pdf",
@@ -163,4 +164,80 @@ class DocumentViewApiTests(APITestCase):
             reverse("documents-reprocess", args=[vinhson_doc.id]),
         )
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        enqueue_mock.assert_called_once()
+
+
+class DocumentFolderApiTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="folder-test@example.com",
+            username="folder_test",
+            password="testpass123",
+        )
+        UserProfile.objects.create(user=self.user, can_use_ai_documents=True)
+        self.client.force_authenticate(self.user)
+
+    def test_crud_document_folders(self):
+        # List folders (should be empty initially)
+        response = self.client.get(reverse("document-folders-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+        # Create folder
+        response = self.client.post(
+            reverse("document-folders-list"),
+            {"name": "Thư mục kiểm tra", "description": "Mô tả kiểm tra"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Thư mục kiểm tra")
+        self.assertEqual(response.data["slug"], "thu-muc-kiem-tra")
+        folder_id = response.data["id"]
+
+        # List folders again
+        response = self.client.get(reverse("document-folders-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+
+        # Update folder
+        response = self.client.put(
+            reverse("document-folders-detail", args=[folder_id]),
+            {"name": "Thư mục đã sửa", "description": "Mô tả mới"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Thư mục đã sửa")
+
+        # Delete folder
+        response = self.client.delete(reverse("document-folders-detail", args=[folder_id]))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_update_document_metadata(self):
+        # Create a folder first
+        folder = DocumentFolder.objects.create(name="Folder test update")
+
+        # Create a document
+        doc = Document.objects.create(
+            title="Original Title",
+            original_file="ai_documents/test.pdf",
+            factory=Document.FACTORY_GENERAL,
+            document_type="quytrinh"
+        )
+
+        # Update metadata via API
+        url = reverse("documents-detail", args=[doc.id])
+        response = self.client.patch(
+            url,
+            {
+                "title": "Updated Title",
+                "document_type": "quy-dinh",
+                "folders": [folder.id]
+            },
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        doc.refresh_from_db()
+        self.assertEqual(doc.title, "Updated Title")
+        self.assertEqual(doc.document_type, "quy_dinh")
+        self.assertEqual(list(doc.folders.values_list("id", flat=True)), [folder.id])
