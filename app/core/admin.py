@@ -2,7 +2,9 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.utils.translation import gettext_lazy as _
-from .models import User, UserProfile
+from django.db import models
+from django import forms
+from .models import User, UserProfile, UserActivityLog, UserRole
 
 
 OPEN_PROFILE_FIELDSETS = {
@@ -65,7 +67,7 @@ class UserProfileInline(admin.StackedInline):
     readonly_fields = ('created_at', 'updated_at', 'full_name')
     fieldsets = (
         ('Thông tin hồ sơ', {
-            'fields': ('full_name', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
+            'fields': ('role', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
         ('Quyền nhật ký sự kiện vận hành', {
             'fields': (
@@ -239,6 +241,82 @@ class UserProfileInline(admin.StackedInline):
     fieldsets = make_profile_fieldsets_collapsible(fieldsets)
 
 
+# Định nghĩa UserRoleForm bằng type() động để các trường can_ được khai báo dưới dạng class attributes.
+# Điều này giúp các trường được lưu vào declared_fields và kế thừa chính xác khi Django modelform_factory tạo subclass.
+form_fields = {
+    'Meta': type('Meta', (object,), {
+        'model': UserRole,
+        'fields': ['name', 'description']
+    })
+}
+
+# Thêm tất cả các trường boolean can_ vào thuộc tính class
+can_fields = [
+    f for f in UserProfile._meta.fields 
+    if isinstance(f, models.BooleanField) and f.name.startswith('can_')
+]
+for field in can_fields:
+    form_fields[field.name] = forms.BooleanField(
+        required=False,
+        label=field.verbose_name or field.name,
+        help_text=field.help_text
+    )
+
+def form_init(self, *args, **kwargs):
+    forms.ModelForm.__init__(self, *args, **kwargs)
+    current_permissions = {}
+    if self.instance and self.instance.pk:
+        current_permissions = self.instance.permissions or {}
+    
+    can_fields_names = [
+        f.name for f in UserProfile._meta.fields 
+        if isinstance(f, models.BooleanField) and f.name.startswith('can_')
+    ]
+    for field_name in can_fields_names:
+        if field_name in self.fields:
+            profile_field = UserProfile._meta.get_field(field_name)
+            self.fields[field_name].initial = current_permissions.get(field_name, profile_field.default)
+
+def form_save(self, commit=True):
+    instance = forms.ModelForm.save(self, commit=False)
+    can_fields_names = [
+        f.name for f in UserProfile._meta.fields 
+        if isinstance(f, models.BooleanField) and f.name.startswith('can_')
+    ]
+    permissions_dict = {}
+    for field_name in can_fields_names:
+        permissions_dict[field_name] = self.cleaned_data.get(field_name, False)
+    instance.permissions = permissions_dict
+    if commit:
+        instance.save()
+    return instance
+
+form_fields['__init__'] = form_init
+form_fields['save'] = form_save
+
+UserRoleForm = type('UserRoleForm', (forms.ModelForm,), form_fields)
+
+
+@admin.register(UserRole)
+class UserRoleAdmin(admin.ModelAdmin):
+    form = UserRoleForm
+    list_display = ('name', 'description', 'created_at', 'updated_at')
+    search_fields = ('name', 'description')
+
+    def get_fieldsets(self, request, obj=None):
+        base_fieldsets = [
+            ('Thông tin vai trò', {
+                'fields': ('name', 'description')
+            })
+        ]
+        # Duyệt qua các fieldset của UserProfileInline và lấy các phần bắt đầu bằng 'Quyền'
+        for title, options in UserProfileInline.fieldsets:
+            if title.startswith('Quyền'):
+                base_fieldsets.append((title, options))
+                
+        return make_profile_fieldsets_collapsible(tuple(base_fieldsets))
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     """Admin configuration for custom User model"""
@@ -271,14 +349,14 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin configuration for UserProfile model"""
-    list_display = ('user', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_use_ai_tools', 'can_use_ai_documents', 'created_at')
-    list_filter = ('is_mobile_user', 'is_all_factories', 'can_view_realtime_hydrology', 'can_update_realtime_hydrology', 'can_view_hydrology_settings', 'can_edit_hydrology_settings', 'can_view_operation_thresholds', 'can_create_operation_thresholds', 'can_edit_operation_thresholds', 'can_delete_operation_thresholds', 'can_use_ai_tools', 'can_use_ai_documents', 'nha_may', 'created_at', 'updated_at')
+    list_display = ('user', 'role', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'created_at')
+    list_filter = ('role', 'is_mobile_user', 'is_all_factories', 'nha_may', 'created_at')
     search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 'phone', 'chuc_danh', 'nha_may__ma_nha_may', 'nha_may__ten_nha_may')
     readonly_fields = ('created_at', 'updated_at', 'full_name')
 
     fieldsets = (
         ('Thông tin cơ bản', {
-            'fields': ('user', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
+            'fields': ('user', 'role', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
         ('Phân quyền nhà máy', {
             'fields': ('nha_may', 'is_all_factories'),
@@ -487,3 +565,21 @@ class UserProfileAdmin(admin.ModelAdmin):
         else:
             return "Chưa gán"
     nha_may.short_description = 'Nhà máy'
+
+
+@admin.register(UserActivityLog)
+class UserActivityLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'action_type', 'description', 'ip_address', 'timestamp')
+    list_filter = ('action_type', 'timestamp')
+    search_fields = ('user__email', 'user__username', 'description', 'ip_address')
+    readonly_fields = ('user', 'action_type', 'description', 'ip_address', 'user_agent', 'timestamp')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+

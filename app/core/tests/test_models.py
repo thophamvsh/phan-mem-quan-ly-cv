@@ -5,8 +5,9 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 import unittest
+from django.db import models
 
-from core.models import UserProfile
+from core.models import UserProfile, UserRole
 
 
 class ModelTests(TestCase):
@@ -126,3 +127,61 @@ class ModelTests(TestCase):
         self.assertIsNotNone(created_user)
         self.assertEqual(created_user.first_name, 'Le')
         self.assertEqual(created_user.last_name, 'Minh')
+
+    def test_role_permissions_sync_on_profile_create(self):
+        """Test that permissions are synced from UserRole on UserProfile creation."""
+        role = UserRole.objects.create(
+            name='Trưởng ca vận hành',
+            permissions={'can_view_materials': True, 'can_delete_materials': False, 'can_approve_export_request': True}
+        )
+        user = get_user_model().objects.create_user(email='tc_create@example.com', password='testpass123')
+        profile = UserProfile.objects.create(user=user, role=role)
+        profile.refresh_from_db()
+        
+        self.assertTrue(profile.can_view_materials)
+        self.assertFalse(profile.can_delete_materials)
+        self.assertTrue(profile.can_approve_export_request)
+
+    def test_role_permissions_sync_on_role_update(self):
+        """Test that updating a UserRole automatically propagates changes to all assigned profiles."""
+        role = UserRole.objects.create(
+            name='Nhân viên vận hành',
+            permissions={'can_view_materials': True, 'can_delete_materials': False}
+        )
+        user1 = get_user_model().objects.create_user(email='nv1@example.com', password='testpass123')
+        user2 = get_user_model().objects.create_user(email='nv2@example.com', password='testpass123')
+        
+        profile1 = UserProfile.objects.create(user=user1, role=role)
+        profile2 = UserProfile.objects.create(user=user2, role=role)
+        
+        # Verify initial state
+        self.assertTrue(profile1.can_view_materials)
+        self.assertTrue(profile2.can_view_materials)
+        self.assertFalse(profile1.can_delete_materials)
+        
+        # Update role permissions
+        role.permissions = {'can_view_materials': False, 'can_delete_materials': True}
+        role.save()
+        
+        # Verify dynamic cascading updates
+        profile1.refresh_from_db()
+        profile2.refresh_from_db()
+        
+        self.assertFalse(profile1.can_view_materials)
+        self.assertFalse(profile2.can_view_materials)
+        self.assertTrue(profile1.can_delete_materials)
+        self.assertTrue(profile2.can_delete_materials)
+
+    def test_role_custom_permissions(self):
+        """Test that having no role (role=None) preserves custom manual permissions."""
+        user = get_user_model().objects.create_user(email='custom_user@example.com', password='testpass123')
+        profile = UserProfile.objects.create(
+            user=user,
+            role=None,
+            can_view_materials=False,
+            can_delete_materials=True
+        )
+        profile.refresh_from_db()
+        
+        self.assertFalse(profile.can_view_materials)
+        self.assertTrue(profile.can_delete_materials)

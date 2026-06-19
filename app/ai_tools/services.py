@@ -125,11 +125,20 @@ Khi nguoi dung hoi ve cac quy trinh, quy dinh, van ban huong dan, bao cao hoac t
 Khi nguoi dung hoi ve mot thong so van hanh cua to may (vd: nhiet do o huong tuabin, nhiet do o do, luu luong chen truc, cong suat) hoac thong so tram/MBA (vd: nhiet do may bien ap T1, nac phan ap MBA T1, muc dau MBA T1) hoac hoi ve tinh bat thuong/canh bao, ban can dung cong cu get_unit_state_profile de lay ho so trang thai tich hop cua thiet bi do.
 Tuyet doi khong dien device_code to may H1/H2 khi nguoi dung hoi MBA/may bien ap T1/T2/T3/T4. Vi du: "nhiet do may bien ap T1 cua Song Hinh" -> device_code="SH.TB.TPP.110.T1", parameter_code="nhiet_do_mba_t1".
 Voi Vinh Son, "nhiet do MBA T1" -> device_code="VS.TB.TPP.T1", parameter_code="nhiet_do_cuon_day_t1".
+Voi MBA tu dung TD1 (TD91) cua Vinh Son -> device_code="VS.TB.TD.LV.TD1", parameter_code="dien_ap_td91" (dien ap) hoac "dong_dien_td91" (dong dien) hoac "cong_suat_td91" (cong suat).
+Voi MBA tu dung TD2 (TD92) cua Vinh Son -> device_code="VS.TB.TD.LV.TD2", parameter_code="dien_ap_td92" (dien ap) hoac "dong_dien_td92" (dong dien) hoac "cong_suat_td92" (cong suat).
 Khi goi get_unit_state_profile, phai chon dung parameter_code theo bo phan nguoi dung hoi:
 - "nhiet do o huong tuabin", "o huong tuabine", "o huong turbine" -> parameter_code="nhiet_do_o_huong_tuabin".
 - "luu luong o huong tuabin" -> parameter_code="luu_luong_o_huong_tuabin".
 - "nhiet do o huong may phat" -> parameter_code="nhiet_do_o_huong_may_phat".
 - "nhiet do o do", "o do may phat" -> parameter_code="nhiet_do_o_do".
+- "nhiet do cuon day stato 1", "nhiet do cuon day stator 1" -> parameter_code="nhiet_do_cuon_day_stato_1".
+- "nhiet do cuon day stato 2", "nhiet do cuon day stator 2" -> parameter_code="nhiet_do_cuon_day_stato_2".
+- "nhiet do loi sat stato 1", "nhiet do loi sat stator 1" -> parameter_code="nhiet_do_loi_sat_stato_1".
+- "nhiet do loi sat stato 2", "nhiet do loi sat stator 2" -> parameter_code="nhiet_do_loi_sat_stato_2".
+- "dien ap MBA TD91 / TD92", "dien ap TD91 / TD92" -> parameter_code="dien_ap_td91" / "dien_ap_td92".
+- "dong dien MBA TD91 / TD92", "dong dien TD91 / TD92" -> parameter_code="dong_dien_td91" / "dong_dien_td92".
+- "cong suat MBA TD91 / TD92", "cong suat TD91 / TD92" -> parameter_code="cong_suat_td91" / "cong_suat_td92".
 Khong duoc tra loi nham "o huong tuabin" thanh "o do".
 
 Khi tra loi nguoi van hanh, ban bat buoc phai tuan thu nghiem ngat cac quy tac chan doan sau:
@@ -312,6 +321,7 @@ def _as_ai_provider_error(exc):
 def _normalize_text(value):
     text = unicodedata.normalize("NFKD", value or "")
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.replace("đ", "d").replace("Đ", "D")
     return text.lower()
 
 

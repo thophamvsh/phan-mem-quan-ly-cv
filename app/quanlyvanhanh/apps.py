@@ -11,3 +11,13 @@ class QuanlyvanhanhConfig(AppConfig):
         CharField.register_lookup(Unaccent)
         TextField.register_lookup(Unaccent)
 
+        # Đăng ký auditlog cho các model quan trọng
+        from auditlog.registry import auditlog
+        from .models import ThietBi, ThongSoVanHanh, ThongSoToMay, ThongSoTram110KV, NguongThongSo
+
+        auditlog.register(ThietBi)
+        auditlog.register(ThongSoVanHanh)
+        auditlog.register(ThongSoToMay)
+        auditlog.register(ThongSoTram110KV)
+        auditlog.register(NguongThongSo)
+

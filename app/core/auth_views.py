@@ -59,6 +59,10 @@ class UserLoginAPIView(APIView):
                 # Fallback to UserSerializer if profile doesn't exist
                 user_data = UserSerializer(user).data
 
+            # Trigger login signal manually for JWT login
+            from django.contrib.auth.signals import user_logged_in
+            user_logged_in.send(sender=user.__class__, request=request, user=user)
+
             return Response({
                 'success': True,
                 'message': 'Đăng nhập thành công',
@@ -90,6 +94,10 @@ class UserLogoutAPIView(APIView):
 
     def post(self, request):
         try:
+            # Trigger logout signal manually
+            from django.contrib.auth.signals import user_logged_out
+            user_logged_out.send(sender=request.user.__class__, request=request, user=request.user)
+
             # Blacklist refresh token
             refresh_token = request.data.get('refresh_token')
             if refresh_token:

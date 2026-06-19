@@ -101,6 +101,10 @@ get_unit_state_profile_function = {
     - Sông Hinh MBA T2 -> device_code="SH.TB.TPP.110.T2", parameter_code="nhiet_do_mba_t2".
     - Sông Hinh MBA T3/T4 -> device_code="SH.TB.TPP.22.T3"/"SH.TB.TPP.22.T4".
     - Vĩnh Sơn MBA T1/T2 -> device_code="VS.TB.TPP.T1"/"VS.TB.TPP.T2", parameter_code="nhiet_do_cuon_day_t1"/"nhiet_do_cuon_day_t2".
+    - Vĩnh Sơn Stator cuộn dây 1/2 -> device_code="VS.TB.H1.GE.STA"/"VS.TB.H2.GE.STA", parameter_code="nhiet_do_cuon_day_stato_1"/"nhiet_do_cuon_day_stato_2".
+    - Vĩnh Sơn Stator lõi sắt 1/2 -> device_code="VS.TB.H1.GE.STA"/"VS.TB.H2.GE.STA", parameter_code="nhiet_do_loi_sat_stato_1"/"nhiet_do_loi_sat_stato_2".
+    - Vĩnh Sơn MBA tự dùng TD1 (TD91) -> device_code="VS.TB.TD.LV.TD1", parameter_codes: "dien_ap_td91" (điện áp), "dong_dien_td91" (dòng điện), "cong_suat_td91" (công suất).
+    - Vĩnh Sơn MBA tự dùng TD2 (TD92) -> device_code="VS.TB.TD.LV.TD2", parameter_codes: "dien_ap_td92" (điện áp), "dong_dien_td92" (dòng điện), "cong_suat_td92" (công suất).
     
     WHEN TO USE:
     - Khi người dùng hỏi về hoạt động của tổ máy H1, H2 hoặc trạm (ví dụ: nhiệt độ, làm mát, lưu lượng).
@@ -113,6 +117,11 @@ get_unit_state_profile_function = {
     - "lưu lượng ổ hướng tuabin" -> parameter_code="luu_luong_o_huong_tuabin".
     - "nhiệt độ ổ hướng máy phát" -> parameter_code="nhiet_do_o_huong_may_phat".
     - "nhiệt độ ổ đỡ", "ổ đỡ máy phát" -> parameter_code="nhiet_do_o_do".
+    - "nhiệt độ cuộn dây stator/cuộn dây 1/2" -> parameter_code="nhiet_do_cuon_day_stato_1"/"nhiet_do_cuon_day_stato_2".
+    - "nhiệt độ lõi sắt stator/lõi sắt 1/2" -> parameter_code="nhiet_do_loi_sat_stato_1"/"nhiet_do_loi_sat_stato_2".
+    - "điện áp MBA TD91 / TD92" -> parameter_code="dien_ap_td91"/"dien_ap_td92".
+    - "dòng điện MBA TD91 / TD92" -> parameter_code="dong_dien_td91"/"dong_dien_td92".
+    - "công suất MBA TD91 / TD92" -> parameter_code="cong_suat_td91"/"cong_suat_td92".
     Không dùng "nhiet_do_o_do" khi người dùng hỏi "ổ hướng tuabin".
     """,
     "parameters": {
@@ -136,7 +145,7 @@ get_unit_state_profile_function = {
             },
             "parameter_code": {
                 "type": "string",
-                "description": "Optional: Mã của thông số cụ thể cần truy vấn. Ví dụ: 'nhiet_do_o_huong_tuabin' cho nhiệt độ ổ hướng tuabin, 'nhiet_do_o_do' cho nhiệt độ ổ đỡ, 'luu_luong_chen_truc' cho lưu lượng chèn trục, 'nhiet_do_mba_t1' cho nhiệt độ MBA T1 Sông Hinh, 'nhiet_do_cuon_day_t1' cho MBA T1 Vĩnh Sơn. Nếu cung cấp, chỉ trả về thông số này và các thông số liên quan."
+                "description": "Optional: Mã của thông số cụ thể cần truy vấn. Ví dụ: 'nhiet_do_o_huong_tuabin' cho nhiệt độ ổ hướng tuabin, 'nhiet_do_o_do' cho nhiệt độ ổ đỡ, 'luu_luong_chen_truc' cho lưu lượng chèn trục, 'nhiet_do_mba_t1' cho nhiệt độ MBA T1 Sông Hinh, 'nhiet_do_cuon_day_t1' cho MBA T1 Vĩnh Sơn, 'nhiet_do_cuon_day_stato_1' / 'nhiet_do_cuon_day_stato_2' cho nhiệt độ cuộn dây stator 1 / 2 của Vĩnh Sơn, 'nhiet_do_loi_sat_stato_1' / 'nhiet_do_loi_sat_stato_2' cho nhiệt độ lõi sắt stator 1 / 2 của Vĩnh Sơn, 'dien_ap_td91' / 'dien_ap_td92' cho điện áp MBA tự dùng TD1 (TD91) / TD2 (TD92) của Vĩnh Sơn. Nếu cung cấp, chỉ trả về thông số này và các thông số liên quan."
             }
         },
         "required": ["device_code"],

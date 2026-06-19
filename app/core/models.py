@@ -124,6 +124,49 @@ class User(AbstractBaseUser, PermissionsMixin):
             pass
 
 
+class UserRole(models.Model):
+    """
+    Model định nghĩa vai trò người dùng động do Admin quản lý.
+    Lưu trữ cấu hình quyền dạng JSONField.
+    """
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name="Tên vai trò",
+        help_text="Nhập tên vai trò (ví dụ: Trưởng ca vận hành, Nhân viên hành chính...)"
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Mô tả vai trò",
+        help_text="Mô tả chi tiết về chức trách hoặc quyền hạn của vai trò."
+    )
+    permissions = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Danh sách quyền (JSON)",
+        help_text="Cấu hình quyền dạng JSON (được cập nhật tự động từ form Admin)."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Vai trò người dùng"
+        verbose_name_plural = "Danh sách vai trò"
+        db_table = 'core_user_role'
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        # Lưu đối tượng UserRole trước
+        super().save(*args, **kwargs)
+        # Tìm và cập nhật tất cả các UserProfile liên kết để đồng bộ quyền tức thời
+        profiles = self.profiles.all()
+        for profile in profiles:
+            profile.save()
+
+
 class UserProfile(models.Model):
     """
     Profile model liên kết với custom User model
@@ -134,6 +177,15 @@ class UserProfile(models.Model):
         on_delete=models.CASCADE,
         related_name='profile',
         help_text="Liên kết với User model"
+    )
+    role = models.ForeignKey(
+        UserRole,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='profiles',
+        verbose_name="Vai trò",
+        help_text="Chọn vai trò để tự động đồng bộ quyền. Để trống nếu muốn tự tích chọn quyền thủ công (Tùy chỉnh)."
     )
     ho_ten = models.CharField(
         max_length=255,
@@ -592,9 +644,40 @@ class UserProfile(models.Model):
             return f"{getattr(settings, 'BASE_URL', 'http://localhost:8000')}{self.chu_ky.url}"
         return None
 
+    def apply_role_permissions(self):
+        """Tự động đồng bộ các quyền từ UserRole liên kết (nếu có)."""
+        if not self.role:
+            # Tương đương với CUSTOM / Tùy chỉnh (giữ nguyên không làm gì)
+            return
+
+        # Lấy tất cả các trường BooleanField bắt đầu bằng 'can_'
+        can_fields = [
+            f.name for f in self._meta.fields 
+            if isinstance(f, models.BooleanField) and f.name.startswith('can_')
+        ]
+
+        role_permissions = self.role.permissions or {}
+        for field in can_fields:
+            # Gán giá trị từ JSON permissions, nếu không có mặc định là False
+            setattr(self, field, role_permissions.get(field, False))
+
     def save(self, *args, **kwargs):
         """Override save to sync name with User model"""
         sync_from_user = kwargs.pop('sync_from_user', False)
+
+        # Apply role permissions before saving
+        self.apply_role_permissions()
+
+        # If update_fields is specified, make sure our updated permission fields and role are included
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'role' in update_fields or not sync_from_user:
+                # Include all 'can_' fields and 'role' in update_fields to be safe
+                can_fields = {f.name for f in self._meta.fields if isinstance(f, models.BooleanField) and f.name.startswith('can_')}
+                update_fields.update(can_fields)
+                update_fields.add('role')
+                kwargs['update_fields'] = list(update_fields)
 
         # Save the profile first
         super().save(*args, **kwargs)
@@ -648,3 +731,27 @@ class UserProfile(models.Model):
             self.user.save(sync_from_profile=True, update_fields=update_fields)
         else:
             self.user.save(sync_from_profile=True)
+
+
+class UserActivityLog(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='activity_logs',
+        help_text="Người dùng thực hiện"
+    )
+    action_type = models.CharField(max_length=50, help_text="Loại hành động")  # 'LOGIN', 'LOGOUT', 'LOGIN_FAILED'
+    description = models.TextField(blank=True, help_text="Mô tả chi tiết")
+    ip_address = models.GenericIPAddressField(null=True, blank=True, help_text="Địa chỉ IP")
+    user_agent = models.TextField(blank=True, help_text="Thông tin trình duyệt/thiết bị")
+    timestamp = models.DateTimeField(auto_now_add=True, help_text="Thời gian ghi nhận")
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Nhật ký hoạt động"
+        verbose_name_plural = "Nhật ký hoạt động"
+
+    def __str__(self):
+        return f"{self.user} - {self.action_type} at {self.timestamp}"

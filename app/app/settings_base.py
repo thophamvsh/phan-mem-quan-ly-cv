@@ -44,17 +44,22 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "1800"))
+LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "180"))
 
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
     "save-realtime-snapshots-hourly": {
         "task": "thongsothuyvan.tasks.save_all_realtime_snapshots_task",
-        "schedule": crontab(minute=5),  # Chạy vào phút thứ 5 của mỗi giờ
+        "schedule": crontab(minute=5),
     },
     "sync-vrain-rainfall-daily": {
         "task": "thongsothuyvan.tasks.sync_vrain_daily_rainfall_task",
-        "schedule": crontab(hour=7, minute=0),  # Chạy vào lúc 7:00 sáng hàng ngày
+        "schedule": crontab(hour=7, minute=0),
+    },
+    "clear-old-logs-daily": {
+        "task": "core.tasks.clear_old_logs_task",
+        "schedule": crontab(hour=2, minute=0),
     },
 }
 
@@ -68,6 +73,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'import_export',
     'django.contrib.postgres',
@@ -79,8 +85,8 @@ INSTALLED_APPS = [
     'ai_tools.apps.AiToolsConfig',
     'documents.apps.DocumentsConfig',
     'drf_spectacular',
+    'auditlog',
 ]
-
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -88,9 +94,12 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.DRFAuthenticationMiddleware',
+    'auditlog.middleware.AuditlogMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 
 ROOT_URLCONF = 'app.urls'
 

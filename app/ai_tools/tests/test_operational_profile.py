@@ -503,7 +503,7 @@ class OperationalProfileTests(TestCase):
         self.assertIn("Nhiệt độ MBA T1", report)
         self.assertIn("nhiet_do_mba_t1", report)
         self.assertIn("**62.50 °C**", report)
-        self.assertNotIn("SH.TB.H1", report)
+        self.assertIn("SH.TB.H1", report)
         self.assertNotIn("nhiet_do_o_huong_tuabin", report)
 
     def test_get_unit_state_profile_reads_song_hinh_transformer_t2_tram_data(self):
@@ -771,3 +771,310 @@ class OperationalProfileTests(TestCase):
         # TB Kỳ hiện tại (10.00 mm) có mặt, TB Kỳ so sánh và Chênh lệch/Thay đổi là "-"
         self.assertIn("10.00 mm", report)
         self.assertIn("-", report)
+
+    def test_vinhson_stator_parameter_resolution(self):
+        # 1. Create Vinh Son H2 and Stator devices
+        vs_h2 = ThietBi.objects.create(
+            ten="TỔ MÁY H2 VĨNH SƠN",
+            ma="VS.TB.H2",
+            ma_day_du="VS.TB.H2",
+            nha_may="Vĩnh Sơn"
+        )
+        vs_stator = ThietBi.objects.create(
+            ten="Stator máy phát H2",
+            ma="GE.STA",
+            ma_day_du="VS.TB.H2.GE.STA",
+            cha=vs_h2,
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 2. Thresholds
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_h2,
+            ma_thong_so="cong_suat_tac_dung_h2",
+            ten_thong_so="Công suất tác dụng",
+            don_vi="MW",
+            rated=33.0
+        )
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_stator,
+            ma_thong_so="nhiet_do_cuon_day_stato_1",
+            ten_thong_so="Cuộn dây 1",
+            don_vi="°C",
+            alarm=85.0,
+            trip=90.0
+        )
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_stator,
+            ma_thong_so="nhiet_do_cuon_day_stato_2",
+            ten_thong_so="Cuộn dây 2",
+            don_vi="°C",
+            alarm=85.0,
+            trip=90.0
+        )
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_stator,
+            ma_thong_so="nhiet_do_loi_sat_stato_1",
+            ten_thong_so="Lõi sắt 1",
+            don_vi="°C",
+            alarm=85.0,
+            trip=90.0
+        )
+
+        # 3. Operational data at 08:00
+        ThongSoVanHanh.objects.create(
+            thiet_bi=vs_h2,
+            ma_thong_so="cong_suat_tac_dung_h2",
+            ten_thong_so="Công suất tác dụng",
+            don_vi="MW",
+            gia_tri="30.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=vs_stator,
+            ma_thong_so="nhiet_do_cuon_day_stato_1",
+            ten_thong_so="Cuộn dây 1",
+            don_vi="°C",
+            gia_tri="75.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=vs_stator,
+            ma_thong_so="nhiet_do_cuon_day_stato_2",
+            ten_thong_so="Cuộn dây 2",
+            don_vi="°C",
+            gia_tri="88.0",  # Trạng thái ALARM
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=vs_stator,
+            ma_thong_so="nhiet_do_loi_sat_stato_1",
+            ten_thong_so="Lõi sắt 1",
+            don_vi="°C",
+            gia_tri="80.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 4. Resolve "nhiệt độ cuộn dây số 1"
+        report1 = get_unit_state_profile("VS.TB.H2", date="2026-06-10", time="08:00", parameter_code="nhiệt độ cuộn dây số 1")
+        self.assertIn("Cuộn dây 1", report1)
+        self.assertIn("75.00 °C", report1)
+        self.assertNotIn("Cuộn dây 2", report1)
+
+        # 5. Resolve "nhiệt độ cuộn dây số 2"
+        report2 = get_unit_state_profile("VS.TB.H2", date="2026-06-10", time="08:00", parameter_code="nhiệt độ cuộn dây số 2")
+        self.assertIn("Cuộn dây 2", report2)
+        self.assertIn("88.00 °C", report2)
+        self.assertIn("🚨 CẢNH BÁO", report2)
+        self.assertNotIn("Cuộn dây 1", report2)
+
+        # 6. Resolve "nhiệt độ lõi sắt 1"
+        report3 = get_unit_state_profile("VS.TB.H2", date="2026-06-10", time="08:00", parameter_code="nhiệt độ lõi sắt 1")
+        self.assertIn("Lõi sắt 1", report3)
+        self.assertIn("80.00 °C", report3)
+        self.assertNotIn("Cuộn dây 1", report3)
+
+    def test_vinhson_td_transformer_parameter_resolution(self):
+        # 1. Create Vinh Son TD1 device
+        vs_td1 = ThietBi.objects.create(
+            ten="Máy biến áp tự dùng TD1",
+            ma="VS.TB.TD.LV.TD1",
+            ma_day_du="VS.TB.TD.LV.TD1",
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 2. Thresholds
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_td1,
+            ma_thong_so="dien_ap_td91",
+            ten_thong_so="U",
+            don_vi="V",
+            rated=380.0,
+            alarm=360.0,
+            trip=350.0
+        )
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_td1,
+            ma_thong_so="cong_suat_td91",
+            ten_thong_so="P",
+            don_vi="kW",
+            rated=50.0
+        )
+
+        # 3. Operational data at 08:00
+        ThongSoVanHanh.objects.create(
+            thiet_bi=vs_td1,
+            ma_thong_so="dien_ap_td91",
+            ten_thong_so="U",
+            don_vi="V",
+            gia_tri="376.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+        ThongSoVanHanh.objects.create(
+            thiet_bi=vs_td1,
+            ma_thong_so="cong_suat_td91",
+            ten_thong_so="P",
+            don_vi="kW",
+            gia_tri="35.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 4. Query for voltage
+        report = get_unit_state_profile("VS.TB.TD.LV.TD1", date="2026-06-10", time="08:00", parameter_code="dien_ap_td91")
+        self.assertIn("Máy biến áp tự dùng TD1", report)
+        self.assertIn("376.00 V", report)
+        self.assertIn("dien_ap_td91", report)
+        
+        # Test resolution with general queries
+        report2 = get_unit_state_profile("VS.TB.TD.LV.TD1", date="2026-06-10", time="08:00", parameter_code="điện áp")
+        self.assertIn("376.00 V", report2)
+
+    def test_parameter_with_newlines_resolution(self):
+        # 1. Create a device with newlines in its name
+        vs_t1 = ThietBi.objects.create(
+            ten="Máy biến áp\nT1",
+            ma="VS.TB.TPP.T1",
+            ma_day_du="VS.TB.TPP.T1",
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 2. Threshold with newlines in name
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_t1,
+            ma_thong_so="nhiet_do_cuon_day_t1",
+            ten_thong_so="Nđ\nổ T1",
+            don_vi="°C",
+            rated=65.0
+        )
+
+        # 3. Operational data with newlines in name
+        ThongSoVanHanh.objects.create(
+            thiet_bi=vs_t1,
+            ma_thong_so="nhiet_do_cuon_day_t1",
+            ten_thong_so="Nđ\nổ T1",
+            don_vi="°C",
+            gia_tri="62.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 4. Call get_unit_state_profile
+        report = get_unit_state_profile("VS.TB.TPP.T1", date="2026-06-10", time="08:00", parameter_code="nhiet_do_cuon_day_t1")
+        
+        # Verify the report contains the cleaned name without newline
+        self.assertIn("Nđ ổ T1", report)
+        self.assertIn("Máy biến áp T1", report)
+        # Verify that the raw uncleaned names with newlines are NOT in the report
+        self.assertNotIn("Nđ\nổ T1", report)
+        self.assertNotIn("Máy biến áp\nT1", report)
+        self.assertIn("62.00 °C", report)
+
+    def test_mba_analysis_includes_generator_power(self):
+        # 1. Create MBA T1 device and H1 device
+        vs_t1 = ThietBi.objects.create(
+            ten="Máy biến áp T1",
+            ma="VS.TB.TPP.T1",
+            ma_day_du="VS.TB.TPP.T1",
+            nha_may="Vĩnh Sơn"
+        )
+        vs_h1 = ThietBi.objects.create(
+            ten="TỔ MÁY H1",
+            ma="VS.TB.H1",
+            ma_day_du="VS.TB.H1",
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 2. Thresholds
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_t1,
+            ma_thong_so="nhiet_do_cuon_day_t1",
+            ten_thong_so="Nhiệt độ cuộn dây T1",
+            don_vi="°C",
+            rated=65.0
+        )
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_h1,
+            ma_thong_so="cong_suat_tac_dung_h1",
+            ten_thong_so="Công suất tác dụng",
+            don_vi="MW",
+            rated=33.0
+        )
+        # Add another parameter on H1 to verify it is filtered out
+        NguongThongSo.objects.create(
+            nha_may="Vĩnh Sơn",
+            thiet_bi=vs_h1,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiệt độ ổ đỡ",
+            don_vi="°C",
+            alarm=80.0
+        )
+
+        # 3. Operational data at 08:00
+        ThongSoVanHanh.objects.create(
+            thiet_bi=vs_t1,
+            ma_thong_so="nhiet_do_cuon_day_t1",
+            ten_thong_so="Nhiệt độ cuộn dây T1",
+            don_vi="°C",
+            gia_tri="62.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+        ThongSoVanHanh.objects.create(
+            thiet_bi=vs_h1,
+            ma_thong_so="cong_suat_tac_dung_h1",
+            ten_thong_so="Công suất tác dụng",
+            don_vi="MW",
+            gia_tri="30.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+        ThongSoToMay.objects.create(
+            thiet_bi=vs_h1,
+            ma_thong_so="nhiet_do_o_do",
+            ten_thong_so="Nhiệt độ ổ đỡ",
+            don_vi="°C",
+            gia_tri="70.0",
+            thoi_diem_nhap=self.dt_0800,
+            ngay_nhap=self.target_date,
+            nha_may="Vĩnh Sơn"
+        )
+
+        # 4. Call get_unit_state_profile for MBA T1
+        report = get_unit_state_profile("VS.TB.TPP.T1", date="2026-06-10", time="08:00", parameter_code="nhiet_do_cuon_day_t1")
+        
+        # Verify generator power is fetched and displayed
+        self.assertIn("Công suất tác dụng", report)
+        self.assertIn("30.00 MW", report)
+        # Verify the expectation formula for T1 temperature uses the H1 load!
+        # Expected temp for winding: t_inlet (25) + (t_rated (65) - t_inlet) * (0.4 + 0.6 * (P/P_rated)^2)
+        # P/P_rated = 30 / 33 = 0.909
+        # Expected = 25 + 40 * (0.4 + 0.6 * 0.826) = 25 + 40 * 0.895 = 60.826 => rounds to 60.83 °C
+        self.assertIn("60.83 °C", report)  # expected value
+        self.assertIn("+1.17 °C", report)  # residual value (62.00 - 60.83)
+        
+        # Verify other H1 parameters (like bearing temp) are filtered out and NOT in the report
+        self.assertNotIn("Nhiệt độ ổ đỡ", report)

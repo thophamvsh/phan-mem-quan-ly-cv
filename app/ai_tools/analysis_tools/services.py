@@ -39,7 +39,15 @@ RAINFALL_STATIONS = {
 def _normalize_text(value: str | None) -> str:
     text = unicodedata.normalize("NFD", value or "")
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.replace("đ", "d").replace("Đ", "D")
     return " ".join(text.replace("-", " ").replace("_", " ").lower().split())
+
+
+def _clean_str(val: str | None) -> str:
+    if not val:
+        return ""
+    val = val.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    return " ".join(val.split())
 
 
 def _parse_day(value: str | None):
@@ -276,7 +284,7 @@ def compare_hydro_periods(data_type, current_start, current_end, compare_start, 
 def get_unit_state_profile(device_code: str, date: str | None = None, time: str | None = None, window: str | None = "60m", parameter_code: str | None = None) -> str:
     from quanlyvanhanh.models import ThietBi, ThongSoToMay, ThongSoTram110KV, ThongSoVanHanh
     from quanlyvanhanh.services.thongso_history_service import get_metric_thresholds, parse_number
-    from django.db.models import Max
+    from django.db.models import Max, Q
     import re
     import json
     from datetime import timedelta
@@ -286,6 +294,8 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
         device = ThietBi.objects.get(ma_day_du=device_code)
     except ThietBi.DoesNotExist:
         return f"Không tìm thấy thiết bị với mã đầy đủ: {device_code}"
+
+    device_ten_clean = _clean_str(device.ten)
 
     # 2. Xác định ngày truy vấn
     target_date = None
@@ -322,27 +332,44 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
         dates = [d for d in [latest_tm, latest_vh, latest_tram] if d is not None]
         target_date = max(dates) if dates else timezone.localtime(timezone.now()).date()
 
+    # Map MBA device_code to generator unit device_code to fetch power data
+    generator_device_code = None
+    if "TPP.110.T1" in device_code.upper() or "TPP.T1" in device_code.upper():
+        if device_code.upper().startswith("SH"):
+            generator_device_code = "SH.TB.H1"
+        elif device_code.upper().startswith("VS"):
+            generator_device_code = "VS.TB.H1"
+    elif "TPP.110.T2" in device_code.upper() or "TPP.T2" in device_code.upper():
+        if device_code.upper().startswith("SH"):
+            generator_device_code = "SH.TB.H2"
+        elif device_code.upper().startswith("VS"):
+            generator_device_code = "VS.TB.H2"
+
+    device_filter = Q(thiet_bi__ma_day_du__startswith=device_code)
+    if generator_device_code:
+        device_filter |= Q(thiet_bi__ma_day_du__startswith=generator_device_code)
+
     # 3. Lấy dữ liệu của ToMay và VanHanh trong khoảng 15 ngày để so sánh
     comparison_days = 15
     comparison_start_date = target_date - timedelta(days=comparison_days - 1)
     qs_tm = ThongSoToMay.objects.filter(
-        thiet_bi__ma_day_du__startswith=device_code,
+        device_filter,
         ngay_nhap__gte=comparison_start_date,
         ngay_nhap__lte=target_date,
     ).select_related('thiet_bi')
     qs_vh = ThongSoVanHanh.objects.filter(
-        thiet_bi__ma_day_du__startswith=device_code,
+        device_filter,
         ngay_nhap__gte=comparison_start_date,
         ngay_nhap__lte=target_date,
     ).select_related('thiet_bi')
     qs_tram = ThongSoTram110KV.objects.filter(
-        thiet_bi__ma_day_du__startswith=device_code,
+        device_filter,
         ngay_nhap__gte=comparison_start_date,
         ngay_nhap__lte=target_date,
     ).select_related('thiet_bi')
 
     if not qs_tm.exists() and not qs_vh.exists() and not qs_tram.exists():
-        return f"Không tìm thấy dữ liệu vận hành cho thiết bị {device.ten} ({device_code}) trong khoảng {comparison_start_date.strftime('%d/%m/%Y')} đến {target_date.strftime('%d/%m/%Y')}."
+        return f"Không tìm thấy dữ liệu vận hành cho thiết bị {device_ten_clean} ({device_code}) trong khoảng {comparison_start_date.strftime('%d/%m/%Y')} đến {target_date.strftime('%d/%m/%Y')}."
 
     # 4. Group dữ liệu theo ngày/thời điểm và căn chỉnh theo múi giờ Việt Nam
     all_aligned_data = {}
@@ -356,6 +383,13 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
 
     def process_records(queryset, source):
         for r in queryset:
+            # If this record belongs to the generator unit, only keep active power
+            if generator_device_code and r.thiet_bi.ma_day_du.startswith(generator_device_code):
+                metric_code = r.ma_thong_so or ""
+                is_active_power = "cong_suat_tac_dung" in metric_code or "cong_suat_thuc" in metric_code or metric_code == "P"
+                if not is_active_power:
+                    continue
+
             val = parse_number(r.gia_tri)
             if val is None:
                 continue
@@ -375,16 +409,16 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
             if signal_key not in param_meta:
                 thresh = get_metric_thresholds(None, source, r.ma_thong_so, r.thiet_bi)
                 param_meta[signal_key] = {
-                    'name': r.ten_thong_so,
+                    'name': _clean_str(r.ten_thong_so),
                     'metric_code': r.ma_thong_so,
-                    'unit': r.don_vi or '',
+                    'unit': _clean_str(r.don_vi or ''),
                     'source': source,
                     'alarm': thresh.get('alarm'),
                     'trip': thresh.get('trip'),
                     'rated': thresh.get('rated'),
-                    'device_name': r.thiet_bi.ten,
+                    'device_name': _clean_str(r.thiet_bi.ten),
                     'device_code': r.thiet_bi.ma_day_du or '',
-                    'factory': r.nha_may or getattr(r.thiet_bi, 'nha_may', ''),
+                    'factory': _clean_str(r.nha_may or getattr(r.thiet_bi, 'nha_may', '')),
                 }
 
     process_records(qs_tm, 'tomay')
@@ -393,7 +427,7 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
 
     aligned_data = all_aligned_data.get(target_date, {})
     if not aligned_data:
-        return f"Không tìm thấy dữ liệu vận hành cho thiết bị {device.ten} ({device_code}) vào ngày {target_date.strftime('%d/%m/%Y')}."
+        return f"Không tìm thấy dữ liệu vận hành cho thiết bị {device_ten_clean} ({device_code}) vào ngày {target_date.strftime('%d/%m/%Y')}."
 
     # Xác định mã tham số công suất và nhiệt độ nước vào sớm để phục vụ lọc
     power_code = None
@@ -441,6 +475,9 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
 
         raw = value.strip()
         raw_norm = _normalize_text(raw)
+        # Chuẩn hóa "số 1" -> "1", "số 2" -> "2"
+        raw_norm = re.sub(r"\bso\s+(\d+)\b", r"\1", raw_norm)
+
         code_norms = {
             code: _normalize_text(" ".join([
                 code,
@@ -478,6 +515,25 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
             ]
         elif mentions_turbine_guide and is_flow:
             preferred_codes = ["luu_luong_o_huong_tuabin"]
+        elif is_temperature and any(token in raw_norm for token in ("cuon day", "stato", "stator", "loi sat")):
+            if "loi sat" in raw_norm:
+                if "1" in raw_norm:
+                    preferred_codes = ["nhiet_do_loi_sat_stato_1"]
+                elif "2" in raw_norm:
+                    preferred_codes = ["nhiet_do_loi_sat_stato_2"]
+                else:
+                    preferred_codes = ["nhiet_do_loi_sat_stato_1", "nhiet_do_loi_sat_stato_2"]
+            else:
+                if "1" in raw_norm:
+                    preferred_codes = ["nhiet_do_cuon_day_stato_1"]
+                elif "2" in raw_norm:
+                    preferred_codes = ["nhiet_do_cuon_day_stato_2"]
+                else:
+                    preferred_codes = [
+                        "nhiet_do_cuon_day_stato_1",
+                        "nhiet_do_cuon_day_stato_2",
+                        "nhiet_do_cuon_day_stato"
+                    ]
 
         for preferred in preferred_codes:
             for code, meta in param_meta.items():
@@ -508,7 +564,7 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
                 has_active_param = True
                 break
         if not has_active_param:
-            return f"Không tìm thấy dữ liệu vận hành cho thông số '{parameter_code}' của thiết bị {device.ten} ({device_code}) vào ngày {target_date.strftime('%d/%m/%Y')}."
+            return f"Không tìm thấy dữ liệu vận hành cho thông số '{parameter_code}' của thiết bị {device_ten_clean} ({device_code}) vào ngày {target_date.strftime('%d/%m/%Y')}."
 
     filtered_codes = None
     if parameter_code:
@@ -679,7 +735,7 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
     # Xây dựng cấu trúc Markdown phản hồi
     device_label = "Tổ máy" if re.search(r"\.H[12](\.|$)", device_code.upper()) else "Thiết bị"
     lines = []
-    lines.append(f"### Hồ sơ trạng thái vận hành {device_label}: {device.ten} ({device_code})")
+    lines.append(f"### Hồ sơ trạng thái vận hành {device_label}: {device_ten_clean} ({device_code})")
     lines.append(f"- **Ngày báo cáo**: {target_date.strftime('%d/%m/%Y')}")
     lines.append(f"- **Khoảng so sánh**: {comparison_start_date.strftime('%d/%m/%Y')} đến {target_date.strftime('%d/%m/%Y')} ({comparison_days} ngày)")
     if time_str:
@@ -979,7 +1035,7 @@ def get_unit_state_profile(device_code: str, date: str | None = None, time: str 
     json_payload = {
         "timestamp": to_dt(time_str).isoformat() if time_str else None,
         "device_code": device_code,
-        "device_name": device.ten,
+        "device_name": device_ten_clean,
         "operating_mode": operating_mode,
         "analysis_window": f"{window_minutes}m",
         "comparison_window": {
