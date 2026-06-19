@@ -539,3 +539,47 @@ class OptimizedViewsTests(APITestCase):
         self.assertEqual(alert["alarm"], 8.0)
         self.assertEqual(alert["thiet_bi_ma"], "SH.TB.H1.TuB.SH")
         self.assertEqual(alert["source"], "tomay")
+
+    def test_thong_so_active_alerts_permissions(self):
+        """Test that active-alerts endpoint respects can_receive_alert_notifications permission."""
+        url = reverse('quanlyvanhanh:thong-so-active-alerts')
+        
+        # 1. User with can_receive_alert_notifications = True (default)
+        profile = self.user.profile
+        profile.can_receive_alert_notifications = True
+        profile.save()
+        
+        # Ensure there is at least one alert configured
+        NguongThongSo.objects.create(
+            nha_may="Song Hinh",
+            thiet_bi=self.device,
+            ma_thong_so="dien_ap_h1",
+            ten_thong_so="Điện áp H1",
+            alarm=200.0,
+            trip=250.0,
+            rated=100.0,
+        )
+        
+        # We need to temporarily remove 'test' from sys.argv to trigger real permission checks
+        import sys
+        original_argv = sys.argv
+        
+        try:
+            sys.argv = [a for a in sys.argv if a != 'test']
+            
+            self.client.force_authenticate(user=self.user)
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            # Should return alerts
+            self.assertTrue(len(response.data) > 0)
+            
+            # 2. User with can_receive_alert_notifications = False
+            profile.can_receive_alert_notifications = False
+            profile.save()
+            
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            # Should return empty list
+            self.assertEqual(response.data, [])
+        finally:
+            sys.argv = original_argv

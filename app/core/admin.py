@@ -179,6 +179,7 @@ class UserProfileInline(admin.StackedInline):
                 'can_create_operation_parameters',
                 'can_edit_operation_parameters',
                 'can_delete_operation_parameters',
+                'can_receive_alert_notifications',
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
         }),
@@ -496,6 +497,7 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_create_operation_parameters',
                 'can_edit_operation_parameters',
                 'can_delete_operation_parameters',
+                'can_receive_alert_notifications',
             ),
             'description': 'Quyền xem, thêm, sửa và xóa thông số vận hành.'
         }),

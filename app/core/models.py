@@ -602,6 +602,11 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen su dung kho tai lieu AI va tim kiem RAG"
     )
+    can_receive_alert_notifications = models.BooleanField(
+        default=True,
+        verbose_name="Nhận thông báo cảnh báo thông số",
+        help_text="Quyết định người dùng có nhận được thông báo Toast khi thông số vận hành vượt ngưỡng hoặc gặp sự cố hay không."
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

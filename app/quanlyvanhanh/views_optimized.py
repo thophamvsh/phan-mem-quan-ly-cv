@@ -540,6 +540,9 @@ class ThongSoActiveAlertsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        if not has_profile_permission(request.user, "can_receive_alert_notifications"):
+            return Response([], status=status.HTTP_200_OK)
+
         if not has_profile_permission(request.user, "can_view_operation_parameters"):
             return Response(
                 {"detail": "Tài khoản của bạn chưa được cấp quyền xem thông số vận hành. Vui lòng liên hệ quản trị viên."},
