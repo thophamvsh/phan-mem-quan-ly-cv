@@ -71,7 +71,7 @@ class QveAnalysisServicesTests(TestCase):
             thoi_gian=datetime(2026, 4, 1, tzinfo=timezone.utc),
             cot_c="vinhson",
             cot_g=100.0,  # MNH A
-            cot_i=10.0,   # Qve A
+            cot_i=37.0,   # Total Qve = 10.0 (Lake A) + 15.0 (Lake B) + 12.0 (Lake C)
             cot_j=5.0,    # Qcm A
             cot_k=0.0,    # Qxl A
             cot_m=50.0,   # Output day
@@ -86,8 +86,8 @@ class QveAnalysisServicesTests(TestCase):
             thoi_gian=datetime(2026, 4, 2, tzinfo=timezone.utc),
             cot_c="vinhson",
             cot_g=100.5,
-            cot_i=12.0,
-            cot_j=6.0,
+            cot_i=41.0,   # Total Qve = 12.0 (Lake A) + 16.0 (Lake B) + 13.0 (Lake C)
+            cot_j=6.0,    # Qcm A
             cot_k=0.0,
             cot_m=55.0,
             cot_n=52.0,
@@ -103,7 +103,7 @@ class QveAnalysisServicesTests(TestCase):
             thoi_gian=datetime(2025, 4, 1, tzinfo=timezone.utc),
             cot_c="vinhson",
             cot_g=99.0,
-            cot_i=8.0,
+            cot_i=31.0,   # Total Qve = 8.0 (Lake A) + 13.0 (Lake B) + 10.0 (Lake C)
             cot_j=4.0,
             cot_k=0.0,
             cot_m=40.0,
@@ -118,7 +118,7 @@ class QveAnalysisServicesTests(TestCase):
             thoi_gian=datetime(2025, 4, 2, tzinfo=timezone.utc),
             cot_c="vinhson",
             cot_g=99.2,
-            cot_i=9.0,
+            cot_i=34.0,   # Total Qve = 9.0 (Lake A) + 14.0 (Lake B) + 11.0 (Lake C)
             cot_j=4.5,
             cot_k=0.0,
             cot_m=42.0,
@@ -293,3 +293,30 @@ class QveAnalysisServicesTests(TestCase):
         self.assertIn("Rainfall-Runoff Relation", report)
         self.assertIn("Physical Water Balance", report)
         self.assertIn("Qcm", report)
+
+    def test_vinhson_qve_a_calculation(self):
+        from ai_tools.vinhson_tools.services.qve_analysis_service import load_vinhson_stats_rows_from_db
+        from datetime import date
+        rows = load_vinhson_stats_rows_from_db(date(2026, 4, 1), date(2026, 4, 2))
+        
+        # We expect:
+        # Day 1: cot_i = 37.0, luuluong_ve_ho_b = 15.0, luuluong_ve_ho_c = 12.0
+        # Qve A = 37.0 - 15.0 - 12.0 = 10.0
+        # Day 2: cot_i = 41.0, luuluong_ve_ho_b = 16.0, luuluong_ve_ho_c = 13.0
+        # Qve A = 41.0 - 16.0 - 13.0 = 12.0
+        
+        self.assertEqual(len(rows), 2)
+        
+        # Row 1 (2026-04-01)
+        row1 = rows[0]
+        self.assertEqual(row1[0], "01/04/2026")
+        self.assertEqual(row1[4], 10.0) # qve_a
+        self.assertEqual(row1[5], 15.0) # qve_b
+        self.assertEqual(row1[6], 12.0) # qve_c
+        
+        # Row 2 (2026-04-02)
+        row2 = rows[1]
+        self.assertEqual(row2[0], "02/04/2026")
+        self.assertEqual(row2[4], 12.0) # qve_a
+        self.assertEqual(row2[5], 16.0) # qve_b
+        self.assertEqual(row2[6], 13.0) # qve_c

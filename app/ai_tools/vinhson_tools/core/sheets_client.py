@@ -84,7 +84,20 @@ def _fetch_vinhson_operational() -> List[List[str]]:
                 row[COL_WATER_LEVEL] = str(rec.cot_g) if rec.cot_g is not None else ""
                 row[COL_VOLUME] = str(rec.cot_h) if rec.cot_h is not None else ""
                 
-            row[COL_INFLOW] = str(rec.cot_i) if rec.cot_i is not None else ""
+            # Calculate inflow based on reservoir
+            inflow = None
+            if rec.cot_i is not None:
+                tot_inflow = float(rec.cot_i)
+                if "B" in res_upper:
+                    inflow = float(rec.luuluong_ve_ho_b) if rec.luuluong_ve_ho_b is not None else 0.0
+                elif "C" in res_upper:
+                    inflow = float(rec.luuluong_ve_ho_c) if rec.luuluong_ve_ho_c is not None else 0.0
+                else: # Lake A
+                    inflow_b = float(rec.luuluong_ve_ho_b) if rec.luuluong_ve_ho_b is not None else 0.0
+                    inflow_c = float(rec.luuluong_ve_ho_c) if rec.luuluong_ve_ho_c is not None else 0.0
+                    inflow = round(tot_inflow - inflow_b - inflow_c, 2)
+            
+            row[COL_INFLOW] = str(inflow) if inflow is not None else ""
             row[COL_TURBINE] = str(rec.cot_j) if rec.cot_j is not None else ""
             row[COL_SPILLWAY] = str(rec.cot_k) if rec.cot_k is not None else ""
             row[COL_QC_DAY] = str(rec.cot_l) if rec.cot_l is not None else ""

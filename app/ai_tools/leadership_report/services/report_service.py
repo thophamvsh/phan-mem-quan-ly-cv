@@ -369,8 +369,17 @@ def _format_weekly_limit_row(config, record, setting, week_start_date, reference
     }
     aggregate_args = {}
     if config.get("qve_field"):
-        aggregate_args["avg_qve"] = Avg(config["qve_field"])
+        from django.db.models import Avg
+        if config["plant_code"] == "vinhson" and config["reservoir_key"] == "vinhson_a":
+            from django.db.models import F
+            from django.db.models.functions import Coalesce
+            aggregate_args["avg_qve"] = Avg(
+                F("cot_i") - Coalesce(F("luuluong_ve_ho_b"), 0.0) - Coalesce(F("luuluong_ve_ho_c"), 0.0)
+            )
+        else:
+            aggregate_args["avg_qve"] = Avg(config["qve_field"])
     if config.get("qcm_field"):
+        from django.db.models import Avg
         aggregate_args["avg_qcm"] = Avg(config["qcm_field"])
 
     if aggregate_args:
@@ -481,6 +490,16 @@ def _format_hydrology_report_row(config, record):
     if useful_capacity is not None and max_useful_capacity and max_useful_capacity > 0:
         useful_percent = max(min(useful_capacity / max_useful_capacity * 100, 100), 0)
 
+    qve_val = None
+    if config["plant_code"] == "vinhson" and config["reservoir_key"] == "vinhson_a":
+        tot_qve = record_value(record, "cot_i")
+        if tot_qve is not None:
+            qb = record_value(record, "luuluong_ve_ho_b") or 0.0
+            qc = record_value(record, "luuluong_ve_ho_c") or 0.0
+            qve_val = tot_qve - qb - qc
+    else:
+        qve_val = record_value(record, config["qve_field"])
+
     return (
         "| {reservoir} | {level} | {total_capacity} | {useful_capacity} | {useful_percent} | {qve} | {qcm} | {spill} |"
     ).format(
@@ -489,7 +508,7 @@ def _format_hydrology_report_row(config, record):
         total_capacity=fmt_report_decimal(useful_capacity, 3),
         useful_capacity=fmt_report_decimal(useful_capacity, 3),
         useful_percent=fmt_report_direct_pct(useful_percent),
-        qve=fmt_report_decimal(record_value(record, config["qve_field"]), 2),
+        qve=fmt_report_decimal(qve_val, 2),
         qcm=fmt_report_decimal(record_value(record, config["qcm_field"]), 2),
         spill=fmt_report_decimal(record_value(record, config["spill_field"]), 2),
     )

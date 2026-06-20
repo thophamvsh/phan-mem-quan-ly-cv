@@ -84,7 +84,8 @@ Quá trình tìm kiếm ngữ nghĩa được điều phối bởi hàm `search_
 1. **Phân tích câu truy vấn (`services/query_parser.py`)**:
    - Sử dụng Regex để trích xuất từ câu hỏi của người dùng các bộ lọc động như: các mốc ngày tháng, số hiệu điều luật (`Điều 12`, `dieu 5`), số liệu và nhà máy được nhắc tới (ví dụ: "Sông Hinh").
 2. **Xác định phạm vi dữ liệu (`_resolve_allowed_factories`)**:
-   - Dựa trên quyền của User đăng nhập (chỉ được xem tài liệu thuộc nhà máy mình quản lý hoặc tài liệu chung) để tạo bộ lọc `factory__in` thích hợp.
+   - Quyền `can_use_ai_documents` là cổng truy cập chung của kho tài liệu. Khi đã có quyền này (hoặc là `superuser`), user được tìm kiếm trên toàn bộ phạm vi tài liệu: Chung, Sông Hinh, Vĩnh Sơn, Thượng Kon Tum và các phòng ban.
+   - Tham số `factory` chỉ dùng để thu hẹp kết quả khi user chủ động chọn nhà máy/phòng ban; đây không phải ranh giới phân quyền theo nhà máy.
 3. **Thu thập ứng viên (Hybrid Search)**:
    - **Semantic Search (Tìm kiếm ngữ nghĩa)**: Tính toán vector nhúng của câu truy vấn, sau đó truy vấn CSDL PostgreSQL tính khoảng cách cosine (`CosineDistance`) giữa các chunks và câu hỏi để lấy các ứng viên có khoảng cách gần nhất.
    - **Keyword Search (Tìm kiếm từ khóa)**: Tìm kiếm gần đúng dạng chứa ký tự (`icontains`) các cụm từ quan trọng, số điều khoản, số mốc thời gian để bổ sung các ứng viên bị trượt do khoảng cách vector nhưng trùng khít từ khóa.
@@ -116,7 +117,7 @@ App cung cấp các endpoint sau dưới định dạng REST API:
 ## 6. Phân quyền và Bảo mật (`permissions.py`)
 
 - Lớp phân quyền **`CanUseAiDocuments`** chặn toàn bộ các API nếu người dùng không được cấu hình quyền `can_use_ai_documents` (hoặc không phải là `superuser`).
-- Trong hàm `filter_documents_for_user`, danh sách tài liệu trả về cho mỗi user được lọc nghiêm ngặt dựa theo Scope quản lý nhà máy của họ:
-  - User có quyền Sông Hinh được xem tài liệu của: Sông Hinh, Thượng Kon Tum và tài liệu Chung.
-  - User có quyền Vĩnh Sơn được xem tài liệu của: Vĩnh Sơn và tài liệu Chung.
-  - User không có Scope cụ thể chỉ được xem tài liệu Chung (`general`).
+- Sau khi vượt qua cổng quyền trên, mọi user có quyền Documents đều được xem, tìm kiếm, upload, cập nhật, xử lý lại và xóa tài liệu trong **toàn bộ kho**, không giới hạn theo Scope nhà máy.
+- Hàm `get_allowed_factories_for_user` cố ý trả về tất cả phạm vi: `general`, `songhinh`, `vinhson`, `thuongkontum`, `tckt`, `khdt`, `th`, `kt`.
+- Bộ lọc `factory` tại API và RAG chỉ giúp thu hẹp dữ liệu cần xem/tìm kiếm, không dùng để ngăn user truy cập tài liệu của một nhà máy khác.
+- Vì quyền Documents cho phép truy cập toàn kho, chỉ nên cấp `can_use_ai_documents=True` cho các tài khoản được phép đọc và quản lý toàn bộ tài liệu nội bộ.

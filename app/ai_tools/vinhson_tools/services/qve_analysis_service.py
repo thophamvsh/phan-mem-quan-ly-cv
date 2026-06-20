@@ -78,12 +78,20 @@ def load_vinhson_stats_rows_from_db(start_d: date, end_d: date) -> List[List]:
         d = _local_date(obj.thoi_gian)
         if not d:
             continue
+        # Calculate Qve A = Total - B - C
+        qve_a = None
+        if obj.cot_i is not None:
+            tot = float(obj.cot_i)
+            qb = float(obj.luuluong_ve_ho_b) if obj.luuluong_ve_ho_b is not None else 0.0
+            qc = float(obj.luuluong_ve_ho_c) if obj.luuluong_ve_ho_c is not None else 0.0
+            qve_a = round(tot - qb - qc, 2)
+            
         rows.append([
             d.strftime("%d/%m/%Y"),
             obj.cot_g,
             obj.mucnuoc_thuongluu_ho_b,
             obj.mucnuoc_thuongluu_ho_c,
-            obj.cot_i,
+            qve_a,
             obj.luuluong_ve_ho_b,
             obj.luuluong_ve_ho_c,
         ])

@@ -66,7 +66,7 @@ class LeadershipHydrologyReportTests(TestCase):
             nha_may="vinhson",
             thoi_gian=datetime(2026, 6, 12, 10, 0, tzinfo=timezone.utc),
             cot_g=770.0,
-            cot_i=44.0,
+            cot_i=209.0,  # Total Qve = 44.0 (Lake A) + 77.0 (Lake B) + 88.0 (Lake C)
             cot_j=55.0,
             cot_k=66.0,
             mucnuoc_thuongluu_ho_b=819.8,

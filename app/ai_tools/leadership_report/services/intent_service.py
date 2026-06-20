@@ -151,7 +151,7 @@ def get_three_plant_production_report_date(content):
     normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
     normalized = " ".join(normalized.split())
     if not normalized:
-        return False
+        return None
 
     has_report = "bao cao" in normalized
     has_production = "san xuat" in normalized or "san luong" in normalized

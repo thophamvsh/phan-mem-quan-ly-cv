@@ -123,7 +123,18 @@ def build_vinhson_stats_rows() -> List[List[str]]:
         mnh_record = mnh_maps[code].get(day)
         water_level = getattr(mnh_record, "Mucnuoc", None) if mnh_record else record.cot_g
         row[1 + idx] = _fmt(water_level)
-        row[4 + idx] = _fmt(record.cot_i)
+        inflow = None
+        if record.cot_i is not None:
+            tot = float(record.cot_i)
+            if code == "B":
+                inflow = record.luuluong_ve_ho_b
+            elif code == "C":
+                inflow = record.luuluong_ve_ho_c
+            else:
+                qb = float(record.luuluong_ve_ho_b or 0.0)
+                qc = float(record.luuluong_ve_ho_c or 0.0)
+                inflow = round(tot - qb - qc, 2)
+        row[4 + idx] = _fmt(inflow)
 
         if record.mucnuoc_thuongluu_ho_b is not None:
             row[2] = _fmt(record.mucnuoc_thuongluu_ho_b)

@@ -51,7 +51,10 @@ def handle_document_tool_call(user, tool_call):
     if not has_ai_documents_permission(user):
         return {"content": "Ban khong co quyen tra cuu kho tai lieu noi bo."}
 
-    args = json.loads(getattr(tool_call.function, "arguments", "") or "{}")
+    try:
+        args = json.loads(getattr(tool_call.function, "arguments", "") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {"content": "Tham so tra cuu tai lieu khong hop le."}
     results = search_documents(
         user,
         query=args.get("query", ""),
