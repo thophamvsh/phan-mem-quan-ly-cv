@@ -38,7 +38,7 @@ def fetch_realtime_payload(prefix):
 
     if not realtime_url:
         return None, Response(
-            {"error": f"Chua cau hinh {prefix}_URL trong .env backend."},
+            {"error": f"Chưa cấu hình {prefix}_URL trong .env backend."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -57,17 +57,17 @@ def fetch_realtime_payload(prefix):
             return json.loads(payload), None
     except HTTPError as exc:
         return None, Response(
-            {"error": f"Realtime API tra ve loi {exc.code}."},
+            {"error": f"Realtime API trả về lỗi {exc.code}."},
             status=status.HTTP_502_BAD_GATEWAY,
         )
     except (URLError, TimeoutError) as exc:
         return None, Response(
-            {"error": f"Khong ket noi duoc realtime API: {exc}"},
+            {"error": f"Không kết nối được realtime API: {exc}"},
             status=status.HTTP_502_BAD_GATEWAY,
         )
     except (ValueError, json.JSONDecodeError):
         return None, Response(
-            {"error": "Realtime API khong tra ve JSON hop le."},
+            {"error": "Realtime API không trả về JSON hợp lệ."},
             status=status.HTTP_502_BAD_GATEWAY,
         )
 
@@ -78,7 +78,7 @@ class SongHinhRealtimeAPIView(APIView):
     def get(self, request):
         if not user_can_view_realtime_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen xem du lieu realtime."},
+                {"error": "Bạn không có quyền xem dữ liệu realtime."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
@@ -96,7 +96,7 @@ class VinhSonRealtimeAPIView(APIView):
     def get(self, request):
         if not user_can_view_realtime_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen xem du lieu realtime."},
+                {"error": "Bạn không có quyền xem dữ liệu realtime."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
@@ -114,7 +114,7 @@ class RealtimeUpdateStateAPIView(APIView):
     def get(self, request):
         if not user_can_view_realtime_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen xem trang realtime."},
+                {"error": "Bạn không có quyền xem trang realtime."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         return Response(serialize_realtime_state())
@@ -122,7 +122,7 @@ class RealtimeUpdateStateAPIView(APIView):
     def patch(self, request):
         if not user_can_update_realtime_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen cap nhat realtime."},
+                {"error": "Bạn không có quyền cập nhật realtime."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         state = RealtimeUpdateState.get_solo()
@@ -138,7 +138,7 @@ class RealtimeManualSaveAPIView(APIView):
     def post(self, request):
         if not user_can_update_realtime_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen cap nhat realtime."},
+                {"error": "Bạn không có quyền cập nhật realtime."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         plant = normalize_plant_code(request.data.get("plant") or "")

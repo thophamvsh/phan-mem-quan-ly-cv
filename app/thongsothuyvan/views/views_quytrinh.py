@@ -110,7 +110,7 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
         if not user_can_access_plant(self.request.user, "songhinh"):
             raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu quy trình của nhà máy Sông Hinh.")
         if not user_can_modify_hydrology_object(self.request.user, obj):
-            raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
+            raise PermissionDenied("Bạn chỉ được sửa dữ liệu do chính bạn cập nhật.")
         
         save_kwargs = {"nha_may": "songhinh", "updated_by": self.request.user}
         if obj.created_by_id is None:
@@ -121,7 +121,7 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
         if not user_can_access_plant(self.request.user, "songhinh"):
             raise PermissionDenied("Bạn không có quyền xóa dữ liệu quy trình của nhà máy Sông Hinh.")
         if not user_can_modify_hydrology_object(self.request.user, instance):
-            raise PermissionDenied("Ban chi duoc xoa du lieu do chinh ban cap nhat.")
+            raise PermissionDenied("Bạn chỉ được xóa dữ liệu do chính bạn cập nhật.")
         instance.delete()
 
     @action(detail=False, methods=["get"], url_path="export-excel")
@@ -168,7 +168,7 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
         excel_file = request.FILES.get("file")
         if not excel_file:
             return Response(
-                {"error": "Vui long chon file Excel voi field 'file'."},
+                {"error": "Vui lòng chọn file Excel với trường 'file'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -176,7 +176,7 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
             df = pd.read_excel(excel_file)
         except Exception as exc:
             return Response(
-                {"error": f"Khong doc duoc file Excel: {exc}"},
+                {"error": f"Không đọc được file Excel: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -195,7 +195,7 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
         missing_fields = [field for field in required_fields if field not in df.columns]
         if missing_fields:
             return Response(
-                {"error": "Thieu cot bat buoc: " + ", ".join(missing_fields)},
+                {"error": "Thiếu cột bắt buộc: " + ", ".join(missing_fields)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -215,9 +215,9 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
                 muc_nuoc_ket_thuc = parse_excel_float(row.get("muc_nuoc_ket_thuc"))
 
                 if not ngay_bat_dau or not ngay_ket_thuc:
-                    raise ValueError("Ngay bat dau/ngay ket thuc khong hop le")
+                    raise ValueError("Ngày bắt đầu/ngày kết thúc không hợp lệ")
                 if muc_nuoc_bat_dau is None or muc_nuoc_ket_thuc is None:
-                    raise ValueError("Muc nuoc bat dau/ket thuc khong hop le")
+                    raise ValueError("Mực nước bắt đầu/kết thúc không hợp lệ")
 
                 obj, created = MucnuocQuytrinh.objects.get_or_create(
                     nha_may="songhinh",
@@ -243,7 +243,7 @@ class MucnuocQuytrinhViewSet(viewsets.ModelViewSet):
         )
         return Response(
             {
-                "message": "Import Excel muc nuoc quy trinh hoan tat",
+                "message": "Nhập file Excel mức nước quy trình hoàn tất",
                 "imported_count": imported_count,
                 "updated_count": updated_count,
                 "errors": errors,

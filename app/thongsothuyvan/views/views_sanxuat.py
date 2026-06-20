@@ -208,7 +208,7 @@ def parse_float_or_none(value):
     try:
         return float(value)
     except (TypeError, ValueError):
-        raise ValueError("Gia tri so khong hop le")
+        raise ValueError("Giá trị số không hợp lệ")
 
 
 def get_year_offset_date(value, offset):
@@ -643,7 +643,7 @@ class GioPhatYearSummaryAPIView(APIView):
         nhamay = normalize_plant_code(request.query_params.get("nhamay", "songhinh"))
         if not user_can_access_plant(request.user, nhamay):
             return Response(
-                {"error": "Ban khong co quyen truy cap du lieu nha may nay."},
+                {"error": "Bạn không có quyền truy cập dữ liệu nhà máy này."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -654,7 +654,7 @@ class GioPhatYearSummaryAPIView(APIView):
                 target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             except ValueError:
                 return Response(
-                    {"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"},
+                    {"error": "Định dạng ngày không hợp lệ. Vui lòng dùng YYYY-MM-DD"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         else:
@@ -703,7 +703,7 @@ class DeletePlantDataByDateAPIView(APIView):
     def post(self, request):
         if not user_can_delete_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen xoa du lieu thuy van."},
+                {"error": "Bạn không có quyền xóa dữ liệu thủy văn."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -712,7 +712,7 @@ class DeletePlantDataByDateAPIView(APIView):
         )
         if not user_can_access_plant(request.user, nhamay):
             return Response(
-                {"error": "Ban khong co quyen xoa du lieu cua nha may nay."},
+                {"error": "Bạn không có quyền xóa dữ liệu của nhà máy này."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -722,7 +722,7 @@ class DeletePlantDataByDateAPIView(APIView):
             target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except (TypeError, ValueError):
             return Response(
-                {"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"},
+                {"error": "Định dạng ngày không hợp lệ. Vui lòng dùng YYYY-MM-DD"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -747,7 +747,7 @@ class DeletePlantDataByDateAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "error": "Ban chi duoc xoa du lieu do chinh ban cap nhat.",
+                    "error": "Bạn chỉ được xóa dữ liệu do chính bạn cập nhật.",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -755,10 +755,16 @@ class DeletePlantDataByDateAPIView(APIView):
         sanluong_qs.delete()
         giophat_qs.delete()
 
+        nhamay_names = {
+            "vinhson": "Vĩnh Sơn",
+            "songhinh": "Sông Hinh",
+            "thuongkontum": "Thượng Kon Tum",
+        }
+        nhamay_name = nhamay_names.get(nhamay, nhamay)
         return Response(
             {
                 "success": True,
-                "message": f"Da xoa du lieu ngay {target_date.isoformat()} cho {nhamay}",
+                "message": f"Đã xóa dữ liệu ngày {target_date.isoformat()} cho {nhamay_name}",
                 "deleted": {
                     "sanluong": sanluong_deleted,
                     "giophat": giophat_deleted,
@@ -783,20 +789,20 @@ class ManualHydrologyDataAPIView(APIView):
     def post(self, request):
         if not user_can_write_hydrology(request.user):
             return Response(
-                {"error": "Ban khong co quyen nhap du lieu thuy van."},
+                {"error": "Bạn không có quyền nhập dữ liệu thủy văn."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         nhamay = normalize_plant_code(request.data.get("nhamay") or "songhinh")
         if nhamay not in ("songhinh", "vinhson", "thuongkontum"):
             return Response(
-                {"error": "Nha may khong hop le."},
+                {"error": "Nhà máy không hợp lệ."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not user_can_access_plant(request.user, nhamay):
             return Response(
-                {"error": "Ban khong co quyen nhap du lieu cho nha may nay."},
+                {"error": "Bạn không có quyền nhập dữ liệu cho nhà máy này."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -805,7 +811,7 @@ class ManualHydrologyDataAPIView(APIView):
             target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except (TypeError, ValueError):
             return Response(
-                {"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"},
+                {"error": "Định dạng ngày không hợp lệ. Vui lòng dùng YYYY-MM-DD"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -829,7 +835,7 @@ class ManualHydrologyDataAPIView(APIView):
             if existing:
                 if not user_can_modify_hydrology_object(request.user, existing):
                     return Response(
-                        {"error": "Ban chi duoc sua du lieu do chinh ban cap nhat."},
+                        {"error": "Bạn chỉ được sửa dữ liệu do chính bạn cập nhật."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
                 for field, value in defaults.items():
@@ -874,7 +880,7 @@ class ManualHydrologyDataAPIView(APIView):
                     existing_gio_phat,
                 ):
                     return Response(
-                        {"error": "Ban chi duoc sua du lieu gio phat do chinh ban cap nhat."},
+                        {"error": "Bạn chỉ được sửa dữ liệu giờ phát do chính bạn cập nhật."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
@@ -905,10 +911,16 @@ class ManualHydrologyDataAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        nhamay_names = {
+            "vinhson": "Vĩnh Sơn",
+            "songhinh": "Sông Hinh",
+            "thuongkontum": "Thượng Kon Tum",
+        }
+        nhamay_name = nhamay_names.get(nhamay, nhamay)
         return Response(
             {
                 "success": True,
-                "message": f"Da luu du lieu nhap tay ngay {target_date.isoformat()} cho {nhamay}",
+                "message": f"Đã lưu dữ liệu nhập tay ngày {target_date.isoformat()} cho {nhamay_name}",
                 "sanluong": {
                     "id": sanluong_obj.id,
                     "created": sanluong_created,

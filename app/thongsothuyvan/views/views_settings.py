@@ -54,7 +54,7 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
     if existing is None and not any(value is not None for value in numeric_defaults.values()):
         return None, False
     if existing is not None and not user_can_edit_hydrology_settings(user):
-        raise PermissionDenied("Ban khong co quyen sua thong so cai dat thuy van.")
+        raise PermissionDenied("Bạn không có quyền sửa thông số cài đặt thủy văn.")
 
     defaults = {**numeric_defaults}
     defaults["updated_by"] = user
@@ -206,7 +206,7 @@ class HydrologySettingsAPIView(APIView):
         )
         if not user_can_view_hydrology_settings(request.user):
             return Response(
-                {"error": "Ban khong co quyen xem thong so thuy van."},
+                {"error": "Bạn không có quyền xem thông số thủy văn cài đặt."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -214,12 +214,12 @@ class HydrologySettingsAPIView(APIView):
             year = int(request.query_params.get("year") or timezone.localdate().year)
         except (TypeError, ValueError):
             return Response(
-                {"error": "Nam khong hop le."},
+                {"error": "Năm không hợp lệ."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if year < 1900 or year > 2100:
             return Response(
-                {"error": "Nam khong hop le."},
+                {"error": "Năm không hợp lệ."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -249,7 +249,7 @@ class HydrologySettingsAPIView(APIView):
         )
         if not user_can_edit_hydrology_settings(request.user):
             return Response(
-                {"error": "Ban khong co quyen cai dat thong so thuy van."},
+                {"error": "Bạn không có quyền cài đặt thông số thủy văn."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -257,12 +257,12 @@ class HydrologySettingsAPIView(APIView):
             year = int(request.data.get("year") or timezone.localdate().year)
         except (TypeError, ValueError):
             return Response(
-                {"error": "Nam khong hop le."},
+                {"error": "Năm không hợp lệ."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if year < 1900 or year > 2100:
             return Response(
-                {"error": "Nam khong hop le."},
+                {"error": "Năm không hợp lệ."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -279,7 +279,7 @@ class HydrologySettingsAPIView(APIView):
                     continue
                 if not user_can_access_plant(request.user, nhamay):
                     return Response(
-                        {"error": "Ban khong co quyen cai dat nha may nay."},
+                        {"error": "Bạn không có quyền cài đặt nhà máy này."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
                 obj, _created = upsert_hydrology_setting(
@@ -298,7 +298,7 @@ class HydrologySettingsAPIView(APIView):
                     continue
                 if not user_can_access_plant(request.user, nhamay):
                     return Response(
-                        {"error": "Ban khong co quyen cai dat nha may nay."},
+                        {"error": "Bạn không có quyền cài đặt nhà máy này."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
                 for month_key, value in (month_values or {}).items():
@@ -374,7 +374,7 @@ class HydrologySettingsAPIView(APIView):
 
         except (TypeError, ValueError):
             return Response(
-                {"error": "Gia tri so khong hop le."},
+                {"error": "Giá trị số không hợp lệ."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -383,6 +383,6 @@ class HydrologySettingsAPIView(APIView):
                 "success": True,
                 "year": year,
                 "updated": changed,
-                "message": "Da luu thong so cai dat thuy van.",
+                "message": "Đã lưu thông số cài đặt thủy văn.",
             }
         )
