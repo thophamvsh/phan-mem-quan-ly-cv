@@ -43,7 +43,7 @@ def get_setting_field_value(nhamay, nam, loai, field, thang=0, tuan=0):
 
 
 def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
-    from .views_sanxuat import parse_float_or_none, user_can_modify_hydrology_object
+    from .views_sanxuat import parse_float_or_none, user_can_edit_hydrology_settings
 
     numeric_defaults = {
         field: parse_float_or_none(value)
@@ -53,8 +53,8 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
     existing = get_setting_record(nhamay, nam, loai, thang=thang, tuan=tuan)
     if existing is None and not any(value is not None for value in numeric_defaults.values()):
         return None, False
-    if existing is not None and not user_can_modify_hydrology_object(user, existing):
-        raise PermissionDenied("Ban chi duoc sua thong so cai dat do chinh ban cap nhat.")
+    if existing is not None and not user_can_edit_hydrology_settings(user):
+        raise PermissionDenied("Ban khong co quyen sua thong so cai dat thuy van.")
 
     defaults = {**numeric_defaults}
     defaults["updated_by"] = user
