@@ -385,13 +385,13 @@ def parse_gio_phat_records(rows, filter_date=None):
         padded_row = row + [''] * (5 - len(row))
 
         ngay_str = padded_row[1]
-        if not ngay_str or '/' not in ngay_str:
+        if not ngay_str:
             continue
 
-        try:
-            ngay = datetime.strptime(ngay_str, '%d/%m/%Y').date()
-        except ValueError:
+        parsed_dt = parse_date(ngay_str)
+        if not parsed_dt:
             continue
+        ngay = parsed_dt.date()
 
         if ngay.year < 2023 or ngay > get_allowed_sync_date():
             continue
