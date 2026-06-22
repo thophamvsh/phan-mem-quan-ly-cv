@@ -219,7 +219,18 @@ class ThietBiViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def qr(self, request, pk=None):
         thiet_bi = self.get_object()
-        qr_data = thiet_bi.ma_day_du or str(thiet_bi.pk)
+        from django.conf import settings
+        frontend_base = None
+        referer = request.META.get('HTTP_REFERER')
+        if referer:
+            from urllib.parse import urlparse
+            parsed_uri = urlparse(referer)
+            frontend_base = f"{parsed_uri.scheme}://{parsed_uri.netloc}"
+            
+        if not frontend_base:
+            frontend_base = getattr(settings, 'KHO_QR_FRONTEND_BASE', 'http://localhost:5173')
+            
+        qr_data = f"{frontend_base}/quanlyvanhanh/thietbi?detailId={thiet_bi.pk}"
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_M,

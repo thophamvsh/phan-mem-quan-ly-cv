@@ -3,8 +3,20 @@ from datetime import time, datetime
 from .models import ThietBi, VatTu, ThietBiVatTu, ThongSoVanHanh, AnToanThietBi, DinhKem, ThongSoToMay, ThongSoTram110KV, NguongThongSo
 
 
-def get_thiet_bi_qr_payload(obj):
-    return obj.ma_day_du or str(obj.pk)
+def get_thiet_bi_qr_payload(obj, request=None):
+    from django.conf import settings
+    frontend_base = None
+    if request:
+        referer = request.META.get('HTTP_REFERER')
+        if referer:
+            from urllib.parse import urlparse
+            parsed_uri = urlparse(referer)
+            frontend_base = f"{parsed_uri.scheme}://{parsed_uri.netloc}"
+            
+    if not frontend_base:
+        frontend_base = getattr(settings, 'KHO_QR_FRONTEND_BASE', 'http://localhost:5173')
+        
+    return f"{frontend_base}/quanlyvanhanh/thietbi?detailId={obj.pk}"
 
 
 def get_thiet_bi_qr_url(obj, request=None):
@@ -47,7 +59,7 @@ class ThietBiSerializer(serializers.ModelSerializer):
         return None
 
     def get_ma_qr(self, obj):
-        return get_thiet_bi_qr_payload(obj)
+        return get_thiet_bi_qr_payload(obj, self.context.get('request'))
 
     def get_qr_url(self, obj):
         return get_thiet_bi_qr_url(obj, self.context.get('request'))
@@ -73,7 +85,7 @@ class ThietBiListSerializer(serializers.ModelSerializer):
         return None
 
     def get_ma_qr(self, obj):
-        return get_thiet_bi_qr_payload(obj)
+        return get_thiet_bi_qr_payload(obj, self.context.get('request'))
 
     def get_qr_url(self, obj):
         return get_thiet_bi_qr_url(obj, self.context.get('request'))
@@ -250,7 +262,7 @@ class ThietBiDetailSerializer(serializers.ModelSerializer):
         return None
 
     def get_ma_qr(self, obj):
-        return get_thiet_bi_qr_payload(obj)
+        return get_thiet_bi_qr_payload(obj, self.context.get('request'))
 
     def get_qr_url(self, obj):
         return get_thiet_bi_qr_url(obj, self.context.get('request'))
