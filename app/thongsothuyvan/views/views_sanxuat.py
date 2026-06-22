@@ -484,7 +484,7 @@ class DashboardSummaryAPIView(APIView):
             ): record
             for record in ThongSoThuyVanCaiDat.objects.filter(
                 nha_may__in=plants,
-                nam=report_year,
+                nam__in=[report_year, report_year - 1],
             )
         }
 

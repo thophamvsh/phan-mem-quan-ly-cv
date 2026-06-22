@@ -252,7 +252,7 @@ class ThongSoThuyVanAPITests(APITestCase):
         self.assertEqual(setting.created_by, self.sh_user)
         self.assertEqual(setting.updated_by, self.sh_user)
 
-    def test_hydrology_settings_other_user_cannot_update_existing_record(self):
+    def test_hydrology_settings_other_user_with_permission_can_update_existing_record(self):
         url = reverse("thongsothuyvan:settings")
         other_user = User.objects.create_user(
             email="sh_other@example.com",
@@ -285,10 +285,36 @@ class ThongSoThuyVanAPITests(APITestCase):
             format="json",
         )
 
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        setting.refresh_from_db()
+        self.assertEqual(setting.sanluong_kehoach_nam, 1300)
+        self.assertEqual(setting.updated_by, other_user)
+
+        # Kiểm tra user khác KHÔNG có quyền can_edit_hydrology_settings
+        no_perm_user = User.objects.create_user(
+            email="sh_no_perm@example.com",
+            password="testpassword123!",
+            username="sh_no_perm",
+        )
+        UserProfile.objects.create(
+            user=no_perm_user,
+            ho_ten="Nhan vien khong co quyen",
+            nha_may=self.nha_may_sh,
+            can_view_hydrology_settings=True,
+            can_edit_hydrology_settings=False,
+        )
+        self.client.force_authenticate(user=no_perm_user)
+        response = self.client.post(
+            url,
+            {
+                "year": 2026,
+                "annual": {"songhinh": 1400},
+            },
+            format="json",
+        )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         setting.refresh_from_db()
-        self.assertEqual(setting.sanluong_kehoach_nam, 1200)
-        self.assertEqual(setting.updated_by, self.sh_user)
+        self.assertEqual(setting.sanluong_kehoach_nam, 1300)
 
     def test_google_sheet_preview_factory_scoping(self):
         url = reverse("thongsothuyvan:sync-preview")

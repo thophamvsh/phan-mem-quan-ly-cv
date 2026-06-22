@@ -185,6 +185,7 @@ def get_operating_capacity_range_for_reservoir(reservoir_key):
     return {"min": 0, "max": round(max(max_capacity - min_capacity, 0), 3)}
 
 
+@lru_cache(maxsize=1024)
 def get_settings_week_number(target_date):
     # 1. Thử tìm trong DB trước
     from .models import ThongSoThuyVanCaiDat
@@ -202,6 +203,7 @@ def get_settings_week_number(target_date):
     return iso_week
 
 
+@lru_cache(maxsize=1024)
 def get_setting_value(nha_may, target_date, loai, field, thang=0, tuan=0):
     nam = target_date.year
     if loai == ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN:

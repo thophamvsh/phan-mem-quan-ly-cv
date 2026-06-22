@@ -378,6 +378,11 @@ class HydrologySettingsAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if changed > 0:
+            from ..hydrology_services import get_settings_week_number, get_setting_value
+            get_settings_week_number.cache_clear()
+            get_setting_value.cache_clear()
+
         return Response(
             {
                 "success": True,

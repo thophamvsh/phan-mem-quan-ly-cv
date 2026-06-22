@@ -87,19 +87,7 @@ class ThongsoSanxuatSerializer(serializers.ModelSerializer):
             record = settings_lookup.get(
                 (nha_may, nam, loai, thang, tuan),
             )
-            if record:
-                return getattr(record, field, None)
-
-            # Fallback truy vấn trực tiếp từ database nếu cache settings_lookup không chứa record
-            record_db = ThongSoThuyVanCaiDat.objects.filter(
-                nha_may=nha_may,
-                nam=nam,
-                loai=loai,
-                thang=thang,
-                tuan=tuan,
-            ).only(field).first()
-            if record_db:
-                return getattr(record_db, field, None)
+            return getattr(record, field, None) if record else None
 
         if not hasattr(self, "_setting_value_cache"):
             self._setting_value_cache = {}
