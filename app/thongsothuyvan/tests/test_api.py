@@ -1,4 +1,6 @@
-from datetime import date
+from datetime import date, datetime, timezone as dt_timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -325,6 +327,83 @@ class ThongSoThuyVanAPITests(APITestCase):
         # 2. Cố tình preview Google Sheet của Vĩnh Sơn => Thất bại (403 Forbidden)
         response = self.client.get(url, {"nhamay": "vinhson", "date": "2026-05-30"})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("thongsothuyvan.sync_views.GoogleSheetHydrologyService")
+    def test_google_sheet_preview_returns_metadata(self, service_class):
+        url = reverse("thongsothuyvan:sync-preview")
+        service_class.return_value.preview_san_luong.return_value = SimpleNamespace(
+            data=[{"thoi_gian_str": "30/05/2026", "cot_g": 200.5}],
+            skipped_rows=[{"row": 1, "reason": "invalid_date"}],
+            warnings=["fallback"],
+            source_range="Sản lượng!all_values",
+        )
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.get(url, {"nhamay": "songhinh", "date": "2026-05-30"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"], response.data["rows"])
+        self.assertEqual(response.data["skipped_rows"][0]["reason"], "invalid_date")
+        self.assertEqual(response.data["warnings"], ["fallback"])
+        self.assertEqual(response.data["source_range"], "Sản lượng!all_values")
+
+    @patch("thongsothuyvan.sync_views.GoogleSheetHydrologyService")
+    def test_google_sheet_preview_hides_internal_google_error(self, service_class):
+        from thongsothuyvan.google_sheet_services import GoogleSheetSyncError
+
+        url = reverse("thongsothuyvan:sync-preview")
+        service_class.return_value.preview_san_luong.side_effect = GoogleSheetSyncError()
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.get(url, {"nhamay": "songhinh", "date": "2026-05-30"})
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.data["error"], "Không thể lấy dữ liệu từ Google Sheet. Vui lòng thử lại sau.")
+
+    def test_google_sheet_save_checks_permissions_before_writing(self):
+        url = reverse("thongsothuyvan:sync-save")
+        protected_time = datetime(2026, 5, 31, tzinfo=dt_timezone.utc)
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=protected_time,
+            cot_g=200.5,
+            created_by=self.vs_user,
+            updated_by=self.vs_user,
+        )
+
+        def production_payload(thoi_gian):
+            return {
+                "thoi_gian": thoi_gian,
+                "cot_c": "Ho A",
+                "cot_d": 1,
+                "cot_f": 2,
+                "cot_g": 3,
+                "cot_h": 4,
+                "cot_i": 5,
+                "cot_j": 6,
+                "cot_k": 7,
+                "cot_l": 8,
+            }
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.post(
+            url,
+            {
+                "data": [
+                    production_payload("2026-05-30T00:00:00Z"),
+                    production_payload("2026-05-31T00:00:00Z"),
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(
+            ThongsoSanxuat.objects.filter(
+                nha_may="songhinh",
+                thoi_gian=datetime(2026, 5, 30, tzinfo=dt_timezone.utc),
+            ).exists()
+        )
 
     def test_vrain_sync_anonymous_denied(self):
         # 1. Gọi API Sync Vrain không có xác thực
