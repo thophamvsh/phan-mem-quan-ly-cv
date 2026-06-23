@@ -368,3 +368,61 @@ class LeadershipEventReportTests(TestCase):
         # Kiểm tra chỉ đạo và link hành động
         self.assertIn("Cần theo dõi sát nhiệt độ", report)
         self.assertIn(f"[Chỉ đạo](/quanlyvanhanh/nhatkysukien?event={old_event.id})", report)
+
+    def test_build_event_statistics_report_is_compact_and_counts_statuses(self):
+        from nhatkyvanhanh.models import SuKien
+        from ai_tools.leadership_report import build_leadership_event_statistics_report
+
+        shown_event = SuKien.objects.create(
+            nha_may=self.sh,
+            thoi_gian_xay_ra=datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc),
+            ten_he_thong_thiet_bi="Governor H1",
+            hien_tuong_dien_bien="Noi dung dien bien rat dai khong nen dua vao bao cao thong ke gon.",
+            loai=SuKien.LoaiSuKien.SU_CO,
+            trang_thai=SuKien.TrangThaiXuLy.DANG_XU_LY,
+            ben_ghi_nhan_su_kien=self.user,
+        )
+        SuKien.objects.create(
+            nha_may=self.sh,
+            thoi_gian_xay_ra=datetime(2026, 6, 11, 8, 0, tzinfo=timezone.utc),
+            ten_he_thong_thiet_bi="Lighting SH",
+            hien_tuong_dien_bien="Short note",
+            loai=SuKien.LoaiSuKien.KHIEM_KHUYET,
+            trang_thai=SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
+        )
+        SuKien.objects.create(
+            nha_may=self.sh,
+            thoi_gian_xay_ra=datetime(2026, 6, 12, 9, 0, tzinfo=timezone.utc),
+            ten_he_thong_thiet_bi="Cooling SH",
+            hien_tuong_dien_bien="Done note",
+            loai=SuKien.LoaiSuKien.SU_CO,
+            trang_thai=SuKien.TrangThaiXuLy.XU_LY_XONG,
+            ben_ghi_nhan_su_kien=self.user,
+        )
+        SuKien.objects.create(
+            nha_may=self.vs,
+            thoi_gian_xay_ra=datetime(2026, 6, 12, 9, 0, tzinfo=timezone.utc),
+            ten_he_thong_thiet_bi="Excluded VS",
+            hien_tuong_dien_bien="Other plant",
+            loai=SuKien.LoaiSuKien.SU_CO,
+            trang_thai=SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
+        )
+
+        report = build_leadership_event_statistics_report(
+            plant_code="SH",
+            plant_name="Sông Hinh",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 30),
+        )
+
+        self.assertIn("**Tổng số:** 3 sự kiện", report)
+        self.assertIn("* **Chưa xử lý:** 1", report)
+        self.assertIn("* **Đang xử lý:** 1", report)
+        self.assertIn("* **Đã xử lý:** 1", report)
+        self.assertIn("Governor H1", report)
+        self.assertIn("Lighting SH", report)
+        self.assertIn("Cooling SH", report)
+        self.assertNotIn("Noi dung dien bien rat dai", report)
+        self.assertNotIn("Excluded VS", report)
+        self.assertIn("| STT | Thời gian | Tên sự kiện | Loại | Trạng thái | Chi tiết |", report)
+        self.assertIn(f"[Xem chi tiết](/quanlyvanhanh/nhatkysukien?event={shown_event.id})", report)

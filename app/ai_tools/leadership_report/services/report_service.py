@@ -12,6 +12,7 @@ from ..config import (
 from ..utils.formatting import (
     add_report_totals,
     as_float,
+    escape_markdown_cell,
     fmt_report_decimal,
     fmt_report_direct_pct,
     fmt_report_number,
@@ -636,19 +637,49 @@ def build_leadership_production_report(report_date):
 
 
 def build_leadership_event_report(reference_date=None):
-    from nhatkyvanhanh.models import SuKien
+    from django.db.models import OuterRef, Prefetch, Q, Subquery
     from django.utils import timezone
     from datetime import timedelta
+    from nhatkyvanhanh.models import KhacPhucSuKien, SuKien
 
     reference_date = reference_date or timezone.localdate()
     start_date = reference_date - timedelta(days=6)
+    plant_codes = ["SH", "VS", "TKT"]
+    pending_statuses = [
+        SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
+        SuKien.TrangThaiXuLy.DANG_XU_LY,
+    ]
+    latest_remediation_time = KhacPhucSuKien.objects.filter(
+        su_kien=OuterRef("pk")
+    ).order_by("-thoi_gian_xu_ly", "-created_at")
+    remediation_prefetch = Prefetch(
+        "khac_phuc_su_kiens",
+        queryset=KhacPhucSuKien.objects.order_by("-thoi_gian_xu_ly", "-created_at"),
+    )
 
     # 1. Thống kê sự kiện:
     # - Các sự kiện Chưa xử lý xong & Đang xử lý: lấy tất cả không giới hạn thời gian (tồn đọng)
     # - Các sự kiện Đã xử lý xong: chỉ lấy sự kiện được xử lý hoặc xảy ra trong vòng 7 ngày qua
-    all_events = SuKien.objects.filter(
-        nha_may__ma_nha_may__in=["SH", "VS", "TKT"]
-    ).select_related("nha_may")
+    all_events = (
+        SuKien.objects.filter(nha_may__ma_nha_may__in=plant_codes)
+        .select_related("nha_may")
+        .prefetch_related(remediation_prefetch)
+        .annotate(latest_remediation_time=Subquery(latest_remediation_time.values("thoi_gian_xu_ly")[:1]))
+        .filter(
+            Q(trang_thai__in=pending_statuses)
+            | Q(
+                trang_thai=SuKien.TrangThaiXuLy.XU_LY_XONG,
+                latest_remediation_time__date__gte=start_date,
+                latest_remediation_time__date__lte=reference_date,
+            )
+            | Q(
+                trang_thai=SuKien.TrangThaiXuLy.XU_LY_XONG,
+                latest_remediation_time__isnull=True,
+                thoi_gian_xay_ra__date__gte=start_date,
+                thoi_gian_xay_ra__date__lte=reference_date,
+            )
+        )
+    )
 
     stats = {
         "SH": {"total": 0, "chua_xu_ly": 0, "dang_xu_ly": 0, "xu_ly_xong": 0},
@@ -675,10 +706,14 @@ def build_leadership_event_report(reference_date=None):
                         stats[code]["total"] += 1
 
     # 2. Danh sách sự kiện chưa khắc phục xong (tồn đọng)
-    pending_events = SuKien.objects.filter(
-        nha_may__ma_nha_may__in=["SH", "VS", "TKT"],
-        trang_thai__in=[SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG, SuKien.TrangThaiXuLy.DANG_XU_LY]
-    ).order_by("-thoi_gian_xay_ra")
+    pending_events = (
+        SuKien.objects.filter(
+            nha_may__ma_nha_may__in=plant_codes,
+            trang_thai__in=pending_statuses,
+        )
+        .select_related("nha_may")
+        .order_by("-thoi_gian_xay_ra")
+    )
 
     # Format bảng markdown cho các sự kiện tồn đọng
     rows = []
@@ -705,7 +740,16 @@ def build_leadership_event_report(reference_date=None):
         action_link = f"[Chỉ đạo](/quanlyvanhanh/nhatkysukien?event={event.id})"
 
         rows.append(
-            f"| {plant_name} | {device_name} | {event.get_loai_display()} | {time_str} | {hien_tuong} | {status_label} | {chi_dao_text} | {action_link} |"
+            "| {plant_name} | {device_name} | {event_type} | {time} | {description} | {status} | {direction} | {action} |".format(
+                plant_name=escape_markdown_cell(plant_name),
+                device_name=escape_markdown_cell(device_name),
+                event_type=escape_markdown_cell(event.get_loai_display()),
+                time=escape_markdown_cell(time_str),
+                description=escape_markdown_cell(hien_tuong),
+                status=escape_markdown_cell(status_label),
+                direction=escape_markdown_cell(chi_dao_text),
+                action=action_link,
+            )
         )
 
     pending_table = ""
@@ -730,4 +774,88 @@ def build_leadership_event_report(reference_date=None):
 {pending_table}
 
 **Tham mưu:** Ngài có thể nhấn vào liên kết **[Chỉ đạo]** ở cột Thao tác để xem chi tiết sự kiện và cho ý kiến chỉ đạo trực tiếp trên hệ thống.
+""".strip()
+
+
+def _event_statistics_period_label(start_date, end_date, all_time):
+    if all_time:
+        return "Tất cả dữ liệu"
+    if start_date == end_date:
+        return _fmt_report_date(start_date)
+    return f"{_fmt_report_date(start_date)} - {_fmt_report_date(end_date)}"
+
+
+def build_leadership_event_statistics_report(
+    *,
+    plant_code,
+    plant_name,
+    start_date=None,
+    end_date=None,
+    all_time=False,
+    include_details=True,
+):
+    from nhatkyvanhanh.models import SuKien
+
+    status_order = [
+        SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
+        SuKien.TrangThaiXuLy.DANG_XU_LY,
+        SuKien.TrangThaiXuLy.XU_LY_XONG,
+    ]
+    status_labels = {
+        SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG: "Chưa xử lý",
+        SuKien.TrangThaiXuLy.DANG_XU_LY: "Đang xử lý",
+        SuKien.TrangThaiXuLy.XU_LY_XONG: "Đã xử lý",
+    }
+
+    queryset = (
+        SuKien.objects.filter(nha_may__ma_nha_may=plant_code)
+        .select_related("nha_may")
+        .order_by("-thoi_gian_xay_ra", "-created_at")
+    )
+    if not all_time:
+        queryset = queryset.filter(
+            thoi_gian_xay_ra__date__gte=start_date,
+            thoi_gian_xay_ra__date__lte=end_date,
+        )
+
+    events = list(queryset)
+    stats = {status: 0 for status in status_order}
+    for event in events:
+        if event.trang_thai in stats:
+            stats[event.trang_thai] += 1
+
+    # Kept in the signature for existing callers; statistics reports always expose detail links.
+    include_details = True
+    header = "| STT | Thời gian | Tên sự kiện | Loại | Trạng thái | Chi tiết |"
+    separator = "|-----|-----------|-------------|------|------------|----------|"
+
+    rows = []
+    for index, event in enumerate(events, start=1):
+        cells = [
+            str(index),
+            _fmt_report_datetime(event.thoi_gian_xay_ra),
+            escape_markdown_cell(event.ten_he_thong_thiet_bi),
+            escape_markdown_cell(event.get_loai_display()),
+            escape_markdown_cell(status_labels.get(event.trang_thai, event.get_trang_thai_display())),
+        ]
+        cells.append(f"[Xem chi tiết](/quanlyvanhanh/nhatkysukien?event={event.id})")
+        rows.append("| " + " | ".join(cells) + " |")
+
+    if not rows:
+        empty_cells = ["-", "-", "-", "-", "-", "-"]
+        rows.append("| " + " | ".join(empty_cells) + " |")
+
+    return f"""
+### Thống kê sự kiện {plant_name}
+
+**Thời gian:** {_event_statistics_period_label(start_date, end_date, all_time)}
+
+**Tổng số:** {len(events)} sự kiện
+* **Chưa xử lý:** {stats[SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG]}
+* **Đang xử lý:** {stats[SuKien.TrangThaiXuLy.DANG_XU_LY]}
+* **Đã xử lý:** {stats[SuKien.TrangThaiXuLy.XU_LY_XONG]}
+
+{header}
+{separator}
+{chr(10).join(rows)}
 """.strip()

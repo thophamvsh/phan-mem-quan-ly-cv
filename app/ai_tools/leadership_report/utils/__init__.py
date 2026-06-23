@@ -1,6 +1,7 @@
 from .formatting import (
     add_report_totals,
     as_float,
+    escape_markdown_cell,
     fmt_report_decimal,
     fmt_report_direct_pct,
     fmt_report_number,
@@ -13,6 +14,7 @@ from .text import normalize_text, normalize_title
 __all__ = [
     "add_report_totals",
     "as_float",
+    "escape_markdown_cell",
     "fmt_report_decimal",
     "fmt_report_direct_pct",
     "fmt_report_number",

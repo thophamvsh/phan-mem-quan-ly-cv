@@ -13,7 +13,7 @@ from ai_tools.leadership_report.services.report_service import (
     _weather_forecast_rows,
 )
 from khovattu.models import Bang_nha_may
-from nhatkyvanhanh.models import SuKien
+from nhatkyvanhanh.models import KhacPhucSuKien, SuKien
 from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
 
 
@@ -175,3 +175,43 @@ class LeadershipEventEdgeTests(TestCase):
         self.assertIn("H" * 47 + "...", report)
         self.assertIn("C" * 37 + "...", report)
         self.assertIn(f"event={pending.id}", report)
+
+    def test_event_report_escapes_pending_markdown_cells(self):
+        pending = SuKien.objects.create(
+            nha_may=self.plant,
+            thoi_gian_xay_ra=datetime(2026, 6, 13, tzinfo=timezone.utc),
+            ten_he_thong_thiet_bi="Pump | Line",
+            hien_tuong_dien_bien="Leak | high\nneeds check",
+            chi_dao="Check | isolate\r\nthen report",
+            trang_thai=SuKien.TrangThaiXuLy.CHUA_XU_LY_XONG,
+        )
+
+        report = build_leadership_event_report(date(2026, 6, 13))
+
+        self.assertIn("Pump \\| Line", report)
+        self.assertIn("Leak \\| high needs check", report)
+        self.assertIn("Check \\| isolate then report", report)
+        self.assertIn(f"event={pending.id}", report)
+
+    def test_resolved_event_stats_use_latest_remediation_time(self):
+        event = SuKien.objects.create(
+            nha_may=self.plant,
+            thoi_gian_xay_ra=datetime(2026, 6, 12, tzinfo=timezone.utc),
+            ten_he_thong_thiet_bi="Resolved twice",
+            hien_tuong_dien_bien="Resolved event",
+            trang_thai=SuKien.TrangThaiXuLy.XU_LY_XONG,
+            ben_ghi_nhan_su_kien=self.user,
+        )
+        KhacPhucSuKien.objects.create(
+            su_kien=event,
+            thoi_gian_xu_ly=datetime(2026, 6, 12, tzinfo=timezone.utc),
+        )
+        KhacPhucSuKien.objects.create(
+            su_kien=event,
+            thoi_gian_xu_ly=datetime(2026, 6, 20, tzinfo=timezone.utc),
+        )
+
+        report = build_leadership_event_report(date(2026, 6, 13))
+
+        self.assertIn("0 sự kiện", report)
+        self.assertNotIn("Resolved twice", report)

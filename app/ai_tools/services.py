@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from .leadership_report import (
     expand_leadership_menu_choice,
+    get_event_statistics_request,
     get_three_plant_production_report_date,
     has_leadership_production_menu_context,
     has_leadership_rainfall_weather_menu_context,
@@ -24,6 +25,7 @@ from .leadership_report import (
     rainfall_weather_report_response,
     weekly_limit_report_response,
     event_report_response,
+    event_statistics_response,
 )
 from .permissions import (
     can_user_use_ai_tool,
@@ -923,6 +925,18 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
 
     menu_history = get_conversation(user, session_id, limit=MODEL_HISTORY_LIMIT)
     if is_leader:
+        event_statistics_request = get_event_statistics_request(content, menu_history)
+        if event_statistics_request:
+            return event_statistics_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="direct_request",
+                request=event_statistics_request,
+            )
         direct_report_date = get_three_plant_production_report_date(content)
         if direct_report_date:
             return production_report_response(

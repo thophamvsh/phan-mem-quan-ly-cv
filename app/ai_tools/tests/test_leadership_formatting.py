@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 from ai_tools.leadership_report.utils.formatting import (
     add_report_totals,
     as_float,
+    escape_markdown_cell,
     fmt_report_decimal,
     fmt_report_direct_pct,
     fmt_report_number,
@@ -34,6 +35,11 @@ class LeadershipFormattingTests(SimpleTestCase):
         self.assertEqual(fmt_report_pct(None, 100), "-")
         self.assertEqual(fmt_report_direct_pct(12.34), "12,3%")
         self.assertEqual(fmt_report_direct_pct(None), "-")
+
+    def test_escape_markdown_cell_keeps_table_cells_valid(self):
+        self.assertEqual(escape_markdown_cell(None), "-")
+        self.assertEqual(escape_markdown_cell(""), "-")
+        self.assertEqual(escape_markdown_cell("A | B\r\nC"), r"A \| B C")
 
     def test_totals_and_safe_record_conversion(self):
         totals = {"a": None, "b": 2.0}

@@ -1,4 +1,5 @@
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase
@@ -7,6 +8,13 @@ from ai_tools.leadership_report.services import response_service
 
 
 class LeadershipResponseTests(SimpleTestCase):
+    def test_services_package_exports_event_report_api(self):
+        from ai_tools.leadership_report import services
+
+        self.assertIs(services.event_report_response, response_service.event_report_response)
+        self.assertTrue(callable(services.build_leadership_event_report))
+        self.assertTrue(callable(services.has_leadership_event_menu_context))
+
     def _assert_response_contract(self, function, builder_name, choice, source_key, **extra):
         user = Mock(name="user")
         report_date = extra.get("report_date")
@@ -86,3 +94,84 @@ class LeadershipResponseTests(SimpleTestCase):
             "event_report",
             "event_report_source",
         )
+
+    def test_event_statistics_response_asks_for_time_when_missing(self):
+        user = Mock(name="user")
+        request = SimpleNamespace(
+            plant_code="SH",
+            plant_name="Sông Hinh",
+            start_date=None,
+            end_date=None,
+            all_time=False,
+            include_details=False,
+            needs_time_clarification=True,
+        )
+        with (
+            patch.object(response_service, "build_leadership_event_statistics_report") as builder,
+            patch.object(response_service, "save_exchange") as save_exchange,
+            patch.object(response_service.time, "time", return_value=100.125),
+        ):
+            response = response_service.event_statistics_response(
+                user=user,
+                session_id="session-1",
+                content="thong ke su kien Song Hinh",
+                provider="openai",
+                selected_model="model-x",
+                start_time=100.0,
+                source="direct",
+                request=request,
+            )
+
+        builder.assert_not_called()
+        self.assertIn("Sông Hinh", response["response"])
+        self.assertIn("thời gian nào", response["response"])
+        self.assertIn("tất cả", response["response"])
+        saved = save_exchange.call_args.kwargs
+        self.assertEqual(saved["assistant_message"], response["response"])
+        self.assertEqual(saved["meta"]["leadership_menu_choice"], "event_statistics")
+        self.assertEqual(saved["meta"]["plant_code"], "SH")
+        self.assertTrue(saved["meta"]["needs_time_clarification"])
+
+    def test_event_statistics_response_builds_report_when_time_is_present(self):
+        user = Mock(name="user")
+        request = SimpleNamespace(
+            plant_code="VS",
+            plant_name="Vĩnh Sơn",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 30),
+            all_time=False,
+            include_details=True,
+            needs_time_clarification=False,
+        )
+        with (
+            patch.object(response_service, "build_leadership_event_statistics_report", return_value="REPORT") as builder,
+            patch.object(response_service, "save_exchange") as save_exchange,
+            patch.object(response_service.time, "time", return_value=100.125),
+        ):
+            response = response_service.event_statistics_response(
+                user=user,
+                session_id="session-1",
+                content="thong ke su kien Vinh Son thang 6/2026 xem chi tiet",
+                provider="openai",
+                selected_model="model-x",
+                start_time=100.0,
+                source="direct",
+                request=request,
+            )
+
+        builder.assert_called_once_with(
+            plant_code="VS",
+            plant_name="Vĩnh Sơn",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 30),
+            all_time=False,
+            include_details=True,
+        )
+        self.assertEqual(response["response"], "REPORT")
+        saved = save_exchange.call_args.kwargs
+        self.assertEqual(saved["meta"]["leadership_menu_choice"], "event_statistics")
+        self.assertEqual(saved["meta"]["event_statistics_source"], "direct")
+        self.assertEqual(saved["meta"]["plant_code"], "VS")
+        self.assertEqual(saved["meta"]["start_date"], "2026-06-01")
+        self.assertEqual(saved["meta"]["end_date"], "2026-06-30")
+        self.assertFalse(saved["meta"]["all_time"])

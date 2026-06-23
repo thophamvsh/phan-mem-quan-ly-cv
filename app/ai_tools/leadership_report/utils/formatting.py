@@ -35,6 +35,15 @@ def fmt_report_direct_pct(value):
     return f"{float(value):.1f}%".replace(".", ",")
 
 
+def escape_markdown_cell(value):
+    if value is None:
+        return "-"
+    text = " ".join(str(value).split())
+    if not text:
+        return "-"
+    return text.replace("|", r"\|")
+
+
 def add_report_totals(totals, metrics):
     for key, value in metrics.items():
         if value is not None:

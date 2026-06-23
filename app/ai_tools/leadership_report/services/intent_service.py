@@ -1,10 +1,22 @@
 import re
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from django.utils import timezone
 
 from ..config import LEADERSHIP_TITLES
 from ..utils.text import normalize_text, normalize_title
+
+
+@dataclass(frozen=True)
+class EventStatisticsRequest:
+    plant_code: str
+    plant_name: str
+    start_date: date | None = None
+    end_date: date | None = None
+    all_time: bool = False
+    include_details: bool = False
+    needs_time_clarification: bool = False
 
 
 def is_leadership_title(title):
@@ -144,6 +156,164 @@ def _extract_report_date(content):
         return date(year, month, day)
     except ValueError:
         return None
+
+
+def _date_from_match(match):
+    day = int(match.group(1))
+    month = int(match.group(2))
+    year_text = match.group(3)
+    if year_text:
+        year = int(year_text)
+        if year < 100:
+            year += 2000
+    else:
+        year = timezone.localdate().year
+
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _date_from_parts(day_text, month_text, year_text=None):
+    day = int(day_text)
+    month = int(month_text)
+    if year_text:
+        year = int(year_text)
+        if year < 100:
+            year += 2000
+    else:
+        year = timezone.localdate().year
+
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _extract_event_statistics_period(content):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s/-]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    today = timezone.localdate()
+
+    if any(phrase in normalized for phrase in ("tat ca", "toan bo", "khong gioi han")):
+        return None, None, True
+    if "hom nay" in normalized or "ngay hom nay" in normalized:
+        return today, today, False
+    if "hom qua" in normalized or "ngay hom qua" in normalized:
+        yesterday = today - timedelta(days=1)
+        return yesterday, yesterday, False
+    if "thang nay" in normalized:
+        start = date(today.year, today.month, 1)
+        next_month = date(today.year + int(today.month == 12), 1 if today.month == 12 else today.month + 1, 1)
+        return start, next_month - timedelta(days=1), False
+    if "nam nay" in normalized:
+        return date(today.year, 1, 1), date(today.year, 12, 31), False
+
+    days_match = re.search(r"(\d{1,3})\s*ngay\s*qua", normalized)
+    if days_match:
+        days_count = max(int(days_match.group(1)), 1)
+        return today - timedelta(days=days_count - 1), today, False
+
+    range_match = re.search(
+        r"tu\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\s+(?:den|toi|-)\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?",
+        normalize_text(content),
+    )
+    if range_match:
+        start = _date_from_parts(range_match.group(1), range_match.group(2), range_match.group(3))
+        end = _date_from_parts(range_match.group(4), range_match.group(5), range_match.group(6))
+        if start and end:
+            return (end, start, False) if start > end else (start, end, False)
+
+    month_match = re.search(r"thang\s+(\d{1,2})(?:[/-](\d{2,4}))?", normalized)
+    if month_match:
+        month = int(month_match.group(1))
+        year = int(month_match.group(2)) if month_match.group(2) else today.year
+        if year < 100:
+            year += 2000
+        if 1 <= month <= 12:
+            start = date(year, month, 1)
+            next_month = date(year + int(month == 12), 1 if month == 12 else month + 1, 1)
+            return start, next_month - timedelta(days=1), False
+
+    year_match = re.search(r"nam\s+(\d{4})", normalized)
+    if year_match:
+        year = int(year_match.group(1))
+        return date(year, 1, 1), date(year, 12, 31), False
+
+    date_match = re.search(
+        r"(?:ngay\s*)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?",
+        normalize_text(content),
+    )
+    if date_match:
+        target = _date_from_match(date_match)
+        if target:
+            return target, target, False
+
+    return None, None, False
+
+
+def _event_statistics_context_from_history(history):
+    last_assistant = normalize_text(_last_assistant_message(history))
+    if "muon thong ke su kien cua" not in last_assistant:
+        return None
+
+    plant_patterns = (
+        ("SH", "Sông Hinh", ("song hinh", "songhinh")),
+        ("VS", "Vĩnh Sơn", ("vinh son", "vinhson")),
+        ("TKT", "Thượng Kon Tum", ("thuong kon tum", "thuongkontum", "kon tum")),
+    )
+    for plant_code, plant_name, aliases in plant_patterns:
+        if any(alias in last_assistant for alias in aliases):
+            return plant_code, plant_name
+    return None
+
+
+def get_event_statistics_request(content, history=None):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s/-]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return None
+
+    has_event = "su kien" in normalized or "thiet bi su kien" in normalized
+    has_statistics = any(
+        keyword in normalized
+        for keyword in ("thong ke", "bao cao", "tong hop", "tinh hinh", "dem")
+    )
+    context_plant = _event_statistics_context_from_history(history)
+    if not (has_event and has_statistics) and not context_plant:
+        return None
+
+    plant_match = None
+    plant_patterns = (
+        ("SH", "Sông Hinh", ("song hinh", "songhinh", "sh")),
+        ("VS", "Vĩnh Sơn", ("vinh son", "vinhson", "vs")),
+        ("TKT", "Thượng Kon Tum", ("thuong kon tum", "thuongkontum", "kon tum", "kontum", "tkt")),
+    )
+    for plant_code, plant_name, aliases in plant_patterns:
+        if any(re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", normalized) for alias in aliases):
+            plant_match = (plant_code, plant_name)
+            break
+
+    if not plant_match:
+        plant_match = context_plant
+
+    if not plant_match:
+        return None
+
+    start_date, end_date, all_time = _extract_event_statistics_period(content)
+    include_details = any(keyword in normalized for keyword in ("chi tiet", "xem", "link", "duong dan"))
+    return EventStatisticsRequest(
+        plant_code=plant_match[0],
+        plant_name=plant_match[1],
+        start_date=start_date,
+        end_date=end_date,
+        all_time=all_time,
+        include_details=include_details,
+        needs_time_clarification=not all_time and not (start_date and end_date),
+    )
 
 
 def get_three_plant_production_report_date(content):

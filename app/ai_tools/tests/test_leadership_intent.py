@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 
 from ai_tools.leadership_report import (
     expand_leadership_menu_choice,
+    get_event_statistics_request,
     get_three_plant_production_report_date,
     has_leadership_event_menu_context,
     has_leadership_production_menu_context,
@@ -87,3 +88,29 @@ class LeadershipIntentTests(SimpleTestCase):
         for content in ("", "muc nuoc gioi han tuan", "bao cao muc nuoc"):
             with self.subTest(content=content):
                 self.assertFalse(is_weekly_limit_report_request(content))
+
+    @patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 6, 13))
+    def test_event_statistics_request_requires_or_extracts_time(self, _localdate):
+        request = get_event_statistics_request("thong ke su kien Song Hinh thang 6/2026")
+        self.assertEqual(request.plant_code, "SH")
+        self.assertEqual(request.start_date, date(2026, 6, 1))
+        self.assertEqual(request.end_date, date(2026, 6, 30))
+        self.assertFalse(request.needs_time_clarification)
+
+        missing_time = get_event_statistics_request("thong ke su kien Vinh Son")
+        self.assertEqual(missing_time.plant_code, "VS")
+        self.assertTrue(missing_time.needs_time_clarification)
+
+    def test_event_statistics_request_uses_clarification_context_for_all_time(self):
+        history = [
+            {
+                "role": "assistant",
+                "content": "Anh/chị muốn thống kê sự kiện của Sông Hinh trong khoảng thời gian nào, hay muốn hiển thị tất cả?",
+            }
+        ]
+
+        request = get_event_statistics_request("tat ca", history)
+
+        self.assertEqual(request.plant_code, "SH")
+        self.assertTrue(request.all_time)
+        self.assertFalse(request.needs_time_clarification)
