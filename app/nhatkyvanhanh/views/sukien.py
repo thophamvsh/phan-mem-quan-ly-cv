@@ -297,9 +297,9 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         }
 
         for item in events_qs.values("trang_thai").annotate(total=Count("id")):
-            status = _normalize_event_status(item["trang_thai"])
-            if status in base_status_counts:
-                base_status_counts[status] += item["total"]
+            event_status = _normalize_event_status(item["trang_thai"])
+            if event_status in base_status_counts:
+                base_status_counts[event_status] += item["total"]
 
         for item in events_qs.values("loai").annotate(total=Count("id")):
             event_type = _normalize_event_type(item["loai"])
@@ -308,9 +308,9 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
 
         for item in events_qs.values("loai", "trang_thai").annotate(total=Count("id")):
             event_type = _normalize_event_type(item["loai"])
-            status = _normalize_event_status(item["trang_thai"])
-            if event_type in status_by_type and status in status_by_type[event_type]:
-                status_by_type[event_type][status] += item["total"]
+            event_status = _normalize_event_status(item["trang_thai"])
+            if event_type in status_by_type and event_status in status_by_type[event_type]:
+                status_by_type[event_type][event_status] += item["total"]
 
         filtered_events_qs = events_qs
         if loai in dict(SuKien.LoaiSuKien.choices):

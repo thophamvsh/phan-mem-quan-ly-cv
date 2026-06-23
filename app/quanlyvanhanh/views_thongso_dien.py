@@ -326,6 +326,13 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["delete"])
     def bulk_delete(self, request):
+        ids = request.data.get("ids", [])
+        if not ids:
+            return Response(
+                {"error": "Can cung cap danh sach ID can xoa"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         queryset = self.get_queryset().filter(id__in=ids)
         if not request.user.is_superuser:
             forbidden_exists = queryset.filter(nguoi_nhap__isnull=False).exclude(nguoi_nhap=request.user).exists()

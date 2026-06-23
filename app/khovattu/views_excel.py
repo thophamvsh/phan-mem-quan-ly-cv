@@ -551,10 +551,6 @@ class ImportDeNghiNhapAPIView(APIView):
         if not file:
             return Response({'error': 'Không có file được upload'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Xác định format được sử dụng
-            use_vietnamese_format = not missing_vietnamese
-
-
         if not ma_nha_may:
             return Response({'error': 'Thiếu mã nhà máy'}, status=status.HTTP_400_BAD_REQUEST)
 
