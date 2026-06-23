@@ -300,6 +300,48 @@ class ThongsoGioPhat(models.Model):
         verbose_name_plural = "Thông số giờ phát"
 
 
+class ThongSoThuyVanThucTe(models.Model):
+    nha_may = models.CharField(max_length=50)
+    ngay = models.DateField()
+    muc_nuoc_ho = models.FloatField(null=True, blank=True)
+    qve = models.FloatField(null=True, blank=True)
+    muc_nuoc_ho_a = models.FloatField(null=True, blank=True)
+    muc_nuoc_ho_b = models.FloatField(null=True, blank=True)
+    muc_nuoc_ho_c = models.FloatField(null=True, blank=True)
+    qve_ho_a = models.FloatField(null=True, blank=True)
+    qve_ho_b = models.FloatField(null=True, blank=True)
+    qve_ho_c = models.FloatField(null=True, blank=True)
+    qve_tong = models.FloatField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsothuyvanthucte_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="thongsothuyvanthucte_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ngay", "nha_may"]
+        unique_together = ("nha_may", "ngay")
+        indexes = [
+            models.Index(fields=["nha_may", "-ngay"], name="tstt_plant_day_desc_idx"),
+        ]
+        verbose_name = "Thủy văn theo dõi"
+        verbose_name_plural = "Thủy văn theo dõi"
+
+    def __str__(self):
+        return f"{self.nha_may} {self.ngay}"
+
+
 class TramDoMuaVrain(models.Model):
     Thoi_gian = models.DateTimeField(verbose_name="Thời gian")
     Xa_Ea_M_doan = models.FloatField(verbose_name="Xã Ea M'đoan", null=True, blank=True)

@@ -9,6 +9,7 @@ from .google_sheet_services import (
     INVALID_SYNC_DATE_MESSAGE,
     MIN_SAN_LUONG_FILLED_FIELDS,
     SAN_LUONG_SYNC_FIELDS,
+    THUC_TE_SYNC_FIELDS,
     GoogleSheetHydrologyService,
     GoogleSheetSyncError,
     count_san_luong_filled_fields,
@@ -20,7 +21,10 @@ from .google_sheet_services import (
     get_san_luong_rows,
     get_san_luong_sheet_row_number,
     get_spreadsheet_id,
+    get_stats_export_spreadsheet_id,
     get_sync_date_error,
+    get_thuc_te_rows,
+    get_thuc_te_sheet_row_number,
     is_date_after_allowed,
     is_san_luong_row_complete_enough,
     parse_cot_c,
@@ -31,6 +35,8 @@ from .google_sheet_services import (
     parse_item_date,
     parse_san_luong_records,
     parse_san_luong_records_with_metadata,
+    parse_thuc_te_records,
+    parse_thuc_te_records_with_metadata,
     parse_to_may,
     prefix_sheet_range_rows,
     safe_float,
@@ -265,6 +271,95 @@ class SaveGioPhatAPIView(APIView):
 
         try:
             result = GoogleSheetHydrologyService().save_gio_phat(
+                data_list=data_list,
+                nhamay=nhamay,
+                user=request.user,
+                can_modify=user_can_modify_hydrology_object,
+            )
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response(
+            {
+                "success": True,
+                "message": (
+                    f"Đã lưu thành công. Tạo mới: {result.saved_count}, "
+                    f"Cập nhật: {result.updated_count}"
+                ),
+            }
+        )
+
+
+class PreviewThuyVanThucTeAPIView(APIView):
+    """API đọc thông số mực nước hồ và Qve thực tế từ Google Sheet export."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        nhamay = normalize_plant_code(request.query_params.get("nhamay", "songhinh"))
+        if not user_can_access_plant(request.user, nhamay):
+            return Response(
+                {"error": "Bạn không có quyền truy cập dữ liệu của nhà máy này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        filter_date_str = request.query_params.get("date")
+        filter_date = parse_filter_date(filter_date_str)
+        if filter_date_str and not filter_date:
+            return Response({"error": "Dinh dang ngay khong hop le. Vui long dung YYYY-MM-DD"}, status=400)
+
+        sync_date_error = get_sync_date_error(filter_date_str, filter_date)
+        if sync_date_error:
+            return Response(sync_date_error, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = GoogleSheetHydrologyService().preview_thuc_te(nhamay, filter_date)
+        except GoogleSheetSyncError as exc:
+            return _google_sheet_error_response(exc)
+
+        return Response(_preview_payload(result, f"Đã lấy dữ liệu thông số thủy văn thực tế ({nhamay})"))
+
+
+class SaveThuyVanThucTeAPIView(APIView):
+    """API lưu thông số mực nước hồ và Qve thực tế vào database."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not user_can_write_hydrology(request.user):
+            return Response(
+                {"error": "Ban khong co quyen dong bo du lieu thuy van thuc te."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        data_list = request.data.get("data", [])
+        nhamay = normalize_plant_code(request.query_params.get("nhamay", "songhinh"))
+        if not user_can_access_plant(request.user, nhamay):
+            return Response(
+                {"error": "Bạn không có quyền đồng bộ dữ liệu của nhà máy này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not data_list:
+            return Response({"error": "Không có dữ liệu để lưu"}, status=400)
+
+        allowed_sync_date = get_allowed_sync_date()
+        invalid_date_rows = [
+            item for item in data_list
+            if item.get("ngay") and is_date_after_allowed(item.get("ngay"), allowed_sync_date)
+        ]
+        if invalid_date_rows:
+            return Response(
+                {
+                    "success": False,
+                    "error": INVALID_SYNC_DATE_MESSAGE,
+                    "max_allowed_date": str(allowed_sync_date),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = GoogleSheetHydrologyService().save_thuc_te(
                 data_list=data_list,
                 nhamay=nhamay,
                 user=request.user,

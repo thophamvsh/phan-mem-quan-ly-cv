@@ -42,6 +42,7 @@ AI_TOOLS_ANTHROPIC_MODEL = os.environ.get("AI_TOOLS_ANTHROPIC_MODEL", "claude-so
 DOCUMENTS_USE_CELERY = env_bool("DOCUMENTS_USE_CELERY", False)
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+CELERY_TIMEZONE = os.environ.get("CELERY_TIMEZONE", "Asia/Ho_Chi_Minh")
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "1800"))
 # Cài đặt thời gian lưu trữ log (theo ngày). Mặc định là 180 ngày. Các log cũ hơn sẽ bị xóa tự động.
@@ -57,6 +58,10 @@ CELERY_BEAT_SCHEDULE = {
     "sync-vrain-rainfall-daily": {
         "task": "thongsothuyvan.tasks.sync_vrain_daily_rainfall_task",
         "schedule": crontab(hour=7, minute=0),
+    },
+    "sync-missing-thuy-van-thuc-te-daily": {
+        "task": "thongsothuyvan.tasks.sync_missing_thuy_van_thuc_te_daily_task",
+        "schedule": crontab(hour=8, minute=0),
     },
     "clear-old-logs-daily": {
         "task": "core.tasks.clear_old_logs_task",

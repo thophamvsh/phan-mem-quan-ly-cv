@@ -14,6 +14,7 @@ from .models import (
     MucnuocQuytrinh,
     ThongsoGioPhat,
     ThongSoThuyVanCaiDat,
+    ThongSoThuyVanThucTe,
     ThongsoSanxuat,
 )
 
@@ -241,6 +242,12 @@ class MucnuocQuytrinhSerializer(serializers.ModelSerializer):
 class ThongsoGioPhatSerializer(serializers.ModelSerializer):
     class Meta:
         model = ThongsoGioPhat
+        fields = "__all__"
+
+
+class ThongSoThuyVanThucTeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ThongSoThuyVanThucTe
         fields = "__all__"
 
 

@@ -1,13 +1,21 @@
 from datetime import date
+from unittest.mock import patch
 
+from gspread.exceptions import WorksheetNotFound
 from django.test import SimpleTestCase
 
-from ..google_sheet_services import GoogleSheetHydrologyService, get_gio_phat_sheet_row_number, get_san_luong_sheet_row_number
+from ..google_sheet_services import (
+    GoogleSheetHydrologyService,
+    get_gio_phat_sheet_row_number,
+    get_san_luong_sheet_row_number,
+    get_thuc_te_sheet_row_number,
+)
 from ..sync_views import (
     get_gio_phat_rows,
     get_san_luong_rows,
     parse_gio_phat_records_with_metadata,
     parse_san_luong_records_with_metadata,
+    parse_thuc_te_records_with_metadata,
     safe_float,
     safe_float_vinhson_decimal,
     safe_int_vinhson,
@@ -65,6 +73,10 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
         self.assertEqual(get_san_luong_sheet_row_number(date(2023, 1, 2)), 3)
         self.assertEqual(get_gio_phat_sheet_row_number(date(2023, 1, 1)), 3)
         self.assertEqual(get_gio_phat_sheet_row_number(date(2023, 1, 2)), 5)
+        self.assertEqual(get_thuc_te_sheet_row_number("songhinh", date(2023, 1, 1)), 8)
+        self.assertEqual(get_thuc_te_sheet_row_number("vinhson", date(2023, 1, 1)), 6)
+        self.assertEqual(get_thuc_te_sheet_row_number("songhinh", date(2023, 1, 2)), 9)
+        self.assertEqual(get_thuc_te_sheet_row_number("vinhson", date(2023, 1, 2)), 7)
 
     def test_range_helpers_read_small_ranges_when_filter_date_present(self):
         class Worksheet:
@@ -110,6 +122,31 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
         self.assertEqual(len(gio_phat.data), 1)
         self.assertEqual(gio_phat.skipped_rows[0]["reason"], "invalid_unit")
 
+    def test_thuc_te_parser_maps_song_hinh_and_vinh_son_columns(self):
+        song_hinh = parse_thuc_te_records_with_metadata(
+            [["30/05/2026", "200,567", "", "", "", "123,456"]],
+            "songhinh",
+            date(2026, 5, 30),
+        )
+        self.assertEqual(song_hinh.data[0]["ngay"], "2026-05-30")
+        self.assertEqual(song_hinh.data[0]["muc_nuoc_ho"], 200.567)
+        self.assertEqual(song_hinh.data[0]["qve"], 123.456)
+        self.assertIsNone(song_hinh.data[0]["qve_tong"])
+
+        vinh_son = parse_thuc_te_records_with_metadata(
+            [["30/05/2026", "768,123", "819,234", "976,345", "10,111", "20,222", "30,333", "60,666"]],
+            "vinhson",
+            date(2026, 5, 30),
+        )
+        self.assertEqual(vinh_son.data[0]["muc_nuoc_ho_a"], 768.123)
+        self.assertEqual(vinh_son.data[0]["muc_nuoc_ho_b"], 819.234)
+        self.assertEqual(vinh_son.data[0]["muc_nuoc_ho_c"], 976.345)
+        self.assertEqual(vinh_son.data[0]["qve_ho_a"], 10.111)
+        self.assertEqual(vinh_son.data[0]["qve_ho_b"], 20.222)
+        self.assertEqual(vinh_son.data[0]["qve_ho_c"], 30.333)
+        self.assertEqual(vinh_son.data[0]["qve_tong"], 60.666)
+        self.assertIsNone(vinh_son.data[0]["muc_nuoc_ho"])
+
     def test_preview_service_falls_back_to_full_sheet_when_range_has_no_data(self):
         class Worksheet:
             def __init__(self):
@@ -153,3 +190,138 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
         self.assertTrue(result.warnings)
         self.assertEqual(worksheet.calls[0][0], "get")
         self.assertEqual(worksheet.calls[1][0], "all")
+
+    @patch("thongsothuyvan.google_sheet_services.get_stats_export_spreadsheet_id", return_value="sheet-id")
+    def test_preview_thuc_te_reads_expected_sheet_range(self, _sheet_id):
+        class Worksheet:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, range_name):
+                self.calls.append(("get", range_name))
+                return [["01/01/2023", "200,5", "", "", "", "123,4"]]
+
+            def get_all_values(self):
+                self.calls.append(("all", None))
+                return []
+
+        class Spreadsheet:
+            def __init__(self, worksheet):
+                self._worksheet = worksheet
+                self.sheet_names = []
+
+            def worksheet(self, name):
+                self.sheet_names.append(name)
+                return self._worksheet
+
+        class Client:
+            def __init__(self, spreadsheet):
+                self._spreadsheet = spreadsheet
+
+            def open_by_key(self, sheet_id):
+                return self._spreadsheet
+
+        worksheet = Worksheet()
+        spreadsheet = Spreadsheet(worksheet)
+        service = GoogleSheetHydrologyService(client_factory=lambda nhamay: Client(spreadsheet))
+
+        result = service.preview_thuc_te("songhinh", date(2023, 1, 1))
+
+        self.assertEqual(spreadsheet.sheet_names, ["2023"])
+        self.assertEqual(worksheet.calls, [("get", "A8:F8")])
+        self.assertEqual(result.source_range, "2023!A8:F8")
+        self.assertEqual(result.data[0]["muc_nuoc_ho"], 200.5)
+        self.assertEqual(result.data[0]["qve"], 123.4)
+
+    @patch("thongsothuyvan.google_sheet_services.get_stats_export_spreadsheet_id", return_value="sheet-id")
+    def test_preview_thuc_te_range_reads_one_google_range(self, _sheet_id):
+        class Worksheet:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, range_name):
+                self.calls.append(("get", range_name))
+                return [
+                    ["01/01/2023", "768,1", "819,2", "976,3", "10", "20", "30", "60"],
+                    ["02/01/2023", "768,2", "819,3", "976,4", "11", "21", "31", "63"],
+                ]
+
+            def get_all_values(self):
+                self.calls.append(("all", None))
+                return []
+
+        class Spreadsheet:
+            def __init__(self, worksheet):
+                self._worksheet = worksheet
+                self.sheet_names = []
+
+            def worksheet(self, name):
+                self.sheet_names.append(name)
+                return self._worksheet
+
+        class Client:
+            def __init__(self, spreadsheet):
+                self._spreadsheet = spreadsheet
+
+            def open_by_key(self, sheet_id):
+                return self._spreadsheet
+
+        worksheet = Worksheet()
+        spreadsheet = Spreadsheet(worksheet)
+        service = GoogleSheetHydrologyService(client_factory=lambda nhamay: Client(spreadsheet))
+
+        result = service.preview_thuc_te_range("vinhson", date(2023, 1, 1), date(2023, 1, 2))
+
+        self.assertEqual(spreadsheet.sheet_names, ["2023 ngày"])
+        self.assertEqual(worksheet.calls, [("get", "A6:H7")])
+        self.assertEqual(result.source_range, "2023 ngày!A6:H7")
+        self.assertEqual(len(result.data), 2)
+        self.assertEqual(result.data[1]["qve_tong"], 63.0)
+
+    @patch("thongsothuyvan.google_sheet_services.get_stats_export_spreadsheet_id", return_value="sheet-id")
+    def test_preview_thuc_te_accepts_sheet_title_with_different_spacing(self, _sheet_id):
+        class Worksheet:
+            title = "2023  ngày"
+
+            def __init__(self):
+                self.calls = []
+
+            def get(self, range_name):
+                self.calls.append(("get", range_name))
+                return [["01/01/2023", "768,1", "819,2", "976,3", "10", "20", "30", "60"]]
+
+            def get_all_values(self):
+                self.calls.append(("all", None))
+                return []
+
+        class Spreadsheet:
+            def __init__(self, worksheet):
+                self._worksheet = worksheet
+                self.requested_titles = []
+
+            def worksheet(self, name):
+                self.requested_titles.append(name)
+                if name == self._worksheet.title:
+                    return self._worksheet
+                raise WorksheetNotFound(name)
+
+            def worksheets(self):
+                return [self._worksheet]
+
+        class Client:
+            def __init__(self, spreadsheet):
+                self._spreadsheet = spreadsheet
+
+            def open_by_key(self, sheet_id):
+                return self._spreadsheet
+
+        worksheet = Worksheet()
+        spreadsheet = Spreadsheet(worksheet)
+        service = GoogleSheetHydrologyService(client_factory=lambda nhamay: Client(spreadsheet))
+
+        result = service.preview_thuc_te_range("vinhson", date(2023, 1, 1), date(2023, 1, 1))
+
+        self.assertEqual(spreadsheet.requested_titles, ["2023 ngày"])
+        self.assertEqual(worksheet.calls, [("get", "A6:H6")])
+        self.assertEqual(result.source_range, "2023  ngày!A6:H6")
+        self.assertEqual(result.data[0]["qve_tong"], 60.0)

@@ -1,10 +1,12 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 import inspect
 import math
 from datetime import date, datetime, timedelta
 from django.contrib.admin.views.main import ChangeList
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.http import HttpResponseRedirect
+from django.urls import path
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import formats as django_formats
@@ -19,9 +21,11 @@ from .models import (
     Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc,
     MucnuocQuytrinh,
     ThongSoThuyVanCaiDat,
+    ThongSoThuyVanThucTe,
     ThongsoSanxuat, ThongsoGioPhat,
     TramDoMuaVrain
 )
+from .google_sheet_services import GOOGLE_SHEET_SYNC_START_DATE, GoogleSheetHydrologyService, GoogleSheetSyncError
 
 
 if not hasattr(django_formats, "sanitize_strftime_format"):
@@ -520,6 +524,119 @@ class ThongsoGioPhatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     date_hierarchy = "ngay"
 
 
+@admin.register(ThongSoThuyVanThucTe)
+class ThongSoThuyVanThucTeAdmin(admin.ModelAdmin):
+    change_list_template = "admin/thongsothuyvan/thongsothuyvanthucte/change_list.html"
+    list_display = (
+        "nha_may",
+        "ngay",
+        "muc_nuoc_ho",
+        "qve",
+        "muc_nuoc_ho_a",
+        "muc_nuoc_ho_b",
+        "muc_nuoc_ho_c",
+        "qve_ho_a",
+        "qve_ho_b",
+        "qve_ho_c",
+        "qve_tong",
+        "updated_at",
+    )
+    list_filter = ("nha_may", "ngay")
+    search_fields = ("nha_may",)
+    date_hierarchy = "ngay"
+    readonly_fields = ("created_at", "updated_at")
+    actions = ("delete_and_resync_selected_plants",)
+
+    def get_urls(self):
+        info = self.model._meta.app_label, self.model._meta.model_name
+        custom_urls = [
+            path(
+                "sync-songhinh/",
+                self.admin_site.admin_view(self.sync_songhinh),
+                name="%s_%s_sync_songhinh" % info,
+            ),
+            path(
+                "sync-vinhson/",
+                self.admin_site.admin_view(self.sync_vinhson),
+                name="%s_%s_sync_vinhson" % info,
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def _can_admin_sync_modify(self, user, obj):
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        created_by_id = getattr(obj, "created_by_id", None)
+        return created_by_id is None or created_by_id == user.id
+
+    def _sync_plant_data_from_admin(self, request, nhamay, plant_label, reset_existing=False):
+        end_date = timezone.localdate() - timedelta(days=1)
+        deleted_count = 0
+        try:
+            if reset_existing:
+                deleted_count, _ = ThongSoThuyVanThucTe.objects.filter(nha_may=nhamay).delete()
+            result = GoogleSheetHydrologyService().sync_thuc_te_range(
+                nhamay=nhamay,
+                start_date=GOOGLE_SHEET_SYNC_START_DATE,
+                end_date=end_date,
+                user=request.user,
+                can_modify=self._can_admin_sync_modify,
+            )
+        except PermissionError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+            return HttpResponseRedirect("../")
+        except GoogleSheetSyncError as exc:
+            self.message_user(request, exc.user_message, messages.ERROR)
+            return HttpResponseRedirect("../")
+
+        message = (
+            f"Đã đồng bộ {plant_label} từ {GOOGLE_SHEET_SYNC_START_DATE:%d/%m/%Y} đến {end_date:%d/%m/%Y}. "
+            f"Đọc {result.parsed_count} dòng, tạo mới {result.saved_count}, cập nhật {result.updated_count}, "
+            f"bỏ qua {result.skipped_count} dòng."
+        )
+        if reset_existing:
+            message = f"Đã xóa {deleted_count} bản ghi cũ. " + message
+        if result.source_range:
+            message += f" Nguồn: {result.source_range}."
+        for warning in result.warnings:
+            self.message_user(request, warning, messages.WARNING)
+        self.message_user(request, message, messages.SUCCESS)
+
+    def _sync_plant_from_admin(self, request, nhamay, plant_label):
+        if not self.has_change_permission(request):
+            self.message_user(request, "Bạn không có quyền đồng bộ dữ liệu.", messages.ERROR)
+            return HttpResponseRedirect("../")
+
+        self._sync_plant_data_from_admin(request, nhamay, plant_label)
+        return HttpResponseRedirect("../")
+
+    def sync_songhinh(self, request):
+        return self._sync_plant_from_admin(request, "songhinh", "Sông Hinh")
+
+    def sync_vinhson(self, request):
+        return self._sync_plant_from_admin(request, "vinhson", "Vĩnh Sơn")
+
+    @admin.action(description="Xóa và đồng bộ lại các nhà máy đã chọn")
+    def delete_and_resync_selected_plants(self, request, queryset):
+        if not self.has_change_permission(request):
+            self.message_user(request, "Bạn không có quyền đồng bộ dữ liệu.", messages.ERROR)
+            return
+        if not self.has_delete_permission(request):
+            self.message_user(request, "Bạn không có quyền xóa dữ liệu để đồng bộ lại.", messages.ERROR)
+            return
+
+        plant_labels = {
+            "songhinh": "Sông Hinh",
+            "vinhson": "Vĩnh Sơn",
+        }
+        plants = sorted(set(queryset.values_list("nha_may", flat=True)))
+        for nhamay in plants:
+            plant_label = plant_labels.get(nhamay, nhamay)
+            self._sync_plant_data_from_admin(request, nhamay, plant_label, reset_existing=True)
+
+
 @admin.register(SongHinhRealtimeSnapshot)
 class SongHinhRealtimeSnapshotAdmin(admin.ModelAdmin):
     list_display = (
@@ -609,5 +726,3 @@ class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
         "Ho_C_TD_Vinh_Son",
     )
     date_hierarchy = "Thoi_gian"
-
-

@@ -9,6 +9,7 @@ from .views import (
     MucnuocQuytrinhViewSet,
     ThongsoSanxuatViewSet,
     ThongsoGioPhatViewSet,
+    ThongSoThuyVanThucTeViewSet,
     DeletePlantDataByDateAPIView,
     DashboardSummaryAPIView,
     GioPhatSummaryAPIView,
@@ -23,7 +24,14 @@ from .views import (
     VinhSonRealtimeAPIView,
     VinhSonRealtimeSnapshotViewSet,
 )
-from .sync_views import PreviewGoogleSheetAPIView, SaveGoogleSheetDataAPIView, PreviewGioPhatAPIView, SaveGioPhatAPIView
+from .sync_views import (
+    PreviewGioPhatAPIView,
+    PreviewGoogleSheetAPIView,
+    PreviewThuyVanThucTeAPIView,
+    SaveGioPhatAPIView,
+    SaveGoogleSheetDataAPIView,
+    SaveThuyVanThucTeAPIView,
+)
 from .vrain_views import SyncVrainRainfallAPIView, VrainRealtimeAPIView
 
 app_name = "thongsothuyvan"
@@ -37,6 +45,7 @@ router.register(r"vinhson-ho-c", Vinhson_HocViewSet, basename="vinhson-hoc")
 router.register(r"thongsosanxuat", ThongsoSanxuatViewSet, basename="thongsosanxuat")
 router.register(r"mucnuoc-quytrinh", MucnuocQuytrinhViewSet, basename="mucnuoc-quytrinh")
 router.register(r"thongsogiophat", ThongsoGioPhatViewSet, basename="thongsogiophat")
+router.register(r"thongso-thucte", ThongSoThuyVanThucTeViewSet, basename="thongso-thucte")
 router.register(r"realtime-songhinh-snapshots", SongHinhRealtimeSnapshotViewSet, basename="realtime-songhinh-snapshots")
 router.register(r"realtime-vinhson-snapshots", VinhSonRealtimeSnapshotViewSet, basename="realtime-vinhson-snapshots")
 
@@ -57,6 +66,8 @@ urlpatterns = [
     path("manual-entry/", ManualHydrologyDataAPIView.as_view(), name="manual-entry"),
     path("sync-giophat/preview/", PreviewGioPhatAPIView.as_view(), name="sync-giophat-preview"),
     path("sync-giophat/save/", SaveGioPhatAPIView.as_view(), name="sync-giophat-save"),
+    path("sync-thucte/preview/", PreviewThuyVanThucTeAPIView.as_view(), name="sync-thucte-preview"),
+    path("sync-thucte/save/", SaveThuyVanThucTeAPIView.as_view(), name="sync-thucte-save"),
     path("sync-vrain/", SyncVrainRainfallAPIView.as_view(), name="sync-vrain"),
     path("vrain-realtime/", VrainRealtimeAPIView.as_view(), name="vrain-realtime"),
 ]

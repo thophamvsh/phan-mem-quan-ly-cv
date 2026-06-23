@@ -8,6 +8,7 @@ from .views_mnh import (
 from .views_sanxuat import (
     ThongsoSanxuatViewSet,
     ThongsoGioPhatViewSet,
+    ThongSoThuyVanThucTeViewSet,
     DashboardSummaryAPIView,
     GioPhatSummaryAPIView,
     GioPhatYearSummaryAPIView,

@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone as dt_timezone
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from ..models import ThongSoThuyVanCaiDat, ThongsoSanxuat, ThongsoGioPhat
+from ..models import ThongSoThuyVanCaiDat, ThongSoThuyVanThucTe, ThongsoSanxuat, ThongsoGioPhat
 from ..hydrology_services import (
     get_capacity_points_for_reservoir,
     get_capacity_bounds_for_reservoir,
@@ -403,6 +403,151 @@ class ThongSoThuyVanAPITests(APITestCase):
                 nha_may="songhinh",
                 thoi_gian=datetime(2026, 5, 30, tzinfo=dt_timezone.utc),
             ).exists()
+        )
+
+    @patch("thongsothuyvan.sync_views.GoogleSheetHydrologyService")
+    def test_thuc_te_preview_returns_metadata(self, service_class):
+        url = reverse("thongsothuyvan:sync-thucte-preview")
+        service_class.return_value.preview_thuc_te.return_value = SimpleNamespace(
+            data=[{"ngay": "2026-05-30", "muc_nuoc_ho": 200.5, "qve": 123.4}],
+            skipped_rows=[],
+            warnings=[],
+            source_range="2023!A1246:F1246",
+        )
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.get(url, {"nhamay": "songhinh", "date": "2026-05-30"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["rows"][0]["qve"], 123.4)
+        self.assertEqual(response.data["source_range"], "2023!A1246:F1246")
+        service_class.return_value.preview_thuc_te.assert_called_once_with("songhinh", date(2026, 5, 30))
+
+    def test_thuc_te_save_creates_song_hinh_record(self):
+        url = reverse("thongsothuyvan:sync-thucte-save")
+
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.post(
+            url,
+            {
+                "data": [
+                    {
+                        "ngay": "2026-05-30",
+                        "muc_nuoc_ho": 200.5,
+                        "qve": 123.4,
+                    }
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        record = ThongSoThuyVanThucTe.objects.get(nha_may="songhinh", ngay=date(2026, 5, 30))
+        self.assertEqual(record.muc_nuoc_ho, 200.5)
+        self.assertEqual(record.qve, 123.4)
+        self.assertEqual(record.created_by, self.sh_user)
+        self.assertEqual(record.updated_by, self.sh_user)
+
+    def test_thuc_te_viewset_factory_scoping(self):
+        url = reverse("thongsothuyvan:thongso-thucte-list")
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="songhinh",
+            ngay=date(2026, 5, 30),
+            muc_nuoc_ho=200.5,
+            qve=123.4,
+            created_by=self.sh_user,
+            updated_by=self.sh_user,
+        )
+
+        self.client.force_authenticate(user=self.sh_user)
+        ok_response = self.client.get(url, {"nhamay": "songhinh"})
+        denied_response = self.client.get(url, {"nhamay": "vinhson"})
+
+        self.assertEqual(ok_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(ok_response.data), 1)
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("thongsothuyvan.admin.timezone.localdate", return_value=date(2026, 5, 31))
+    @patch("thongsothuyvan.admin.GoogleSheetHydrologyService")
+    def test_admin_sync_thuc_te_button_calls_backend_sync(self, service_class, _localdate):
+        admin_user = User.objects.create_superuser(
+            email="admin@example.com",
+            password="testpassword123!",
+            username="admin",
+        )
+        service_class.return_value.sync_thuc_te_range.return_value = SimpleNamespace(
+            saved_count=1,
+            updated_count=2,
+            parsed_count=3,
+            skipped_count=0,
+            source_range="2023!A8:F10",
+            warnings=[],
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse("admin:thongsothuyvan_thongsothuyvanthucte_sync_songhinh"))
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        service_class.return_value.sync_thuc_te_range.assert_called_once_with(
+            nhamay="songhinh",
+            start_date=date(2023, 1, 1),
+            end_date=date(2026, 5, 30),
+            user=admin_user,
+            can_modify=ANY,
+        )
+
+    @patch("thongsothuyvan.admin.timezone.localdate", return_value=date(2026, 5, 31))
+    @patch("thongsothuyvan.admin.GoogleSheetHydrologyService")
+    def test_admin_action_reset_sync_thuc_te_deletes_selected_plants_before_sync(self, service_class, _localdate):
+        admin_user = User.objects.create_superuser(
+            email="admin-reset@example.com",
+            password="testpassword123!",
+            username="admin-reset",
+        )
+        songhinh_record = ThongSoThuyVanThucTe.objects.create(
+            nha_may="songhinh",
+            ngay=date(2026, 5, 30),
+            muc_nuoc_ho=200.5,
+            qve=123.4,
+            created_by=admin_user,
+            updated_by=admin_user,
+        )
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="vinhson",
+            ngay=date(2026, 5, 30),
+            muc_nuoc_ho_a=768.1,
+            qve_tong=60.0,
+            created_by=admin_user,
+            updated_by=admin_user,
+        )
+        service_class.return_value.sync_thuc_te_range.return_value = SimpleNamespace(
+            saved_count=1,
+            updated_count=0,
+            parsed_count=1,
+            skipped_count=0,
+            source_range="2023!A8:F8",
+            warnings=[],
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.post(
+            reverse("admin:thongsothuyvan_thongsothuyvanthucte_changelist"),
+            {
+                "action": "delete_and_resync_selected_plants",
+                "_selected_action": [str(songhinh_record.pk)],
+                "index": "0",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertFalse(ThongSoThuyVanThucTe.objects.filter(nha_may="songhinh").exists())
+        self.assertTrue(ThongSoThuyVanThucTe.objects.filter(nha_may="vinhson").exists())
+        service_class.return_value.sync_thuc_te_range.assert_called_once_with(
+            nhamay="songhinh",
+            start_date=date(2023, 1, 1),
+            end_date=date(2026, 5, 30),
+            user=admin_user,
+            can_modify=ANY,
         )
 
     def test_vrain_sync_anonymous_denied(self):

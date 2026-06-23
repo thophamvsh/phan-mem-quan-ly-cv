@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 from google.oauth2.service_account import Credentials
 
-from .models import ThongsoGioPhat, ThongsoSanxuat
+from .models import ThongSoThuyVanThucTe, ThongsoGioPhat, ThongsoSanxuat
 from .plants import normalize_plant_code
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,31 @@ INSUFFICIENT_SAN_LUONG_MESSAGE = (
 INVALID_SYNC_DATE_MESSAGE = "Không được đồng bộ dữ liệu vượt quá ngày D-1."
 GOOGLE_SHEET_SYNC_START_DATE = datetime(2023, 1, 1).date()
 GOOGLE_SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
+THUC_TE_SYNC_FIELDS = (
+    "muc_nuoc_ho",
+    "qve",
+    "muc_nuoc_ho_a",
+    "muc_nuoc_ho_b",
+    "muc_nuoc_ho_c",
+    "qve_ho_a",
+    "qve_ho_b",
+    "qve_ho_c",
+    "qve_tong",
+)
+THUC_TE_SHEET_CONFIG = {
+    "songhinh": {
+        "spreadsheet_env": "SONGHINH_STATS_EXPORT_SPREADSHEET_ID",
+        "sheet_name": "2023",
+        "start_row": 8,
+        "range_end_col": "F",
+    },
+    "vinhson": {
+        "spreadsheet_env": "VINHSON_STATS_EXPORT_SPREADSHEET_ID",
+        "sheet_name": "2023 ngày",
+        "start_row": 6,
+        "range_end_col": "H",
+    },
+}
 
 
 class GoogleSheetSyncError(Exception):
@@ -67,6 +92,16 @@ class ParsedSheetResult:
 class SaveResult:
     saved_count: int = 0
     updated_count: int = 0
+
+
+@dataclass
+class SyncRangeResult:
+    saved_count: int = 0
+    updated_count: int = 0
+    parsed_count: int = 0
+    skipped_count: int = 0
+    source_range: str = ""
+    warnings: list[str] = field(default_factory=list)
 
 
 def get_env_value(name):
@@ -208,6 +243,30 @@ def safe_float(val):
         return None
 
 
+def safe_float_decimal_comma(val):
+    try:
+        if isinstance(val, str):
+            val = val.strip().replace(" ", "")
+            if not val:
+                return None
+
+            has_comma = "," in val
+            has_dot = "." in val
+
+            if has_comma and has_dot:
+                if val.rfind(",") > val.rfind("."):
+                    val = val.replace(".", "").replace(",", ".")
+                else:
+                    val = val.replace(",", "")
+            elif has_comma:
+                val = val.replace(",", ".")
+            elif val.count(".") > 1:
+                val = val.replace(".", "")
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def safe_int_vinhson(val):
     try:
         if isinstance(val, (int, float)):
@@ -274,6 +333,13 @@ def get_spreadsheet_id(nhamay):
     return get_env_value(f"{nhamay.upper()}_SPREADSHEET_ID")
 
 
+def get_stats_export_spreadsheet_id(nhamay):
+    config = THUC_TE_SHEET_CONFIG.get(normalize_plant_code(nhamay))
+    if not config:
+        return None
+    return get_env_value(config["spreadsheet_env"])
+
+
 def get_san_luong_sheet_row_number(filter_date):
     if not filter_date or filter_date < GOOGLE_SHEET_SYNC_START_DATE:
         return None
@@ -286,8 +352,39 @@ def get_gio_phat_sheet_row_number(filter_date):
     return (filter_date - GOOGLE_SHEET_SYNC_START_DATE).days * 2 + 3
 
 
+def get_thuc_te_sheet_row_number(nhamay, filter_date):
+    config = THUC_TE_SHEET_CONFIG.get(normalize_plant_code(nhamay))
+    if not config or not filter_date or filter_date < GOOGLE_SHEET_SYNC_START_DATE:
+        return None
+    return config["start_row"] + (filter_date - GOOGLE_SHEET_SYNC_START_DATE).days
+
+
 def prefix_sheet_range_rows(rows):
     return [["", *row] for row in (rows or [])]
+
+
+def normalize_worksheet_title(value):
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def get_worksheet_by_title(spreadsheet, expected_title):
+    try:
+        return spreadsheet.worksheet(expected_title)
+    except gspread.exceptions.WorksheetNotFound:
+        expected_normalized = normalize_worksheet_title(expected_title)
+        try:
+            worksheets = spreadsheet.worksheets()
+        except Exception as exc:
+            raise GoogleSheetSyncError(f"Không tìm thấy tab Google Sheet: {expected_title}") from exc
+
+        for worksheet in worksheets:
+            if normalize_worksheet_title(getattr(worksheet, "title", "")) == expected_normalized:
+                return worksheet
+
+        available_titles = ", ".join(getattr(worksheet, "title", "") for worksheet in worksheets) or "không có tab nào"
+        raise GoogleSheetSyncError(
+            f"Không tìm thấy tab Google Sheet '{expected_title}'. Các tab hiện có: {available_titles}."
+        )
 
 
 def get_san_luong_rows(worksheet, filter_date=None):
@@ -306,6 +403,33 @@ def get_gio_phat_rows(worksheet, filter_date=None):
         return prefix_sheet_range_rows(worksheet.get(f"B{start_row}:E{end_row}"))
 
     return worksheet.get_all_values()
+
+
+def get_thuc_te_rows(worksheet, nhamay, filter_date=None):
+    nhamay = normalize_plant_code(nhamay)
+    config = THUC_TE_SHEET_CONFIG.get(nhamay)
+    if not config:
+        return []
+
+    row_number = get_thuc_te_sheet_row_number(nhamay, filter_date)
+    if row_number:
+        return worksheet.get(f"A{row_number}:{config['range_end_col']}{row_number}")
+
+    return worksheet.get_all_values()[config["start_row"] - 1:]
+
+
+def get_thuc_te_rows_for_date_range(worksheet, nhamay, start_date, end_date):
+    nhamay = normalize_plant_code(nhamay)
+    config = THUC_TE_SHEET_CONFIG.get(nhamay)
+    if not config:
+        return []
+
+    start_row = get_thuc_te_sheet_row_number(nhamay, start_date)
+    end_row = get_thuc_te_sheet_row_number(nhamay, end_date)
+    if not start_row or not end_row:
+        return worksheet.get_all_values()[config["start_row"] - 1:]
+
+    return worksheet.get(f"A{start_row}:{config['range_end_col']}{end_row}")
 
 
 def parse_san_luong_records_with_metadata(rows, nhamay, filter_date=None, source_range=""):
@@ -447,6 +571,88 @@ def parse_gio_phat_records(rows, filter_date=None):
     return parse_gio_phat_records_with_metadata(rows, filter_date).data
 
 
+def parse_thuc_te_records_with_metadata(rows, nhamay, filter_date=None, source_range="", start_date=None, end_date=None):
+    nhamay = normalize_plant_code(nhamay)
+    parsed_data = []
+    skipped_rows = []
+
+    for index, row in enumerate(rows or [], start=1):
+        if nhamay == "vinhson":
+            padded_row = row + [""] * (8 - len(row))
+            ngay_str = padded_row[0]
+        else:
+            padded_row = row + [""] * (6 - len(row))
+            ngay_str = padded_row[0]
+
+        if not ngay_str:
+            skipped_rows.append({"row": index, "reason": "missing_date"})
+            continue
+
+        parsed_dt = parse_date(ngay_str)
+        if not parsed_dt:
+            skipped_rows.append({"row": index, "reason": "invalid_date", "value": ngay_str})
+            continue
+        ngay = parsed_dt.date()
+
+        if ngay.year < 2023:
+            skipped_rows.append({"row": index, "reason": "before_supported_year", "value": ngay_str})
+            continue
+        if ngay > get_allowed_sync_date():
+            skipped_rows.append({"row": index, "reason": "after_allowed_date", "value": ngay_str})
+            continue
+        if filter_date and ngay != filter_date:
+            skipped_rows.append({"row": index, "reason": "outside_filter_date", "value": ngay_str})
+            continue
+        if start_date and ngay < start_date:
+            skipped_rows.append({"row": index, "reason": "outside_filter_range", "value": ngay_str})
+            continue
+        if end_date and ngay > end_date:
+            skipped_rows.append({"row": index, "reason": "outside_filter_range", "value": ngay_str})
+            continue
+
+        if nhamay == "vinhson":
+            record = {
+                "nha_may": nhamay,
+                "ngay": str(ngay),
+                "ngay_str": ngay_str,
+                "muc_nuoc_ho": None,
+                "qve": None,
+                "muc_nuoc_ho_a": safe_float_decimal_comma(padded_row[1]),
+                "muc_nuoc_ho_b": safe_float_decimal_comma(padded_row[2]),
+                "muc_nuoc_ho_c": safe_float_decimal_comma(padded_row[3]),
+                "qve_ho_a": safe_float_decimal_comma(padded_row[4]),
+                "qve_ho_b": safe_float_decimal_comma(padded_row[5]),
+                "qve_ho_c": safe_float_decimal_comma(padded_row[6]),
+                "qve_tong": safe_float_decimal_comma(padded_row[7]),
+            }
+        elif nhamay == "songhinh":
+            record = {
+                "nha_may": nhamay,
+                "ngay": str(ngay),
+                "ngay_str": ngay_str,
+                "muc_nuoc_ho": safe_float_decimal_comma(padded_row[1]),
+                "qve": safe_float_decimal_comma(padded_row[5]),
+                "muc_nuoc_ho_a": None,
+                "muc_nuoc_ho_b": None,
+                "muc_nuoc_ho_c": None,
+                "qve_ho_a": None,
+                "qve_ho_b": None,
+                "qve_ho_c": None,
+                "qve_tong": None,
+            }
+        else:
+            skipped_rows.append({"row": index, "reason": "unsupported_plant", "value": nhamay})
+            continue
+
+        parsed_data.append(record)
+
+    return ParsedSheetResult(data=parsed_data, skipped_rows=skipped_rows, source_range=source_range)
+
+
+def parse_thuc_te_records(rows, nhamay, filter_date=None):
+    return parse_thuc_te_records_with_metadata(rows, nhamay, filter_date).data
+
+
 class GoogleSheetHydrologyService:
     def __init__(self, client_factory=get_gspread_client, spreadsheet_id_getter=get_spreadsheet_id):
         self.client_factory = client_factory
@@ -456,6 +662,14 @@ class GoogleSheetHydrologyService:
         sheet_id = self.spreadsheet_id_getter(nhamay)
         if not sheet_id:
             raise GoogleSheetSyncError(f"Chưa cấu hình SPREADSHEET_ID cho {nhamay} trong .env")
+        client = self.client_factory(nhamay)
+        return client.open_by_key(sheet_id)
+
+    def _open_thuc_te_spreadsheet(self, nhamay):
+        nhamay = normalize_plant_code(nhamay)
+        sheet_id = get_stats_export_spreadsheet_id(nhamay)
+        if not sheet_id:
+            raise GoogleSheetSyncError(f"Chưa cấu hình STATS_EXPORT_SPREADSHEET_ID cho {nhamay} trong .env")
         client = self.client_factory(nhamay)
         return client.open_by_key(sheet_id)
 
@@ -526,6 +740,87 @@ class GoogleSheetHydrologyService:
             raise
         except Exception as exc:
             logger.exception("Failed to preview hydrology generation-hours sheet for plant %s", nhamay)
+            raise GoogleSheetSyncError() from exc
+
+    def preview_thuc_te(self, nhamay, filter_date=None):
+        nhamay = normalize_plant_code(nhamay)
+        config = THUC_TE_SHEET_CONFIG.get(nhamay)
+        if not config:
+            raise GoogleSheetSyncError("Nhà máy chưa được hỗ trợ đồng bộ thông số thủy văn thực tế.")
+
+        try:
+            sheet = self._open_thuc_te_spreadsheet(nhamay)
+            worksheet = get_worksheet_by_title(sheet, config["sheet_name"])
+            sheet_title = getattr(worksheet, "title", config["sheet_name"])
+            row_number = get_thuc_te_sheet_row_number(nhamay, filter_date)
+            if row_number:
+                source_range = f"{sheet_title}!A{row_number}:{config['range_end_col']}{row_number}"
+            else:
+                source_range = f"{sheet_title}!all_values"
+
+            rows = get_thuc_te_rows(worksheet, nhamay, filter_date)
+            result = parse_thuc_te_records_with_metadata(rows, nhamay, filter_date, source_range)
+
+            if filter_date and not result.data:
+                fallback_rows = worksheet.get_all_values()[config["start_row"] - 1:]
+                fallback = parse_thuc_te_records_with_metadata(
+                    fallback_rows,
+                    nhamay,
+                    filter_date,
+                    f"{sheet_title}!all_values",
+                )
+                fallback.warnings.append(
+                    f"Không tìm thấy dữ liệu ở {source_range}; đã đọc lại toàn bộ tab {sheet_title}."
+                )
+                return fallback
+
+            return result
+        except GoogleSheetSyncError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to preview actual hydrology sheet for plant %s", nhamay)
+            raise GoogleSheetSyncError() from exc
+
+    def preview_thuc_te_range(self, nhamay, start_date=None, end_date=None):
+        nhamay = normalize_plant_code(nhamay)
+        config = THUC_TE_SHEET_CONFIG.get(nhamay)
+        if not config:
+            raise GoogleSheetSyncError("Nhà máy chưa được hỗ trợ đồng bộ thông số thủy văn thực tế.")
+
+        start_date = start_date or GOOGLE_SHEET_SYNC_START_DATE
+        end_date = end_date or get_allowed_sync_date()
+        if end_date > get_allowed_sync_date():
+            end_date = get_allowed_sync_date()
+        if start_date < GOOGLE_SHEET_SYNC_START_DATE:
+            start_date = GOOGLE_SHEET_SYNC_START_DATE
+        if start_date > end_date:
+            return ParsedSheetResult(
+                warnings=["Khoảng ngày đồng bộ không hợp lệ hoặc chưa có dữ liệu được phép đồng bộ."],
+            )
+
+        try:
+            sheet = self._open_thuc_te_spreadsheet(nhamay)
+            worksheet = get_worksheet_by_title(sheet, config["sheet_name"])
+            sheet_title = getattr(worksheet, "title", config["sheet_name"])
+            start_row = get_thuc_te_sheet_row_number(nhamay, start_date)
+            end_row = get_thuc_te_sheet_row_number(nhamay, end_date)
+            if start_row and end_row:
+                source_range = f"{sheet_title}!A{start_row}:{config['range_end_col']}{end_row}"
+            else:
+                source_range = f"{sheet_title}!all_values"
+
+            rows = get_thuc_te_rows_for_date_range(worksheet, nhamay, start_date, end_date)
+            return parse_thuc_te_records_with_metadata(
+                rows,
+                nhamay,
+                source_range=source_range,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except GoogleSheetSyncError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to preview actual hydrology range for plant %s", nhamay)
             raise GoogleSheetSyncError() from exc
 
     def save_san_luong(self, *, data_list, nhamay, user, can_modify):
@@ -609,3 +904,58 @@ class GoogleSheetHydrologyService:
                     updated_count += 1
 
         return SaveResult(saved_count=saved_count, updated_count=updated_count)
+
+    def save_thuc_te(self, *, data_list, nhamay, user, can_modify):
+        nhamay = normalize_plant_code(nhamay)
+        saved_count = 0
+        updated_count = 0
+
+        existing_by_day = {}
+        for item in data_list:
+            ngay = item.get("ngay")
+            if not ngay:
+                continue
+            existing = ThongSoThuyVanThucTe.objects.filter(ngay=ngay, nha_may=nhamay).first()
+            if existing and not can_modify(user, existing):
+                raise PermissionError("Ban chi duoc sua du lieu thuy van thuc te do chinh ban cap nhat.")
+            existing_by_day[ngay] = existing
+
+        with transaction.atomic():
+            for item in data_list:
+                ngay = item.get("ngay")
+                if not ngay:
+                    continue
+
+                existing = existing_by_day.get(ngay)
+                _, created = ThongSoThuyVanThucTe.objects.update_or_create(
+                    ngay=ngay,
+                    nha_may=nhamay,
+                    defaults={
+                        **{field: item.get(field) for field in THUC_TE_SYNC_FIELDS},
+                        "updated_by": user,
+                        **({} if existing and existing.created_by_id else {"created_by": user}),
+                    },
+                )
+                if created:
+                    saved_count += 1
+                else:
+                    updated_count += 1
+
+        return SaveResult(saved_count=saved_count, updated_count=updated_count)
+
+    def sync_thuc_te_range(self, *, nhamay, start_date=None, end_date=None, user, can_modify):
+        preview = self.preview_thuc_te_range(nhamay, start_date, end_date)
+        save_result = self.save_thuc_te(
+            data_list=preview.data,
+            nhamay=nhamay,
+            user=user,
+            can_modify=can_modify,
+        )
+        return SyncRangeResult(
+            saved_count=save_result.saved_count,
+            updated_count=save_result.updated_count,
+            parsed_count=len(preview.data),
+            skipped_count=len(preview.skipped_rows),
+            source_range=preview.source_range,
+            warnings=preview.warnings,
+        )

@@ -13,6 +13,7 @@ from ..models import (
     ThongsoSanxuat,
     ThongsoGioPhat,
     ThongSoThuyVanCaiDat,
+    ThongSoThuyVanThucTe,
 )
 
 def get_env_value(name):
@@ -39,6 +40,7 @@ def get_env_value(name):
 from ..serializers import (
     ThongsoSanxuatSerializer,
     ThongsoGioPhatSerializer,
+    ThongSoThuyVanThucTeSerializer,
 )
 from ..plants import get_hydrology_plants, normalize_plant_code
 from .views_settings import build_hydrology_settings_payload
@@ -431,6 +433,74 @@ class ThongsoGioPhatViewSet(viewsets.ModelViewSet):
         if not user_can_modify_hydrology_object(self.request.user, obj):
             raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
         
+        save_kwargs = {"updated_by": self.request.user}
+        if obj.created_by_id is None:
+            save_kwargs["created_by"] = self.request.user
+        serializer.save(**save_kwargs)
+
+    def perform_destroy(self, instance):
+        if not user_can_delete_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền xóa dữ liệu thủy văn.")
+
+        if not user_can_access_plant(self.request.user, instance.nha_may):
+            raise PermissionDenied("Bạn không có quyền xóa dữ liệu của nhà máy này.")
+        if not user_can_modify_hydrology_object(self.request.user, instance):
+            raise PermissionDenied("Ban chi duoc xoa du lieu do chinh ban cap nhat.")
+        instance.delete()
+
+
+class ThongSoThuyVanThucTeViewSet(viewsets.ModelViewSet):
+    serializer_class = ThongSoThuyVanThucTeSerializer
+    pagination_class = None
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if not user_can_access_hydrology_viewset_action(
+            self.request.user,
+            getattr(self, "action", ""),
+        ):
+            raise PermissionDenied("Bạn không có quyền thao tác dữ liệu thủy văn.")
+
+        nhamay = normalize_plant_code(self.request.query_params.get("nhamay", "songhinh"))
+        if not user_can_access_plant(self.request.user, nhamay):
+            raise PermissionDenied("Bạn không có quyền truy cập dữ liệu của nhà máy này.")
+
+        queryset = ThongSoThuyVanThucTe.objects.filter(nha_may=nhamay)
+
+        date_from = parse_filter_date(self.request.query_params.get("date_from"))
+        date_to = parse_filter_date(self.request.query_params.get("date_to"))
+        if date_from:
+            queryset = queryset.filter(ngay__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(ngay__lte=date_to)
+
+        queryset = queryset.order_by("-ngay")
+        try:
+            limit = int(self.request.query_params.get("limit") or 0)
+        except (TypeError, ValueError):
+            limit = 0
+
+        return queryset[:limit] if limit > 0 else queryset
+
+    def perform_create(self, serializer):
+        if not user_can_create_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền tạo dữ liệu thủy văn.")
+
+        nhamay = normalize_plant_code(serializer.validated_data.get("nha_may", "songhinh"))
+        if not user_can_access_plant(self.request.user, nhamay):
+            raise PermissionDenied("Bạn không có quyền tạo dữ liệu cho nhà máy này.")
+        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        if not user_can_edit_hydrology(self.request.user):
+            raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu thủy văn.")
+
+        obj = self.get_object()
+        if not user_can_access_plant(self.request.user, obj.nha_may):
+            raise PermissionDenied("Bạn không có quyền cập nhật dữ liệu của nhà máy này.")
+        if not user_can_modify_hydrology_object(self.request.user, obj):
+            raise PermissionDenied("Ban chi duoc sua du lieu do chinh ban cap nhat.")
+
         save_kwargs = {"updated_by": self.request.user}
         if obj.created_by_id is None:
             save_kwargs["created_by"] = self.request.user
