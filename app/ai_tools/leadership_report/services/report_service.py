@@ -1,3 +1,4 @@
+import json
 import requests
 from datetime import datetime, time, timedelta
 from django.utils import timezone
@@ -43,6 +44,52 @@ WEATHER_CODE_TEXT = {
     96: "Dông, có mưa đá",
     99: "Dông mạnh, có mưa đá",
 }
+
+ACTUAL_WATER_LEVEL_RESERVOIRS = (
+    {
+        "plant_code": "songhinh",
+        "name": "Sông Hinh",
+        "actual_level_field": "muc_nuoc_ho",
+        "actual_qve_field": "qve",
+        "reported_level_field": "cot_g",
+        "reported_qve_field": "cot_i",
+    },
+    {
+        "plant_code": "vinhson",
+        "name": "Vĩnh Sơn A",
+        "actual_level_field": "muc_nuoc_ho_a",
+        "actual_qve_field": "qve_ho_a",
+        "reported_level_field": "cot_g",
+        "reported_qve_field": "vinhson_a_qve",
+    },
+    {
+        "plant_code": "vinhson",
+        "name": "Vĩnh Sơn B",
+        "actual_level_field": "muc_nuoc_ho_b",
+        "actual_qve_field": "qve_ho_b",
+        "reported_level_field": "mucnuoc_thuongluu_ho_b",
+        "reported_qve_field": "luuluong_ve_ho_b",
+    },
+    {
+        "plant_code": "vinhson",
+        "name": "Vĩnh Sơn C",
+        "actual_level_field": "muc_nuoc_ho_c",
+        "actual_qve_field": "qve_ho_c",
+        "reported_level_field": "mucnuoc_thuongluu_ho_c",
+        "reported_qve_field": "luuluong_ve_ho_c",
+    },
+    {
+        "plant_code": "thuongkontum",
+        "name": "Thượng Kon Tum",
+        "actual_level_field": "muc_nuoc_ho",
+        "actual_qve_field": "qve",
+        "reported_level_field": "cot_g",
+        "reported_qve_field": "cot_i",
+    },
+)
+
+ACTUAL_WATER_CHART_Y_DOMAIN = [0, 220]
+ACTUAL_WATER_CHART_Y_TICKS = [0, 55, 110, 165, 220]
 
 
 def _fmt_report_date(value):
@@ -120,6 +167,394 @@ def _rainfall_records_by_period(start_date, end_date):
 
 def _date_range(start_date, days_count):
     return [start_date + timedelta(days=offset) for offset in range(days_count)]
+
+
+def _actual_water_period_label(start_date, end_date):
+    if start_date == end_date:
+        return _fmt_report_date(start_date)
+    return f"{_fmt_report_date(start_date)} - {_fmt_report_date(end_date)}"
+
+
+def _chart_block(chart_json):
+    chart_json.setdefault("yDomain", ACTUAL_WATER_CHART_Y_DOMAIN)
+    chart_json.setdefault("yTicks", ACTUAL_WATER_CHART_Y_TICKS)
+    chart_json.setdefault(
+        "yAxis",
+        {
+            "domain": ACTUAL_WATER_CHART_Y_DOMAIN,
+            "ticks": ACTUAL_WATER_CHART_Y_TICKS,
+        },
+    )
+    return f"```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```"
+
+
+def _actual_water_level_status(actual_level, reported_level):
+    if actual_level is None and reported_level is None:
+        return "Thiếu MNH thực tế và MNH báo cáo"
+    if actual_level is None:
+        return "Thiếu MNH thực tế"
+    if reported_level is None:
+        return "Thiếu MNH báo cáo"
+
+    diff = actual_level - reported_level
+    if abs(diff) <= 0.05:
+        return "Khớp trong ngưỡng 0,05 m"
+    if diff > 0:
+        return f"Thực tế cao hơn báo cáo {fmt_report_decimal(abs(diff), 2)} m"
+    return f"Thực tế thấp hơn báo cáo {fmt_report_decimal(abs(diff), 2)} m"
+
+
+def _actual_water_level_configs(plant_codes=None):
+    if not plant_codes:
+        return ACTUAL_WATER_LEVEL_RESERVOIRS
+    allowed = set(plant_codes)
+    return tuple(config for config in ACTUAL_WATER_LEVEL_RESERVOIRS if config["plant_code"] in allowed)
+
+
+def _reported_actual_water_qve(record, config):
+    if not record:
+        return None
+    if config.get("reported_qve_field") == "vinhson_a_qve":
+        total_qve = record_value(record, "cot_i")
+        if total_qve is None:
+            return None
+        qve_b = record_value(record, "luuluong_ve_ho_b") or 0.0
+        qve_c = record_value(record, "luuluong_ve_ho_c") or 0.0
+        return total_qve - qve_b - qve_c
+    return record_value(record, config.get("reported_qve_field"))
+
+
+def _latest_reported_water_records(start_date, end_date, configs):
+    from thongsothuyvan.models import ThongsoSanxuat
+
+    plant_codes = {config["plant_code"] for config in configs}
+    records = {}
+    queryset = (
+        ThongsoSanxuat.objects.filter(
+            nha_may__in=plant_codes,
+            thoi_gian__date__gte=start_date,
+            thoi_gian__date__lte=end_date,
+        )
+        .order_by("thoi_gian", "id")
+    )
+    for record in queryset:
+        record_date = timezone.localtime(record.thoi_gian).date()
+        records[(record.nha_may, record_date)] = record
+    return records
+
+
+def _actual_water_records(start_date, end_date, configs):
+    from thongsothuyvan.models import ThongSoThuyVanThucTe
+
+    plant_codes = {config["plant_code"] for config in configs}
+    return {
+        (record.nha_may, record.ngay): record
+        for record in ThongSoThuyVanThucTe.objects.filter(
+            nha_may__in=plant_codes,
+            ngay__gte=start_date,
+            ngay__lte=end_date,
+        )
+    }
+
+
+def _actual_water_summary_rows(summary, configs):
+    rows = []
+    for config in configs:
+        reservoir_summary = summary[config["name"]]
+        differences = reservoir_summary["differences"]
+        if differences:
+            avg_diff = sum(differences) / len(differences)
+            max_abs_diff = max(differences, key=lambda value: abs(value))
+        else:
+            avg_diff = None
+            max_abs_diff = None
+        rows.append(
+            "| {reservoir} | {count} | {avg_diff} | {max_abs_diff} | {missing_actual} | {missing_reported} |".format(
+                reservoir=config["name"],
+                count=len(differences),
+                avg_diff=fmt_report_decimal(avg_diff, 2),
+                max_abs_diff=fmt_report_decimal(max_abs_diff, 2),
+                missing_actual=reservoir_summary["missing_actual"],
+                missing_reported=reservoir_summary["missing_reported"],
+            )
+        )
+    return rows
+
+
+def _actual_only_water_summary_rows(summary, configs):
+    rows = []
+    for config in configs:
+        reservoir_summary = summary[config["name"]]
+        levels = reservoir_summary["levels"]
+        qves = reservoir_summary["qves"]
+        rows.append(
+            "| {reservoir} | {count} | {level_avg} | {level_min} | {level_max} | {qve_avg} | {qve_min} | {qve_max} |".format(
+                reservoir=config["name"],
+                count=reservoir_summary["count"],
+                level_avg=fmt_report_decimal(_average_numeric(levels), 2),
+                level_min=fmt_report_decimal(min(levels) if levels else None, 2),
+                level_max=fmt_report_decimal(max(levels) if levels else None, 2),
+                qve_avg=fmt_report_decimal(_average_numeric(qves), 2),
+                qve_min=fmt_report_decimal(min(qves) if qves else None, 2),
+                qve_max=fmt_report_decimal(max(qves) if qves else None, 2),
+            )
+        )
+    return rows
+
+
+def _build_actual_only_water_level_report(start_date, end_date, configs, actual_records, days):
+    detail_rows = []
+    summary = {
+        config["name"]: {"count": 0, "levels": [], "qves": []}
+        for config in configs
+    }
+    for report_date in days:
+        for config in configs:
+            actual_record = actual_records.get((config["plant_code"], report_date))
+            actual_level = record_value(actual_record, config["actual_level_field"])
+            qve = record_value(actual_record, config["actual_qve_field"])
+            reservoir_summary = summary[config["name"]]
+            if actual_level is not None or qve is not None:
+                reservoir_summary["count"] += 1
+            if actual_level is not None:
+                reservoir_summary["levels"].append(actual_level)
+            if qve is not None:
+                reservoir_summary["qves"].append(qve)
+
+            detail_rows.append(
+                "| {date} | {reservoir} | {actual_level} | {qve} |".format(
+                    date=_fmt_report_date(report_date),
+                    reservoir=config["name"],
+                    actual_level=fmt_report_decimal(actual_level, 2),
+                    qve=fmt_report_decimal(qve, 2),
+                )
+            )
+
+    return f"""
+### Thá»‘ng kÃª má»±c nÆ°á»›c vÃ  Qve thá»±c táº¿
+
+**Thá»i gian:** {_actual_water_period_label(start_date, end_date)}
+
+| NgÃ y | Há»“ | MNH thá»±c táº¿ (m) | Qve thá»±c táº¿ (mÂ³/s) |
+|------|----|-----------------|--------------------|
+{chr(10).join(detail_rows)}
+
+**Thá»‘ng kÃª thá»±c táº¿**
+
+| Há»“ | Sá»‘ ngÃ y cÃ³ dá»¯ liá»‡u | MNH TB | MNH min | MNH max | Qve TB | Qve min | Qve max |
+|----|---------------------|--------|---------|---------|--------|---------|---------|
+{chr(10).join(_actual_only_water_summary_rows(summary, configs))}
+
+**Ghi chÃº:** MNH vÃ  Qve thá»±c táº¿ láº¥y tá»« `ThongSoThuyVanThucTe`.
+""".strip()
+
+
+def _build_actual_only_water_level_report_clean(start_date, end_date, configs, actual_records, days):
+    detail_rows = []
+    chart_rows = {config["name"]: [] for config in configs}
+    summary = {
+        config["name"]: {"count": 0, "levels": [], "qves": []}
+        for config in configs
+    }
+    for report_date in days:
+        for config in configs:
+            actual_record = actual_records.get((config["plant_code"], report_date))
+            actual_level = record_value(actual_record, config["actual_level_field"])
+            qve = record_value(actual_record, config["actual_qve_field"])
+            reservoir_summary = summary[config["name"]]
+            if actual_level is not None or qve is not None:
+                reservoir_summary["count"] += 1
+            if actual_level is not None:
+                reservoir_summary["levels"].append(actual_level)
+            if qve is not None:
+                reservoir_summary["qves"].append(qve)
+
+            chart_item = {"Ngày": _fmt_report_date(report_date)}
+            has_chart_value = False
+            if actual_level is not None:
+                chart_item["MNH thực tế"] = round(actual_level, 2)
+                has_chart_value = True
+            if qve is not None:
+                chart_item["Qve thực tế"] = round(qve, 2)
+                has_chart_value = True
+            if has_chart_value:
+                chart_rows[config["name"]].append(chart_item)
+
+            detail_rows.append(
+                "| {date} | {reservoir} | {actual_level} | {qve} |".format(
+                    date=_fmt_report_date(report_date),
+                    reservoir=config["name"],
+                    actual_level=fmt_report_decimal(actual_level, 2),
+                    qve=fmt_report_decimal(qve, 2),
+                )
+            )
+
+    chart_blocks = []
+    for reservoir_name, rows in chart_rows.items():
+        if not rows:
+            continue
+        chart_blocks.append(
+            _chart_block(
+                {
+                    "type": "line",
+                    "title": f"Diễn biến MNH và Qve thực tế - {reservoir_name}",
+                    "data": rows,
+                    "xKey": "Ngày",
+                    "yKeys": ["MNH thực tế", "Qve thực tế"],
+                    "colors": ["#2563eb", "#10b981"],
+                    "unit": " m / m³/s",
+                }
+            )
+        )
+    chart_section = "\n\n".join(chart_blocks)
+
+    return f"""
+### Thống kê mực nước và Qve thực tế
+
+**Thời gian:** {_actual_water_period_label(start_date, end_date)}
+
+| Ngày | Hồ | MNH thực tế (m) | Qve thực tế (m³/s) |
+|------|----|-----------------|--------------------|
+{chr(10).join(detail_rows)}
+
+**Thống kê thực tế**
+
+| Hồ | Số ngày có dữ liệu | MNH TB | MNH min | MNH max | Qve TB | Qve min | Qve max |
+|----|---------------------|--------|---------|---------|--------|---------|---------|
+{chr(10).join(_actual_only_water_summary_rows(summary, configs))}
+
+**Đồ thị chỉ số thực tế**
+
+{chart_section or "Không có dữ liệu để vẽ đồ thị."}
+
+**Ghi chú:** MNH và Qve thực tế lấy từ `ThongSoThuyVanThucTe`.
+""".strip()
+
+
+def _actual_water_source_note(configs):
+    plant_codes = {config["plant_code"] for config in configs}
+    parts = [
+        "MNH thực tế lấy từ `ThongSoThuyVanThucTe`; MNH báo cáo lấy từ `ThongsoSanxuat`."
+    ]
+    if "vinhson" in plant_codes:
+        parts.append(
+            "Với Vĩnh Sơn, hồ A dùng `cot_g`, hồ B dùng `mucnuoc_thuongluu_ho_b`, "
+            "hồ C dùng `mucnuoc_thuongluu_ho_c`."
+        )
+    if "thuongkontum" in plant_codes:
+        parts.append("TKT dùng bản ghi `thuongkontum` và cột `cot_g`.")
+    return " ".join(parts)
+
+
+def build_leadership_actual_water_level_report(start_date, end_date, plant_codes=None, compare_reported=False):
+    start_date, end_date = (end_date, start_date) if start_date > end_date else (start_date, end_date)
+    configs = _actual_water_level_configs(plant_codes)
+    actual_records = _actual_water_records(start_date, end_date, configs)
+    days = _date_range(start_date, (end_date - start_date).days + 1)
+    if not compare_reported:
+        return _build_actual_only_water_level_report_clean(start_date, end_date, configs, actual_records, days)
+
+    reported_records = _latest_reported_water_records(start_date, end_date, configs)
+
+    detail_rows = []
+    chart_rows = {config["name"]: [] for config in configs}
+    summary = {
+        config["name"]: {"differences": [], "missing_actual": 0, "missing_reported": 0}
+        for config in configs
+    }
+    for report_date in days:
+        for config in configs:
+            actual_record = actual_records.get((config["plant_code"], report_date))
+            reported_record = reported_records.get((config["plant_code"], report_date))
+            actual_level = record_value(actual_record, config["actual_level_field"])
+            reported_level = record_value(reported_record, config["reported_level_field"])
+            qve = record_value(actual_record, config["actual_qve_field"])
+            reported_qve = _reported_actual_water_qve(reported_record, config)
+            difference = (
+                actual_level - reported_level
+                if actual_level is not None and reported_level is not None
+                else None
+            )
+
+            reservoir_summary = summary[config["name"]]
+            if actual_level is None:
+                reservoir_summary["missing_actual"] += 1
+            if reported_level is None:
+                reservoir_summary["missing_reported"] += 1
+            if difference is not None:
+                reservoir_summary["differences"].append(difference)
+
+            chart_item = {"Ngày": _fmt_report_date(report_date)}
+            has_chart_value = False
+            if actual_level is not None:
+                chart_item["MNH thực tế"] = round(actual_level, 2)
+                has_chart_value = True
+            if reported_level is not None:
+                chart_item["MNH báo cáo"] = round(reported_level, 2)
+                has_chart_value = True
+            if qve is not None:
+                chart_item["Qve thực tế"] = round(qve, 2)
+                has_chart_value = True
+            if reported_qve is not None:
+                chart_item["Qve báo cáo"] = round(reported_qve, 2)
+                has_chart_value = True
+            if has_chart_value:
+                chart_rows[config["name"]].append(chart_item)
+
+            detail_rows.append(
+                "| {date} | {reservoir} | {actual_level} | {reported_level} | {difference} | "
+                "{qve} | {reported_qve} | {status} |".format(
+                    date=_fmt_report_date(report_date),
+                    reservoir=config["name"],
+                    actual_level=fmt_report_decimal(actual_level, 2),
+                    reported_level=fmt_report_decimal(reported_level, 2),
+                    difference=fmt_report_decimal(difference, 2),
+                    qve=fmt_report_decimal(qve, 2),
+                    reported_qve=fmt_report_decimal(reported_qve, 2),
+                    status=_actual_water_level_status(actual_level, reported_level),
+                )
+            )
+
+    chart_blocks = []
+    for reservoir_name, rows in chart_rows.items():
+        if not rows:
+            continue
+        chart_blocks.append(
+            _chart_block(
+                {
+                    "type": "line",
+                    "title": f"So sánh MNH và Qve thực tế/báo cáo - {reservoir_name}",
+                    "data": rows,
+                    "xKey": "Ngày",
+                    "yKeys": ["MNH thực tế", "MNH báo cáo", "Qve thực tế", "Qve báo cáo"],
+                    "colors": ["#2563eb", "#f59e0b", "#10b981", "#ef4444"],
+                    "unit": " m / m³/s",
+                }
+            )
+        )
+    chart_section = "\n\n".join(chart_blocks)
+
+    return f"""
+### Báo cáo mực nước hồ thực tế và chênh lệch MNH báo cáo
+
+**Thời gian:** {_actual_water_period_label(start_date, end_date)}
+
+| Ngày | Hồ | MNH thực tế (m) | MNH báo cáo (m) | Chênh lệch TT-BC (m) | Qve thực tế (m³/s) | Qve báo cáo (m³/s) | Đánh giá |
+|------|----|-----------------|-----------------|----------------------|--------------------|--------------------|----------|
+{chr(10).join(detail_rows)}
+
+**Thống kê chênh lệch**
+
+| Hồ | Số ngày đối chiếu | Chênh TB (m) | Chênh lớn nhất (m) | Ngày thiếu MNH thực tế | Ngày thiếu MNH báo cáo |
+|----|-------------------|--------------|--------------------|------------------------|------------------------|
+{chr(10).join(_actual_water_summary_rows(summary, configs))}
+
+**Đồ thị so sánh MNH và Qve**
+
+{chart_section or "Không có dữ liệu để vẽ đồ thị."}
+
+**Ghi chú:** {_actual_water_source_note(configs)}
+""".strip()
 
 
 def _rainfall_daily_table(records, start_date, days_count):
@@ -359,13 +794,15 @@ def _format_weekly_limit_row(config, record, setting, week_start_date, reference
     level_gap = current_level - weekly_limit if current_level is not None and weekly_limit is not None else None
     capacity_gap = limit_capacity - current_capacity if current_capacity is not None and limit_capacity is not None else None
 
-    # Lấy lưu lượng trung bình từ đầu tuần đến ngày báo cáo
+    # Use the latest 7 days for Qve/Qcm averages so Monday reports still have
+    # enough operating data even when the new week has just started.
     avg_qve = None
     avg_qcm = None
+    average_start_date = reference_date - timedelta(days=6)
 
     filter_kwargs = {
         "nha_may": config["plant_code"],
-        "thoi_gian__date__gte": week_start_date,
+        "thoi_gian__date__gte": average_start_date,
         "thoi_gian__date__lte": reference_date,
     }
     aggregate_args = {}
@@ -423,6 +860,194 @@ def _format_weekly_limit_row(config, record, setting, week_start_date, reference
     )
 
 
+def _average_numeric(values):
+    clean_values = [float(value) for value in values if value is not None]
+    if not clean_values:
+        return None
+    return sum(clean_values) / len(clean_values)
+
+
+def _flow_to_capacity(flow, seconds):
+    if flow is None or seconds <= 0:
+        return None
+    return float(flow) * seconds / 1_000_000
+
+
+def _capacity_to_flow(capacity, seconds):
+    if capacity is None or seconds <= 0:
+        return None
+    return float(capacity) * 1_000_000 / seconds
+
+
+def _vinhson_average_flows(reference_date):
+    from thongsothuyvan.models import ThongsoSanxuat
+
+    start_date = reference_date - timedelta(days=6)
+    records = list(
+        ThongsoSanxuat.objects.filter(
+            nha_may="vinhson",
+            thoi_gian__date__gte=start_date,
+            thoi_gian__date__lte=reference_date,
+        )
+    )
+
+    qve_a_values = []
+    qve_b_values = []
+    qve_c_values = []
+    qcm_a_values = []
+    for record in records:
+        qve_b = record_value(record, "luuluong_ve_ho_b")
+        qve_c = record_value(record, "luuluong_ve_ho_c")
+        total_qve = record_value(record, "cot_i")
+        if total_qve is not None:
+            qve_a_values.append(total_qve - (qve_b or 0.0) - (qve_c or 0.0))
+        if qve_b is not None:
+            qve_b_values.append(qve_b)
+        if qve_c is not None:
+            qve_c_values.append(qve_c)
+        qcm_a = record_value(record, "cot_j")
+        if qcm_a is not None:
+            qcm_a_values.append(qcm_a)
+
+    return {
+        "qve_a": _average_numeric(qve_a_values),
+        "qve_b": _average_numeric(qve_b_values),
+        "qve_c": _average_numeric(qve_c_values),
+        "qcm_a": _average_numeric(qcm_a_values),
+    }
+
+
+def _build_vinhson_cascade_analysis(record, setting, reference_date, week_end_date):
+    from thongsothuyvan.hydrology_services import get_operating_capacity_by_reservoir_level
+
+    title = "### Phân tích điều tiết bậc thang Vĩnh Sơn"
+    if not record or not setting:
+        return f"\n\n{title}\n\nChưa đủ dữ liệu mực nước hiện tại hoặc MNGH tuần của Vĩnh Sơn."
+
+    current_level_a = record_value(record, "cot_g")
+    current_level_b = record_value(record, "mucnuoc_thuongluu_ho_b")
+    current_level_c = record_value(record, "mucnuoc_thuongluu_ho_c")
+    weekly_limit_a = record_value(setting, "mucnuoc_gioihan_tuan_ho_a")
+    weekly_limit_b = record_value(setting, "mucnuoc_gioihan_tuan_ho_b")
+    flows = _vinhson_average_flows(reference_date)
+    qve_a = flows["qve_a"]
+    qve_b = flows["qve_b"]
+    qve_c = flows["qve_c"]
+    qcm_a = flows["qcm_a"]
+    required_values = (
+        current_level_a,
+        current_level_b,
+        current_level_c,
+        weekly_limit_a,
+        weekly_limit_b,
+        qve_a,
+        qve_b,
+        qve_c,
+        qcm_a,
+    )
+    if any(value is None for value in required_values):
+        return f"\n\n{title}\n\nChưa đủ dữ liệu Qve A/B/C, Qcm A, mực nước hiện tại A/B/C hoặc MNGH A/B để phân tích điều tiết."
+
+    current_capacity_a = get_operating_capacity_by_reservoir_level("vinhson_a", current_level_a)
+    current_capacity_b = get_operating_capacity_by_reservoir_level("vinhson_b", current_level_b)
+    current_capacity_c = get_operating_capacity_by_reservoir_level("vinhson_c", current_level_c)
+    limit_capacity_a = get_operating_capacity_by_reservoir_level("vinhson_a", weekly_limit_a)
+    limit_capacity_b = get_operating_capacity_by_reservoir_level("vinhson_b", weekly_limit_b)
+    required_capacities = (
+        current_capacity_a,
+        current_capacity_b,
+        current_capacity_c,
+        limit_capacity_a,
+        limit_capacity_b,
+    )
+    if any(value is None for value in required_capacities):
+        return f"\n\n{title}\n\nChưa đủ dữ liệu dung tích hồ A/B/C để phân tích điều tiết."
+
+    remaining_seconds = _remaining_seconds_to_week_end(record.thoi_gian, week_end_date)
+    if remaining_seconds <= 0:
+        return f"\n\n{title}\n\nĐã hết thời gian còn lại đến cuối tuần, không tính khuyến nghị điều tiết dự báo."
+
+    capacity_gap_a = limit_capacity_a - current_capacity_a
+    capacity_gap_b = limit_capacity_b - current_capacity_b
+    qve_a_capacity = _flow_to_capacity(qve_a, remaining_seconds)
+    qve_b_capacity = _flow_to_capacity(qve_b, remaining_seconds)
+    qve_c_capacity = _flow_to_capacity(qve_c, remaining_seconds)
+    qcm_a_capacity = _flow_to_capacity(qcm_a, remaining_seconds)
+
+    max_b_to_a_capacity = max(capacity_gap_a + qcm_a_capacity - qve_a_capacity, 0.0)
+    max_b_to_a_flow = _capacity_to_flow(max_b_to_a_capacity, remaining_seconds)
+    required_b_to_a_capacity = max(qve_b_capacity - capacity_gap_b, 0.0)
+    required_b_to_a_flow = _capacity_to_flow(required_b_to_a_capacity, remaining_seconds)
+    max_c_to_b_by_ab_capacity = max(capacity_gap_b + max_b_to_a_capacity - qve_b_capacity, 0.0)
+    max_c_to_b_by_c_capacity = max(current_capacity_c + qve_c_capacity, 0.0)
+    max_c_to_b_capacity = min(max_c_to_b_by_ab_capacity, max_c_to_b_by_c_capacity)
+    max_c_to_b_flow = _capacity_to_flow(max_c_to_b_capacity, remaining_seconds)
+    max_c_to_b_by_current_c_flow = _capacity_to_flow(current_capacity_c, remaining_seconds)
+    max_c_to_b_by_c_flow = _capacity_to_flow(max_c_to_b_by_c_capacity, remaining_seconds)
+    recommended_c_to_b_flow = min(max_c_to_b_by_c_flow, max_c_to_b_flow)
+    recommended_c_to_b_capacity = _flow_to_capacity(recommended_c_to_b_flow, remaining_seconds)
+    recommended_b_to_a_capacity = max(qve_b_capacity + recommended_c_to_b_capacity - capacity_gap_b, 0.0)
+    recommended_b_to_a_flow = min(_capacity_to_flow(recommended_b_to_a_capacity, remaining_seconds), max_b_to_a_flow)
+
+    forecast_capacity_a = current_capacity_a + _flow_to_capacity(
+        qve_a + recommended_b_to_a_flow - qcm_a,
+        remaining_seconds,
+    )
+    forecast_capacity_b = current_capacity_b + _flow_to_capacity(
+        qve_b + recommended_c_to_b_flow - recommended_b_to_a_flow,
+        remaining_seconds,
+    )
+    forecast_level_a = _operating_level_by_capacity("vinhson_a", forecast_capacity_a)
+    forecast_level_b = _operating_level_by_capacity("vinhson_b", forecast_capacity_b)
+
+    capacity_gap_a_flow = _capacity_to_flow(capacity_gap_a, remaining_seconds)
+    capacity_gap_b_flow = _capacity_to_flow(capacity_gap_b, remaining_seconds)
+    required_b_to_a_all_c_flow = max(qve_b + qve_c - capacity_gap_b_flow, 0.0)
+    required_qcm_a_all_c_flow = max(qve_a + required_b_to_a_all_c_flow - capacity_gap_a_flow, 0.0)
+
+    if capacity_gap_a + qcm_a_capacity < qve_a_capacity:
+        assessment = (
+            "Hồ A có nguy cơ vượt MNGH ngay cả khi chưa nhận thêm nước từ B; cần tăng Qcm A hoặc giảm nước về A."
+        )
+    elif required_b_to_a_flow > max_b_to_a_flow:
+        assessment = (
+            "Chưa đủ khả năng chuyển nước từ B về A mà vẫn giữ A dưới MNGH; cần tăng Qcm A trước khi hạ B."
+        )
+    elif qve_c > max_c_to_b_flow:
+        assessment = (
+            "Không nên chuyển toàn bộ Qve C về B; cần giữ lại một phần ở C hoặc tăng Qcm A để tạo dung tích cho A/B."
+        )
+    elif max_c_to_b_by_c_capacity < max_c_to_b_by_ab_capacity:
+        assessment = (
+            "Giới hạn chuyển C -> B hiện do dung tích hữu ích khả dụng của hồ C quyết định; A/B còn khả năng nhận thêm nước."
+        )
+    else:
+        assessment = "Có thể điều tiết C qua B và B qua A theo giới hạn tính toán mà A/B không vượt MNGH."
+
+    return f"""
+
+{title}
+
+| Chỉ tiêu | Giá trị |
+|---------|---------|
+| Qve A/B/C trung bình 7 ngày (m³/s) | {fmt_report_decimal(qve_a, 2)} / {fmt_report_decimal(qve_b, 2)} / {fmt_report_decimal(qve_c, 2)} |
+| Qcm A trung bình 7 ngày (m³/s) | {fmt_report_decimal(qcm_a, 2)} |
+| Dung tích còn tới MNGH A/B (tr.m³) | {fmt_report_decimal(capacity_gap_a, 3)} / {fmt_report_decimal(capacity_gap_b, 3)} |
+| DT hữu ích hiện tại hồ C (tr.m³) | {fmt_report_decimal(current_capacity_c, 3)} |
+| B -> A tối thiểu để B không vượt MNGH (m³/s) | {fmt_report_decimal(required_b_to_a_flow, 2)} |
+| B -> A tối đa để A không vượt MNGH (m³/s) | {fmt_report_decimal(max_b_to_a_flow, 2)} |
+| C -> B tối đa theo A/B không vượt MNGH (m³/s) | {fmt_report_decimal(_capacity_to_flow(max_c_to_b_by_ab_capacity, remaining_seconds), 2)} |
+| C -> B tối đa theo DT hữu ích hiện tại hồ C (m³/s) | {fmt_report_decimal(max_c_to_b_by_current_c_flow, 2)} |
+| C -> B tối đa theo DT hữu ích C + Qve C đến cuối tuần (m³/s) | {fmt_report_decimal(max_c_to_b_by_c_flow, 2)} |
+| C -> B tối đa khuyến nghị (m³/s) | {fmt_report_decimal(max_c_to_b_flow, 2)} |
+| MN dự báo A/B nếu điều tiết theo khuyến nghị (m) | {fmt_report_decimal(forecast_level_a, 2)} / {fmt_report_decimal(forecast_level_b, 2)} |
+| Qcm A tối thiểu nếu chuyển toàn bộ Qve C (m³/s) | {fmt_report_decimal(required_qcm_a_all_c_flow, 2)} |
+| Đánh giá | {assessment} |
+
+**Ghi chú Vĩnh Sơn:** Hồ C chưa có MNGH tuần nên phần C được tính theo dung tích hữu ích hiện tại có thể điều tiết và Qve C dự báo theo trung bình 7 ngày. Lưu lượng C -> B khuyến nghị là giá trị nhỏ hơn giữa khả năng nhận của A/B và lượng nước hữu ích khả dụng của C. Các lưu lượng B -> A, C -> B là lưu lượng điều tiết khuyến nghị theo cân bằng nước, không phải số đo Qcm riêng của hồ B/C.
+""".rstrip()
+
+
 def build_leadership_weekly_limit_report(reference_date=None):
     from thongsothuyvan.hydrology_services import get_settings_week_number
 
@@ -443,6 +1068,12 @@ def build_leadership_weekly_limit_report(reference_date=None):
         )
         for config in LEADERSHIP_WEEKLY_LIMIT_RESERVOIRS
     ]
+    vinhson_cascade_analysis = _build_vinhson_cascade_analysis(
+        latest_records.get("vinhson"),
+        settings_by_plant.get("vinhson"),
+        reference_date,
+        week_end_date,
+    )
 
     return f"""
 ### Mực nước giới hạn tuần và phân tích
@@ -453,7 +1084,8 @@ def build_leadership_weekly_limit_report(reference_date=None):
 |----|-------------------|-----------------|---------------|--------------------------|---------------------|------------------------------|------------|------------|-------------------------|------------------------------|----------|
 {chr(10).join(rows)}
 
-**Ghi chú:** MN dự báo cuối tuần = dung tích hiện tại + (Qve - Qcm) * thời gian còn lại đến cuối tuần / 1.000.000. Vĩnh Sơn B hiện chưa có Qcm riêng trong dữ liệu nên chỉ phân tích hiện trạng khi thiếu dữ liệu điều tiết ra.
+**Ghi chú:** Qve và Qcm trong bảng là trung bình 7 ngày gần nhất đến ngày báo cáo. MN dự báo cuối tuần = dung tích hiện tại + (Qve - Qcm) * thời gian còn lại đến cuối tuần / 1.000.000. Vĩnh Sơn B hiện chưa có Qcm riêng trong dữ liệu nên chỉ phân tích hiện trạng khi thiếu dữ liệu điều tiết ra.
+{vinhson_cascade_analysis}
 """.strip()
 
 

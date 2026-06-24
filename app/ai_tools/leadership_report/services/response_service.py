@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from ...storage import save_exchange
 from .report_service import (
+    build_leadership_actual_water_level_report,
     build_leadership_production_report,
     build_leadership_rainfall_weather_report,
     build_leadership_weekly_limit_report,
@@ -153,6 +154,11 @@ def event_statistics_response(*, user, session_id, content, provider, selected_m
             f"Anh/chị muốn thống kê sự kiện của {request.plant_name} trong khoảng thời gian nào, "
             "hay muốn hiển thị tất cả?"
         )
+    elif False:
+        assistant_message = (
+            f"Anh/chị muốn thống kê sự kiện của {request.plant_name} trong khoảng thời gian nào, "
+            "hay muốn hiển thị tất cả?"
+        )
     else:
         assistant_message = build_leadership_event_statistics_report(
             plant_code=request.plant_code,
@@ -184,6 +190,78 @@ def event_statistics_response(*, user, session_id, content, provider, selected_m
             "start_date": request.start_date.isoformat() if request.start_date else "",
             "end_date": request.end_date.isoformat() if request.end_date else "",
             "all_time": request.all_time,
+            "needs_time_clarification": request.needs_time_clarification,
+        },
+    )
+    return {
+        "session_id": session_id,
+        "response": assistant_message,
+        "provider": provider,
+        "model": selected_model,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+        "latency_ms": latency_ms,
+        "tools_called": 0,
+    }
+
+
+def _actual_water_clarification_message(compare_reported):
+    if compare_reported:
+        return (
+            "Anh/chị muốn so sánh mực nước/Qve thực tế và báo cáo "
+            "ngày nào hoặc trong khoảng thời gian nào?"
+        )
+    return (
+        "Anh/chị muốn thống kê mực nước/Qve thực tế "
+        "ngày nào hoặc trong khoảng thời gian nào?"
+    )
+
+
+def actual_water_level_report_response(*, user, session_id, content, provider, selected_model, start_time, source, request):
+    plant_codes = getattr(request, "plant_codes", None)
+    compare_reported = getattr(request, "compare_reported", False)
+    if request.needs_time_clarification:
+        assistant_message = _actual_water_clarification_message(compare_reported)
+    elif False:
+        if compare_reported:
+            assistant_message = (
+                "Anh/chị muốn so sánh mực nước/Qve thực tế và báo cáo "
+                "ngày nào hoặc trong khoảng thời gian nào?"
+            )
+        else:
+            assistant_message = (
+                "Anh/chị muốn thống kê mực nước/Qve thực tế "
+                "ngày nào hoặc trong khoảng thời gian nào?"
+            )
+    else:
+        assistant_message = build_leadership_actual_water_level_report(
+            request.start_date,
+            request.end_date,
+            plant_codes=plant_codes,
+            compare_reported=compare_reported,
+        )
+
+    latency_ms = int((time.time() - start_time) * 1000)
+    save_exchange(
+        user=user,
+        session_id=session_id,
+        user_message=content,
+        assistant_message=assistant_message,
+        model=selected_model,
+        total_tokens=0,
+        cost_usd=0,
+        tools_called=0,
+        latency_ms=latency_ms,
+        meta={
+            "reservoir_detected": False,
+            "tools_called": 0,
+            "provider": provider,
+            "leadership_menu_choice": "actual_water_level_report",
+            "actual_water_level_source": source,
+            "start_date": request.start_date.isoformat() if request.start_date else "",
+            "end_date": request.end_date.isoformat() if request.end_date else "",
+            "plant_codes": ",".join(plant_codes or ()),
+            "compare_reported": compare_reported,
             "needs_time_clarification": request.needs_time_clarification,
         },
     )

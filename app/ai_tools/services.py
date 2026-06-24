@@ -12,7 +12,9 @@ from django.conf import settings
 from django.utils import timezone
 
 from .leadership_report import (
+    actual_water_level_report_response,
     expand_leadership_menu_choice,
+    get_actual_water_level_request,
     get_event_statistics_request,
     get_three_plant_production_report_date,
     has_leadership_production_menu_context,
@@ -924,7 +926,55 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
     is_leader = is_leadership_title(title)
 
     menu_history = get_conversation(user, session_id, limit=MODEL_HISTORY_LIMIT)
+    actual_water_level_request = get_actual_water_level_request(content, menu_history)
+    if actual_water_level_request and not is_leader:
+        assistant_message = (
+            "Xin lỗi! Chức năng phân tích mực nước hồ thực tế và chênh lệch MNH báo cáo "
+            "chỉ dành cho Tổng Giám Đốc/Phó Tổng Giám Đốc."
+        )
+        latency_ms = int((time.time() - start_time) * 1000)
+        save_exchange(
+            user=user,
+            session_id=session_id,
+            user_message=content,
+            assistant_message=assistant_message,
+            model=selected_model,
+            total_tokens=0,
+            cost_usd=0,
+            tools_called=0,
+            latency_ms=latency_ms,
+            meta={
+                "reservoir_detected": False,
+                "tools_called": 0,
+                "provider": provider,
+                "permission_denied": True,
+                "leadership_only": True,
+                "leadership_menu_choice": "actual_water_level_report",
+            },
+        )
+        return {
+            "session_id": session_id,
+            "response": assistant_message,
+            "provider": provider,
+            "model": selected_model,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+            "latency_ms": latency_ms,
+            "tools_called": 0,
+        }
+
     if is_leader:
+        if actual_water_level_request:
+            return actual_water_level_report_response(
+                user=user,
+                session_id=session_id,
+                content=content,
+                provider=provider,
+                selected_model=selected_model,
+                start_time=start_time,
+                source="direct_request",
+                request=actual_water_level_request,
+            )
         event_statistics_request = get_event_statistics_request(content, menu_history)
         if event_statistics_request:
             return event_statistics_response(

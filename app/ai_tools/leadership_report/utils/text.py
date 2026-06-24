@@ -2,7 +2,8 @@ import unicodedata
 
 
 def normalize_text(value):
-    text = unicodedata.normalize("NFKD", value or "")
+    text = str(value or "").replace("đ", "d").replace("Đ", "D")
+    text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return text.lower()
 

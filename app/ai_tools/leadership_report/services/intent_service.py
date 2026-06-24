@@ -19,6 +19,15 @@ class EventStatisticsRequest:
     needs_time_clarification: bool = False
 
 
+@dataclass(frozen=True)
+class ActualWaterLevelRequest:
+    start_date: date | None = None
+    end_date: date | None = None
+    plant_codes: tuple[str, ...] | None = None
+    compare_reported: bool = False
+    needs_time_clarification: bool = False
+
+
 def is_leadership_title(title):
     normalized = normalize_title(title)
     return normalized in LEADERSHIP_TITLES or any(
@@ -211,13 +220,14 @@ def _extract_event_statistics_period(content):
     if "nam nay" in normalized:
         return date(today.year, 1, 1), date(today.year, 12, 31), False
 
-    days_match = re.search(r"(\d{1,3})\s*ngay\s*qua", normalized)
+    days_match = re.search(r"(\d{1,3})\s*ngay\s*(?:qua|gan nhat)", normalized)
     if days_match:
         days_count = max(int(days_match.group(1)), 1)
         return today - timedelta(days=days_count - 1), today, False
 
     range_match = re.search(
-        r"tu\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\s+(?:den|toi|-)\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?",
+        r"tu\s+(?:ngay\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\s+"
+        r"(?:den|toi|-)\s+(?:ngay\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?",
         normalize_text(content),
     )
     if range_match:
@@ -313,6 +323,68 @@ def get_event_statistics_request(content, history=None):
         all_time=all_time,
         include_details=include_details,
         needs_time_clarification=not all_time and not (start_date and end_date),
+    )
+
+
+def _actual_water_level_context_from_history(history):
+    last_assistant = normalize_text(_last_assistant_message(history))
+    has_context = "muc nuoc ho thuc te" in last_assistant or "mnh thuc te" in last_assistant
+    asks_time = "thoi gian nao" in last_assistant or "ngay nao" in last_assistant
+    return has_context and asks_time
+
+
+def _actual_water_compare_reported(normalized, history=None):
+    has_compare = any(keyword in normalized for keyword in ("so sanh", "chenh lech", "sai lech", "doi chieu"))
+    has_reported = "bao cao" in normalized
+    if has_compare and has_reported:
+        return True
+
+    last_assistant = normalize_text(_last_assistant_message(history))
+    return any(
+        keyword in last_assistant
+        for keyword in ("so sanh", "chenh lech", "mnh bao cao", "qve bao cao")
+    )
+
+
+def _extract_actual_water_plant_codes(normalized):
+    matches = []
+    plant_patterns = (
+        ("songhinh", ("song hinh", "songhinh", "sh")),
+        ("vinhson", ("vinh son", "vinhson", "vs", "vsa", "vsb", "vsc")),
+        ("thuongkontum", ("thuong kon tum", "thuongkontum", "kon tum", "kontum", "tkt")),
+    )
+    for plant_code, aliases in plant_patterns:
+        if any(re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", normalized) for alias in aliases):
+            matches.append(plant_code)
+    return tuple(matches) or None
+
+
+def get_actual_water_level_request(content, history=None):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s/-]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return None
+
+    has_context = _actual_water_level_context_from_history(history)
+    has_water_level = "muc nuoc" in normalized or "mnh" in normalized
+    has_qve = "qve" in normalized or "luu luong ve" in normalized or "luu luong nuoc ve" in normalized
+    has_actual = "thuc te" in normalized
+
+    # The word "thuc te" is the routing keyword for ThongSoThuyVanThucTe.
+    # Without it, let the normal AI/tool flow handle the request.
+    is_direct_request = has_actual and (has_water_level or has_qve)
+    if not is_direct_request and not has_context:
+        return None
+
+    start_date, end_date, all_time = _extract_event_statistics_period(content)
+    needs_time_clarification = all_time or not (start_date and end_date)
+    return ActualWaterLevelRequest(
+        start_date=start_date,
+        end_date=end_date,
+        plant_codes=_extract_actual_water_plant_codes(normalized),
+        compare_reported=_actual_water_compare_reported(normalized, history),
+        needs_time_clarification=needs_time_clarification,
     )
 
 

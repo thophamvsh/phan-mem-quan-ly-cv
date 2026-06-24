@@ -55,4 +55,5 @@ class LeadershipFormattingTests(SimpleTestCase):
     def test_text_normalization_is_case_and_accent_insensitive(self):
         self.assertEqual(normalize_text("BÁO CÁO"), "bao cao")
         self.assertEqual(normalize_title("  Phó   Tổng Giám Đốc  "), "pho tong giam doc")
+        self.assertEqual(normalize_text("Từ ngày 1/6 đến 23/6"), "tu ngay 1/6 den 23/6")
         self.assertEqual(normalize_text(None), "")

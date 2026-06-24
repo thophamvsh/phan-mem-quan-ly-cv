@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 
 from ai_tools.leadership_report import (
     expand_leadership_menu_choice,
+    get_actual_water_level_request,
     get_event_statistics_request,
     get_three_plant_production_report_date,
     has_leadership_event_menu_context,
@@ -88,6 +89,72 @@ class LeadershipIntentTests(SimpleTestCase):
         for content in ("", "muc nuoc gioi han tuan", "bao cao muc nuoc"):
             with self.subTest(content=content):
                 self.assertFalse(is_weekly_limit_report_request(content))
+
+    @patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 6, 24))
+    def test_actual_water_level_request_requires_or_extracts_time(self, _localdate):
+        missing_time = get_actual_water_level_request("bao cao muc nuoc ho thuc te")
+        self.assertIsNone(missing_time.start_date)
+        self.assertTrue(missing_time.needs_time_clarification)
+
+        day_request = get_actual_water_level_request("phan tich chenh lech MNH thuc te va MNH bao cao ngay 23/6")
+        self.assertEqual(day_request.start_date, date(2026, 6, 23))
+        self.assertEqual(day_request.end_date, date(2026, 6, 23))
+        self.assertTrue(day_request.compare_reported)
+        self.assertFalse(day_request.needs_time_clarification)
+
+        range_request = get_actual_water_level_request("thong ke muc nuoc thuc te 7 ngay gan nhat")
+        self.assertEqual(range_request.start_date, date(2026, 6, 18))
+        self.assertEqual(range_request.end_date, date(2026, 6, 24))
+        self.assertFalse(range_request.compare_reported)
+        self.assertFalse(range_request.needs_time_clarification)
+
+        direct_request = get_actual_water_level_request(
+            "Muc nuoc va Qve thuc te cua Song Hinh tu ngay 1/6 den 23/6/2026"
+        )
+        self.assertEqual(direct_request.start_date, date(2026, 6, 1))
+        self.assertEqual(direct_request.end_date, date(2026, 6, 23))
+        self.assertEqual(direct_request.plant_codes, ("songhinh",))
+        self.assertFalse(direct_request.compare_reported)
+        self.assertFalse(direct_request.needs_time_clarification)
+
+        vietnamese_request = get_actual_water_level_request(
+            "Thống kê Mực nước và Qve thực tế của Sông Hinh từ ngày 1/6 đến 23/6/2026"
+        )
+        self.assertEqual(vietnamese_request.start_date, date(2026, 6, 1))
+        self.assertEqual(vietnamese_request.end_date, date(2026, 6, 23))
+        self.assertEqual(vietnamese_request.plant_codes, ("songhinh",))
+        self.assertFalse(vietnamese_request.compare_reported)
+        self.assertFalse(vietnamese_request.needs_time_clarification)
+
+        compare_request = get_actual_water_level_request(
+            "So sanh Qve va MNH thuc te va bao cao cua Song Hinh tu ngay 1/6 den 23/6/2026"
+        )
+        self.assertEqual(compare_request.start_date, date(2026, 6, 1))
+        self.assertEqual(compare_request.end_date, date(2026, 6, 23))
+        self.assertEqual(compare_request.plant_codes, ("songhinh",))
+        self.assertTrue(compare_request.compare_reported)
+
+        no_actual_keyword = get_actual_water_level_request(
+            "Muc nuoc va Qve cua Song Hinh tu ngay 1/6 den 23/6/2026"
+        )
+        self.assertIsNone(no_actual_keyword)
+
+    def test_actual_water_level_request_uses_clarification_context(self):
+        history = [
+            {
+                "role": "assistant",
+                "content": (
+                    "Anh/chị muốn phân tích mực nước hồ thực tế "
+                    "và chênh lệch MNH báo cáo ngày nào hoặc trong khoảng thời gian nào?"
+                ),
+            }
+        ]
+
+        request = get_actual_water_level_request("ngay 23/6/2026", history)
+
+        self.assertEqual(request.start_date, date(2026, 6, 23))
+        self.assertEqual(request.end_date, date(2026, 6, 23))
+        self.assertFalse(request.needs_time_clarification)
 
     @patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 6, 13))
     def test_event_statistics_request_requires_or_extracts_time(self, _localdate):

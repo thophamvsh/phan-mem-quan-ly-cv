@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from ai_tools.leadership_report import (
+    build_leadership_actual_water_level_report,
     build_leadership_hydrology_report,
     build_leadership_rainfall_weather_report,
     build_leadership_weekly_limit_report,
@@ -17,6 +18,7 @@ from thongsothuyvan.hydrology_services import (
 from thongsothuyvan.models import (
     SonghinhMnh,
     ThongSoThuyVanCaiDat,
+    ThongSoThuyVanThucTe,
     ThongsoSanxuat,
     ThuongKonTumMnh,
     TramDoMuaVrain,
@@ -101,6 +103,149 @@ class LeadershipHydrologyReportTests(TestCase):
         report = build_leadership_hydrology_report(self.report_date)
 
         self.assertIn("| Thượng Kon Tum | Không có dữ liệu | - | - | - | - | - | - |", report)
+
+
+class LeadershipActualWaterLevelReportTests(TestCase):
+    databases = {"default"}
+
+    def test_actual_water_level_report_compares_actual_and_reported_levels(self):
+        report_date = date(2026, 6, 23)
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="songhinh",
+            ngay=report_date,
+            muc_nuoc_ho=202.4,
+            qve=11.0,
+        )
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="vinhson",
+            ngay=report_date,
+            muc_nuoc_ho_a=770.5,
+            muc_nuoc_ho_b=819.9,
+            muc_nuoc_ho_c=976.2,
+            qve_ho_a=44.0,
+            qve_ho_b=77.0,
+            qve_ho_c=88.0,
+        )
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="thuongkontum",
+            ngay=report_date,
+            muc_nuoc_ho=1144.3,
+            qve=99.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=datetime(2026, 6, 23, 7, 0, tzinfo=timezone.utc),
+            cot_g=202.0,
+            cot_i=10.5,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="vinhson",
+            thoi_gian=datetime(2026, 6, 23, 7, 0, tzinfo=timezone.utc),
+            cot_g=770.0,
+            cot_i=210.0,
+            mucnuoc_thuongluu_ho_b=820.0,
+            mucnuoc_thuongluu_ho_c=976.0,
+            luuluong_ve_ho_b=77.0,
+            luuluong_ve_ho_c=88.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="thuongkontum",
+            thoi_gian=datetime(2026, 6, 23, 7, 0, tzinfo=timezone.utc),
+            cot_g=1144.0,
+            cot_i=98.5,
+        )
+
+        report = build_leadership_actual_water_level_report(
+            report_date,
+            report_date,
+            compare_reported=True,
+        )
+
+        self.assertIn("### Báo cáo mực nước hồ thực tế", report)
+        self.assertIn("| 23/06/2026 | Sông Hinh | 202,40 | 202,00 | 0,40 | 11,00 |", report)
+        self.assertIn("| 23/06/2026 | Vĩnh Sơn A | 770,50 | 770,00 | 0,50 | 44,00 |", report)
+        self.assertIn("| 23/06/2026 | Vĩnh Sơn B | 819,90 | 820,00 | -0,10 | 77,00 |", report)
+        self.assertIn("| 23/06/2026 | Vĩnh Sơn C | 976,20 | 976,00 | 0,20 | 88,00 |", report)
+        self.assertIn("| 23/06/2026 | Thượng Kon Tum | 1.144,30 | 1.144,00 | 0,30 | 99,00 |", report)
+        self.assertIn("Qve báo cáo", report)
+        self.assertIn("11,00 | 10,50", report)
+        self.assertIn("44,00 | 45,00", report)
+        self.assertIn("99,00 | 98,50", report)
+        self.assertIn("```chart", report)
+        self.assertIn("So sánh MNH và Qve thực tế/báo cáo - Sông Hinh", report)
+        self.assertIn('"yKeys": [', report)
+        self.assertIn('"MNH thực tế"', report)
+        self.assertIn('"MNH báo cáo"', report)
+        self.assertIn('"Qve thực tế"', report)
+        self.assertIn('"Qve báo cáo"', report)
+        self.assertIn('"yTicks": [', report)
+        self.assertIn("55", report)
+        self.assertIn("110", report)
+        self.assertIn("165", report)
+        self.assertIn("220", report)
+        self.assertIn("ThongSoThuyVanThucTe", report)
+        self.assertIn("ThongsoSanxuat", report)
+
+    def test_actual_water_level_report_can_filter_to_songhinh(self):
+        report_date = date(2026, 6, 23)
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="songhinh",
+            ngay=report_date,
+            muc_nuoc_ho=202.4,
+            qve=11.0,
+        )
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="vinhson",
+            ngay=report_date,
+            muc_nuoc_ho_a=770.5,
+            qve_ho_a=44.0,
+        )
+
+        report = build_leadership_actual_water_level_report(
+            report_date,
+            report_date,
+            plant_codes=("songhinh",),
+        )
+
+        self.assertIn("| 23/06/2026 | Sông Hinh | 202,40 |", report)
+        self.assertNotIn("Vĩnh Sơn", report)
+        self.assertNotIn("Thượng Kon Tum", report)
+
+
+    def test_actual_water_level_report_defaults_to_actual_only(self):
+        report_date = date(2026, 6, 23)
+        ThongSoThuyVanThucTe.objects.create(
+            nha_may="songhinh",
+            ngay=report_date,
+            muc_nuoc_ho=202.4,
+            qve=11.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=datetime(2026, 6, 23, 7, 0, tzinfo=timezone.utc),
+            cot_g=202.0,
+            cot_i=10.5,
+        )
+
+        report = build_leadership_actual_water_level_report(
+            report_date,
+            report_date,
+            plant_codes=("songhinh",),
+        )
+
+        self.assertIn("Thống kê mực nước và Qve thực tế", report)
+        self.assertIn("| Ngày | Hồ | MNH thực tế (m) | Qve thực tế (m³/s) |", report)
+        self.assertIn("| 23/06/2026 | Sông Hinh | 202,40 | 11,00 |", report)
+        self.assertIn("```chart", report)
+        self.assertIn("Diễn biến MNH và Qve thực tế - Sông Hinh", report)
+        self.assertIn('"MNH thực tế"', report)
+        self.assertIn('"Qve thực tế"', report)
+        self.assertIn('"yDomain": [', report)
+        self.assertIn('"yTicks": [', report)
+        self.assertNotIn("Qve báo cáo", report)
+        self.assertNotIn("Thá»", report)
+        self.assertNotIn("mÃ", report)
+        self.assertNotIn("202,00", report)
 
 
 class LeadershipRainfallWeatherReportTests(TestCase):
@@ -221,6 +366,59 @@ class LeadershipWeeklyLimitReportTests(TestCase):
         self.assertIn("202,50 | 50,000 | Hiện tại thấp hơn MNGH 2,50 m; Dự báo cuối tuần thấp hơn MNGH 2,50 m |", report)
         self.assertIn("Hiện tại thấp hơn MNGH 2,20 m; Chưa đủ dữ liệu Qcm/điều tiết để dự báo", report)
         self.assertIn("Vĩnh Sơn B hiện chưa có Qcm riêng", report)
+        self.assertIn("### Phân tích điều tiết bậc thang Vĩnh Sơn", report)
+        self.assertIn("| Qve A/B/C trung bình 7 ngày (m³/s) | 7,00 / 5,00 / 3,00 |", report)
+        self.assertIn("| Qcm A trung bình 7 ngày (m³/s) | 15,00 |", report)
+        self.assertIn("| DT hữu ích hiện tại hồ C (tr.m³) | 5,000 |", report)
+        self.assertIn("| B -> A tối thiểu để B không vượt MNGH (m³/s) | 0,00 |", report)
+        self.assertIn("| C -> B tối đa theo A/B không vượt MNGH (m³/s) |", report)
+        self.assertIn("| C -> B tối đa theo DT hữu ích hiện tại hồ C (m³/s) |", report)
+        self.assertIn("| C -> B tối đa theo DT hữu ích C + Qve C đến cuối tuần (m³/s) |", report)
+        self.assertIn("| C -> B tối đa khuyến nghị (m³/s) |", report)
+        self.assertIn("dung tích hữu ích khả dụng của hồ C quyết định", report)
+        self.assertIn("Hồ C chưa có MNGH tuần", report)
+        self.assertIn("dung tích hữu ích hiện tại", report)
+
+    def test_weekly_limit_report_uses_latest_seven_days_for_qve_qcm_averages(self):
+        reference_date = date(2026, 6, 15)
+        week_number = get_settings_week_number(reference_date)
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan=week_number,
+            tuan_bat_dau=date(2026, 6, 15),
+            tuan_ket_thuc=date(2026, 6, 21),
+            mucnuoc_gioihan_tuan=205.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=datetime(2026, 6, 8, 0, 0, tzinfo=timezone.utc),
+            cot_g=202.0,
+            cot_i=1000.0,
+            cot_j=1000.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=datetime(2026, 6, 9, 0, 0, tzinfo=timezone.utc),
+            cot_g=202.0,
+            cot_i=20.0,
+            cot_j=10.0,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=datetime(2026, 6, 14, 0, 0, tzinfo=timezone.utc),
+            cot_g=202.5,
+            cot_i=40.0,
+            cot_j=30.0,
+        )
+
+        report = build_leadership_weekly_limit_report(reference_date)
+
+        self.assertIn(f"**Tuần:** {week_number} (15/06/2026 - 21/06/2026)", report)
+        self.assertIn("| Sông Hinh | 14/06/2026 07:00 | 202,50 | 205,00 | -2,50 |", report)
+        self.assertIn("30,00 | 20,00", report)
+        self.assertIn("Qve và Qcm trong bảng là trung bình 7 ngày gần nhất", report)
 
     def test_weekly_limit_report_describes_current_above_limit_but_forecast_below_limit(self):
         reference_date = date(2026, 6, 13)

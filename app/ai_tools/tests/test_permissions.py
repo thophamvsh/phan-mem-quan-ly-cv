@@ -641,6 +641,75 @@ class AiToolFactoryScopeTests(TestCase):
         self.assertEqual(response["response"], "Chuyển cho LLM xử lý.")
 
 
+    def test_actual_water_level_request_denied_for_non_leader(self):
+        self.all_factories_user.profile.chuc_danh = "Giám đốc"
+        self.all_factories_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="bao cao muc nuoc ho thuc te ngay 23/6/2026",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("chỉ dành cho Tổng Giám Đốc/Phó Tổng Giám Đốc", response["response"])
+
+    def test_actual_water_level_ambiguous_request_asks_leader_for_time(self):
+        self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
+        self.all_factories_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="bao cao muc nuoc ho thuc te",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("ngày nào", response["response"])
+        self.assertIn("khoảng thời gian nào", response["response"])
+
+    def test_actual_water_level_direct_songhinh_range_does_not_call_openai_tools(self):
+        self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
+        self.all_factories_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Muc nuoc va Qve thuc te cua Song Hinh tu ngay 1/6 den 23/6/2026",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("01/06/2026 - 23/06/2026", response["response"])
+        self.assertIn("Sông Hinh", response["response"])
+        self.assertNotIn("Vĩnh Sơn", response["response"])
+
+
+    def test_actual_water_level_without_actual_keyword_uses_normal_ai_flow(self):
+        self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
+        self.all_factories_user.profile.save()
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            run_openai.return_value = ("NORMAL FLOW", 0, 0, 0, 0)
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Muc nuoc va Qve cua Song Hinh tu ngay 1/6 den 23/6/2026",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_called_once()
+        self.assertEqual(response["response"], "NORMAL FLOW")
+
+
 class AiToolsApiPermissionTests(APITestCase):
     def test_chat_requires_ai_tools_permission(self):
         user = get_user_model().objects.create_user(

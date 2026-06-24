@@ -113,7 +113,7 @@ class VinhSonRealtimeSnapshot(models.Model):
 class ThongsoSanxuat(models.Model):
     nha_may = models.CharField(max_length=50, default='songhinh')
     thoi_gian = models.DateTimeField()
-    
+
     # Các cột từ C đến X (trừ E)
     cot_c = models.CharField(verbose_name="Hồ chứa", max_length=100, null=True, blank=True)
     cot_d = models.FloatField(verbose_name="Mực nước kế hoạch", null=True, blank=True)
@@ -160,7 +160,7 @@ class ThongsoSanxuat(models.Model):
         related_name="thongsosanxuat_updated",
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         ordering = ["-thoi_gian"]
         unique_together = ('thoi_gian', 'nha_may')
@@ -289,7 +289,7 @@ class ThongsoGioPhat(models.Model):
         related_name="thongsogiophat_updated",
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         ordering = ["-ngay", "to_may"]
         unique_together = ('ngay', 'to_may', 'nha_may')
