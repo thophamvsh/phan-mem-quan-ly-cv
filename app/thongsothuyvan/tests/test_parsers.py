@@ -279,6 +279,61 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
         self.assertEqual(result.data[1]["qve_tong"], 63.0)
 
     @patch("thongsothuyvan.google_sheet_services.get_stats_export_spreadsheet_id", return_value="sheet-id")
+    def test_preview_thuc_te_range_falls_back_when_sheet_rows_are_shifted(self, _sheet_id):
+        class Worksheet:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, range_name):
+                self.calls.append(("get", range_name))
+                return [
+                    ["18/06/2026", "203,505", "56", "33,361", "0,0", "14,840"],
+                    ["19/06/2026", "203,44", "55", "36,473", "0,0", "14,865"],
+                    ["20/06/2026", "203,368", "56", "32,163", "0,0", "10,555"],
+                ]
+
+            def get_all_values(self):
+                self.calls.append(("all", None))
+                return [
+                    ["header"],
+                    [],
+                    [],
+                    ["header"],
+                    [],
+                    ["header"],
+                    [],
+                    ["21/06/2026", "203,276", "56", "32,253", "0,0", "7,559"],
+                    ["22/06/2026", "203,225", "56", "27,674", "0,0", "12,240"],
+                    ["23/06/2026", "203,174", "55,5", "27,967", "0,0", "9,446"],
+                ]
+
+        class Spreadsheet:
+            def __init__(self, worksheet):
+                self._worksheet = worksheet
+
+            def worksheet(self, name):
+                return self._worksheet
+
+        class Client:
+            def __init__(self, spreadsheet):
+                self._spreadsheet = spreadsheet
+
+            def open_by_key(self, sheet_id):
+                return self._spreadsheet
+
+        worksheet = Worksheet()
+        spreadsheet = Spreadsheet(worksheet)
+        service = GoogleSheetHydrologyService(client_factory=lambda nhamay: Client(spreadsheet))
+
+        result = service.preview_thuc_te_range("songhinh", date(2026, 6, 21), date(2026, 6, 23))
+
+        self.assertEqual(worksheet.calls, [("get", "A1275:F1277"), ("all", None)])
+        self.assertEqual(result.source_range, "2023!all_values")
+        self.assertEqual([item["ngay"] for item in result.data], ["2026-06-21", "2026-06-22", "2026-06-23"])
+        self.assertEqual(result.data[2]["qve"], 9.446)
+        self.assertTrue(result.warnings)
+
+    @patch("thongsothuyvan.google_sheet_services.get_stats_export_spreadsheet_id", return_value="sheet-id")
     def test_preview_thuc_te_accepts_sheet_title_with_different_spacing(self, _sheet_id):
         class Worksheet:
             title = "2023  ngày"

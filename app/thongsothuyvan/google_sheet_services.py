@@ -432,6 +432,26 @@ def get_thuc_te_rows_for_date_range(worksheet, nhamay, start_date, end_date):
     return worksheet.get(f"A{start_row}:{config['range_end_col']}{end_row}")
 
 
+def iter_dates(start_date, end_date):
+    current_date = start_date
+    while current_date <= end_date:
+        yield current_date
+        current_date += timedelta(days=1)
+
+
+def parsed_result_covers_date_range(result, start_date, end_date):
+    if not start_date or not end_date:
+        return True
+
+    expected_dates = set(iter_dates(start_date, end_date))
+    parsed_dates = {
+        parsed_date
+        for parsed_date in (parse_item_date(item.get("ngay")) for item in result.data)
+        if parsed_date is not None
+    }
+    return expected_dates.issubset(parsed_dates)
+
+
 def parse_san_luong_records_with_metadata(rows, nhamay, filter_date=None, source_range=""):
     parsed_data = []
     skipped_rows = []
@@ -810,13 +830,27 @@ class GoogleSheetHydrologyService:
                 source_range = f"{sheet_title}!all_values"
 
             rows = get_thuc_te_rows_for_date_range(worksheet, nhamay, start_date, end_date)
-            return parse_thuc_te_records_with_metadata(
+            result = parse_thuc_te_records_with_metadata(
                 rows,
                 nhamay,
                 source_range=source_range,
                 start_date=start_date,
                 end_date=end_date,
             )
+            if parsed_result_covers_date_range(result, start_date, end_date):
+                return result
+
+            fallback = parse_thuc_te_records_with_metadata(
+                worksheet.get_all_values()[config["start_row"] - 1:],
+                nhamay,
+                source_range=f"{sheet_title}!all_values",
+                start_date=start_date,
+                end_date=end_date,
+            )
+            fallback.warnings.append(
+                f"Khong tim thay du ngay o {source_range}; da doc lai toan bo tab {sheet_title}."
+            )
+            return fallback
         except GoogleSheetSyncError:
             raise
         except Exception as exc:

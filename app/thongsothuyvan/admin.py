@@ -61,6 +61,31 @@ class SafeFloatWidget(widgets.FloatWidget):
         return float(value)
 
 
+class DecimalCommaFloatWidget(SafeFloatWidget):
+    def clean(self, value, row=None, **kwargs):
+        if value is None or value == "":
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        value = str(value).strip()
+        if value in {"", "-", "--", "nan", "NaN", "None"}:
+            return None
+
+        value = value.replace(" ", "")
+        if "," in value and "." in value:
+            if value.rfind(",") > value.rfind("."):
+                value = value.replace(".", "").replace(",", ".")
+            else:
+                value = value.replace(",", "")
+        elif "," in value:
+            value = value.replace(",", ".")
+        elif value.count(".") > 1:
+            value = value.replace(".", "")
+
+        return float(value)
+
+
 class FlexibleDateTimeWidget(widgets.DateTimeWidget):
     supported_formats = (
         "%Y-%m-%d %H:%M:%S",
@@ -417,6 +442,46 @@ class ThongsoGioPhatResource(resources.ModelResource):
         import_id_fields = ("ngay", "to_may", "nha_may")
 
 
+class ThongSoThuyVanThucTeResource(SafeWidgetResource):
+    required_import_fields = ("nha_may", "ngay")
+    date_fields = ("ngay",)
+    float_fields = (
+        "muc_nuoc_ho",
+        "qve",
+        "muc_nuoc_ho_a",
+        "muc_nuoc_ho_b",
+        "muc_nuoc_ho_c",
+        "qve_ho_a",
+        "qve_ho_b",
+        "qve_ho_c",
+        "qve_tong",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in self.float_fields:
+            if field_name in self.fields:
+                self.fields[field_name].widget = DecimalCommaFloatWidget()
+
+    class Meta:
+        model = ThongSoThuyVanThucTe
+        fields = (
+            "nha_may",
+            "ngay",
+            "muc_nuoc_ho",
+            "qve",
+            "muc_nuoc_ho_a",
+            "muc_nuoc_ho_b",
+            "muc_nuoc_ho_c",
+            "qve_ho_a",
+            "qve_ho_b",
+            "qve_ho_c",
+            "qve_tong",
+        )
+        export_order = fields
+        import_id_fields = ("nha_may", "ngay")
+
+
 class MucnuocQuytrinhResource(SafeWidgetResource):
     required_import_fields = ("ngay_bat_dau", "ngay_ket_thuc")
     ignored_blank_fields = ("nha_may",)
@@ -525,7 +590,8 @@ class ThongsoGioPhatAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
 
 
 @admin.register(ThongSoThuyVanThucTe)
-class ThongSoThuyVanThucTeAdmin(admin.ModelAdmin):
+class ThongSoThuyVanThucTeAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
+    resource_class = ThongSoThuyVanThucTeResource
     change_list_template = "admin/thongsothuyvan/thongsothuyvanthucte/change_list.html"
     list_display = (
         "nha_may",
