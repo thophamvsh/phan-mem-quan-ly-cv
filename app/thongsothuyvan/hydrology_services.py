@@ -53,12 +53,18 @@ def get_capacity_points_for_reservoir(reservoir_key):
         return ()
 
     return tuple(
-        (record.Mucnuoc, record.dungtich)
-        for record in model_class.objects.order_by("Mucnuoc").only(
+        (float(row[0]), float(row[1]))
+        for row in model_class.objects.order_by("Mucnuoc").values_list(
             "Mucnuoc",
             "dungtich",
         )
     )
+
+
+@lru_cache(maxsize=16)
+def get_capacity_levels_for_reservoir(reservoir_key):
+    points = get_capacity_points_for_reservoir(reservoir_key)
+    return [point[0] for point in points]
 
 
 def get_capacity_points_for_plant(nha_may):
@@ -66,31 +72,33 @@ def get_capacity_points_for_plant(nha_may):
 
 
 def get_capacity_by_reservoir_level(reservoir_key, mucnuoc):
+    if mucnuoc is None:
+        return None
     try:
-        level = Decimal(str(mucnuoc))
-    except (InvalidOperation, TypeError, ValueError):
+        level = float(mucnuoc)
+    except (TypeError, ValueError):
         return None
 
     points = get_capacity_points_for_reservoir(reservoir_key)
     if not points:
         return None
 
-    levels = [point[0] for point in points]
+    levels = get_capacity_levels_for_reservoir(reservoir_key)
     upper_index = bisect_left(levels, level)
 
     if upper_index == 0:
-        return float(points[0][1])
+        return points[0][1]
     if upper_index == len(points):
-        return float(points[-1][1])
+        return points[-1][1]
 
     lower_level, lower_capacity = points[upper_index - 1]
     upper_level, upper_capacity = points[upper_index]
     if lower_level == upper_level:
-        return float(lower_capacity)
+        return lower_capacity
 
     ratio = (level - lower_level) / (upper_level - lower_level)
     capacity = lower_capacity + ratio * (upper_capacity - lower_capacity)
-    return float(capacity)
+    return capacity
 
 
 def get_capacity_by_level(nha_may, mucnuoc):
@@ -107,9 +115,9 @@ def get_capacity_bounds_for_reservoir(reservoir_key):
         return {"min_level": None, "min_capacity": None, "max_capacity": None}
 
     return {
-        "min_level": float(points[0][0]),
-        "min_capacity": float(points[0][1]),
-        "max_capacity": float(points[-1][1]),
+        "min_level": points[0][0],
+        "min_capacity": points[0][1],
+        "max_capacity": points[-1][1],
     }
 
 
@@ -165,6 +173,7 @@ def get_operating_capacity_range(nha_may):
     )
 
 
+@lru_cache(maxsize=16)
 def get_operating_capacity_range_for_reservoir(reservoir_key):
     level_range = OPERATING_LEVEL_RANGE_BY_RESERVOIR.get(reservoir_key)
     if not level_range:
@@ -185,17 +194,26 @@ def get_operating_capacity_range_for_reservoir(reservoir_key):
     return {"min": 0, "max": round(max(max_capacity - min_capacity, 0), 3)}
 
 
+@lru_cache(maxsize=1)
+def get_all_weekly_settings_cached():
+    from .models import ThongSoThuyVanCaiDat
+    return list(
+        ThongSoThuyVanCaiDat.objects.filter(
+            loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
+            tuan_bat_dau__isnull=False,
+            tuan_ket_thuc__isnull=False,
+        ).only("tuan_bat_dau", "tuan_ket_thuc", "tuan")
+    )
+
+
 @lru_cache(maxsize=1024)
 def get_settings_week_number(target_date):
-    # 1. Thử tìm trong DB trước
-    from .models import ThongSoThuyVanCaiDat
-    record = ThongSoThuyVanCaiDat.objects.filter(
-        loai=ThongSoThuyVanCaiDat.LOAI_MNGH_TUAN,
-        tuan_bat_dau__lte=target_date,
-        tuan_ket_thuc__gte=target_date,
-    ).first()
-    if record:
-        return record.tuan
+    if not target_date:
+        return None
+    # 1. Tìm trong danh sách weekly settings được cache trong memory
+    for record in get_all_weekly_settings_cached():
+        if record.tuan_bat_dau <= target_date <= record.tuan_ket_thuc:
+            return record.tuan
 
     # 2. Fallback sang tính theo ISO week calendar
     monday = target_date - timedelta(days=target_date.weekday())
@@ -232,3 +250,4 @@ def get_setting_value(nha_may, target_date, loai, field, thang=0, tuan=0):
         .first()
     )
     return getattr(record, field, None) if record else None
+
