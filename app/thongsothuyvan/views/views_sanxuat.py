@@ -259,6 +259,17 @@ def build_dashboard_records_for_plant(plant, target_date=None):
     if not report_date:
         return []
 
+    recent_end = latest_date or report_date
+    recent_start = recent_end - timedelta(days=13)
+    add_queryset_records(
+        record_map,
+        ThongsoSanxuat.objects.filter(
+            nha_may=plant,
+            thoi_gian__date__gte=recent_start,
+            thoi_gian__date__lte=recent_end,
+        ).order_by("-thoi_gian"),
+    )
+
     previous_year_date = get_year_offset_date(report_date, 1)
     if previous_year_date:
         add_record(
