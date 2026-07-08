@@ -20,7 +20,13 @@ RUN pip install --no-binary=:all: psycopg2==2.9.9
 
 # cài dependencies (prod + optional dev)
 ARG DEV=false
+ARG TARGETARCH
 RUN pip install --upgrade pip setuptools wheel && \
+    ARCH=$(uname -m) && \
+    if [ "$TARGETARCH" = "arm64" ] || [ "$TARGETARCH" = "arm" ] || [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "armv7l" ] || [ "$ARCH" = "armv6l" ]; then \
+        echo "Detected ARM architecture ($TARGETARCH / $ARCH). Removing docling from requirements.txt to prevent compilation / OOM errors on Raspberry Pi..."; \
+        python -c "import pathlib; p = pathlib.Path('/tmp/requirements.txt'); p.write_text('\n'.join(line for line in p.read_text().splitlines() if 'docling' not in line));"; \
+    fi && \
     pip install -r /tmp/requirements.txt && \
     if [ "$DEV" = "true" ]; then pip install -r /tmp/requirements.dev.txt; fi && \
     rm -rf /root/.cache /tmp/*

@@ -1,7 +1,16 @@
+import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+try:
+    import docling
+except ImportError:
+    # Create a mock docling module so testing imports and @patch work without docling installed
+    mock_docling = Mock()
+    sys.modules["docling"] = mock_docling
+    sys.modules["docling.document_converter"] = mock_docling.document_converter
 
 from django.test import SimpleTestCase
 
