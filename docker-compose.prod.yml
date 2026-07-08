@@ -1,4 +1,4 @@
-name: vsh-dev # cố định tên project để tránh đổi tên volumes ngoài ý muốn
+name: vsh-prod
 
 services:
   redis:
@@ -10,18 +10,17 @@ services:
   db:
     image: pgvector/pgvector:pg13
     environment:
-      POSTGRES_DB: ${DB_NAME:-devdb}
-      POSTGRES_USER: ${DB_USER:-devuser}
+      POSTGRES_DB: ${DB_NAME:-vsh_prod}
+      POSTGRES_USER: ${DB_USER:-vsh_user}
       POSTGRES_PASSWORD: ${DB_PASS:-changeme}
-      # Khởi tạo DB với UTF-8 (ổn định sort/like, đặc biệt tiếng Việt)
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
-      - dev-db-data:/var/lib/postgresql/data
+      - prod-db-data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${DB_USER:-devuser} -d ${DB_NAME:-devdb} -q",
+          "pg_isready -U ${DB_USER:-vsh_user} -d ${DB_NAME:-vsh_prod} -q",
         ]
       interval: 10s
       timeout: 5s
@@ -33,27 +32,25 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile # hoặc Dockerfile.improved nếu bạn tách riêng
-      target: ${BUILD_TARGET:-development}
+      dockerfile: Dockerfile
+      target: production
       args:
-        DEV: ${DEV:-true}
+        DEV: "false"
     env_file:
-      - .env # ưu tiên đọc từ .env (DEBUG, DB_*, v.v.)
+      - .env
     environment:
-      # fallback an toàn cho local nếu .env thiếu
       DB_HOST: db
-      DB_NAME: ${DB_NAME:-devdb}
-      DB_USER: ${DB_USER:-devuser}
+      DB_NAME: ${DB_NAME:-vsh_prod}
+      DB_USER: ${DB_USER:-vsh_user}
       DB_PASS: ${DB_PASS:-changeme}
-      DEBUG: ${DEBUG:-True}
+      DEBUG: "False"
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - ./app:/app # hot-reload code
-      - ./vol/web/media:/vol/web/media # user uploads
+      - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
     command: run.sh
@@ -76,22 +73,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
+      target: production
       args:
-        DEV: ${DEV:-true}
+        DEV: "false"
     env_file:
       - .env
     environment:
       DB_HOST: db
-      DB_NAME: ${DB_NAME:-devdb}
-      DB_USER: ${DB_USER:-devuser}
+      DB_NAME: ${DB_NAME:-vsh_prod}
+      DB_USER: ${DB_USER:-vsh_user}
       DB_PASS: ${DB_PASS:-changeme}
-      DEBUG: ${DEBUG:-True}
+      DEBUG: "False"
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
-      - ./app:/app
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
@@ -100,13 +96,12 @@ services:
         python manage.py wait_for_db &&
         celery -A app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
       "
-    healthcheck:
-      disable: true
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
+    restart: unless-stopped
     networks:
       - vsh-net
 
@@ -114,22 +109,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
+      target: production
       args:
-        DEV: ${DEV:-true}
+        DEV: "false"
     env_file:
       - .env
     environment:
       DB_HOST: db
-      DB_NAME: ${DB_NAME:-devdb}
-      DB_USER: ${DB_USER:-devuser}
+      DB_NAME: ${DB_NAME:-vsh_prod}
+      DB_USER: ${DB_USER:-vsh_user}
       DB_PASS: ${DB_PASS:-changeme}
-      DEBUG: ${DEBUG:-True}
+      DEBUG: "False"
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
-      - ./app:/app
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
@@ -138,8 +132,6 @@ services:
         python manage.py wait_for_db &&
         celery -A app beat --loglevel=info
       "
-    healthcheck:
-      disable: true
     depends_on:
       db:
         condition: service_healthy
@@ -154,4 +146,4 @@ networks:
     driver: bridge
 
 volumes:
-  dev-db-data:
+  prod-db-data:
