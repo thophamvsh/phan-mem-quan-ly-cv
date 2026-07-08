@@ -1,7 +1,6 @@
 import io
 import pandas as pd
 import tablib
-from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -71,14 +70,20 @@ class ExcelImportTests(APITestCase):
         self.assertEqual(od.cha_id, ge.id)
         self.assertEqual(od.ma, "OD")
 
-    def test_thietbi_resource_import_reports_missing_parent(self):
+    def test_thietbi_resource_import_auto_creates_missing_parent(self):
         dataset = tablib.Dataset(headers=["ma_day_du", "ten", "nha_may"])
         dataset.append(("VS.TB.H10.GE", "GE", "VS"))
 
-        with self.assertRaises(ValidationError) as ctx:
-            ThietBiResource().before_import(dataset)
+        result = ThietBiResource().import_data(dataset, dry_run=False, raise_errors=True)
 
-        self.assertIn("VS.TB.H10", str(ctx.exception))
+        self.assertFalse(result.has_errors())
+        parent = ThietBi.objects.get(ma_day_du="VS.TB.H10")
+        child = ThietBi.objects.get(ma_day_du="VS.TB.H10.GE")
+        self.assertIsNone(parent.cha_id)
+        self.assertEqual(parent.ma, "VS.TB.H10")
+        self.assertEqual(parent.ten, "VS.TB.H10")
+        self.assertEqual(child.cha_id, parent.id)
+        self.assertEqual(child.ma, "GE")
 
     def _dien_rows(self, include_index_column=False):
         headers = [["header"] * 34, ["header"] * 34, ["header"] * 34]

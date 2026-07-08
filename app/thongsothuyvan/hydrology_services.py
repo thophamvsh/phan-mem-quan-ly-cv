@@ -11,6 +11,13 @@ from .models import (
     ThongSoThuyVanCaiDat,
 )
 
+FLOAT_ROUND_DIGITS = 10
+
+
+def _round_float(value):
+    return round(value, FLOAT_ROUND_DIGITS) if isinstance(value, float) else value
+
+
 CAPACITY_MODEL_BY_PLANT = {
     "songhinh": SonghinhMnh,
     "vinhson": Vinhson_HoA,
@@ -98,7 +105,7 @@ def get_capacity_by_reservoir_level(reservoir_key, mucnuoc):
 
     ratio = (level - lower_level) / (upper_level - lower_level)
     capacity = lower_capacity + ratio * (upper_capacity - lower_capacity)
-    return capacity
+    return _round_float(capacity)
 
 
 def get_capacity_by_level(nha_may, mucnuoc):
@@ -140,7 +147,7 @@ def get_useful_capacity_by_level(nha_may, mucnuoc, dead_level):
     if current_capacity is None or dead_capacity is None:
         return None
 
-    return max(current_capacity - dead_capacity, 0)
+    return _round_float(max(current_capacity - dead_capacity, 0))
 
 
 def get_operating_capacity_by_level(nha_may, mucnuoc):
@@ -164,7 +171,7 @@ def get_operating_capacity_by_reservoir_level(reservoir_key, mucnuoc):
     if current_capacity is None or min_capacity is None:
         return None
 
-    return max(current_capacity - min_capacity, 0)
+    return _round_float(max(current_capacity - min_capacity, 0))
 
 
 def get_operating_capacity_range(nha_may):
@@ -250,4 +257,3 @@ def get_setting_value(nha_may, target_date, loai, field, thang=0, tuan=0):
         .first()
     )
     return getattr(record, field, None) if record else None
-

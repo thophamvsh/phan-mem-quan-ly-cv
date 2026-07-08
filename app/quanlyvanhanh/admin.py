@@ -384,6 +384,33 @@ class ThietBiResource(resources.ModelResource):
                 f"{preview}{extra}"
             )
 
+    def _ensure_missing_parent_rows(self, rows, seen):
+        rows_by_code = {
+            row.get("ma_day_du", "").lower(): row
+            for row in rows
+            if row.get("ma_day_du")
+        }
+
+        for row in list(rows):
+            parent_code = row.get("cha_ma_day_du")
+            while parent_code:
+                parent_key = parent_code.lower()
+                if parent_key in rows_by_code or self._parent_exists(parent_code):
+                    parent_code = self._parent_code_from_ma_day_du(parent_code)
+                    continue
+
+                parent_row = self._ensure_codes({
+                    "ma_day_du": parent_code,
+                    "ten": parent_code,
+                    "nha_may": row.get("nha_may") or parent_code.split(".")[0],
+                })
+                parent_row["__source_line"] = f"auto:{row.get('__source_line', '?')}"
+                rows.append(parent_row)
+                rows_by_code[parent_key] = parent_row
+                seen.add(parent_row["ma_day_du"])
+
+                parent_code = parent_row.get("cha_ma_day_du")
+
     def _ensure_codes(self, row: dict) -> dict:
         """
         Đồng bộ mã: TỪ MA_DAY_DU TỰ ĐỘNG SUY RA MA & CHA_MA_DAY_DU.
@@ -469,6 +496,7 @@ class ThietBiResource(resources.ModelResource):
             seen.add(code)
             rows.append(row)
 
+        self._ensure_missing_parent_rows(rows, seen)
         self._validate_parent_codes(rows, seen)
 
         rows.sort(key=lambda row: (self._code_depth(row.get("ma_day_du")), row.get("ma_day_du", "")))
