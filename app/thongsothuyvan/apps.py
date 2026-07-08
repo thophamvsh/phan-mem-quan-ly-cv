@@ -25,6 +25,13 @@ class ThongsothuyvanConfig(AppConfig):
             get_settings_week_number.cache_clear()
             get_setting_value.cache_clear()
 
-        post_save.connect(clear_hydrology_caches, sender=ThongSoThuyVanCaiDat)
-        post_delete.connect(clear_hydrology_caches, sender=ThongSoThuyVanCaiDat)
-
+        post_save.connect(
+            clear_hydrology_caches,
+            sender=ThongSoThuyVanCaiDat,
+            dispatch_uid="thongsothuyvan.clear_hydrology_caches.save",
+        )
+        post_delete.connect(
+            clear_hydrology_caches,
+            sender=ThongSoThuyVanCaiDat,
+            dispatch_uid="thongsothuyvan.clear_hydrology_caches.delete",
+        )

@@ -17,7 +17,7 @@ def get_user_agent(request):
         return ""
     return request.META.get('HTTP_USER_AGENT', '')
 
-@receiver(user_logged_in)
+@receiver(user_logged_in, dispatch_uid="core.log_user_logged_in")
 def log_user_logged_in(sender, request, user, **kwargs):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
@@ -29,7 +29,7 @@ def log_user_logged_in(sender, request, user, **kwargs):
         user_agent=ua
     )
 
-@receiver(user_logged_out)
+@receiver(user_logged_out, dispatch_uid="core.log_user_logged_out")
 def log_user_logged_out(sender, request, user, **kwargs):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
@@ -42,7 +42,7 @@ def log_user_logged_out(sender, request, user, **kwargs):
             user_agent=ua
         )
 
-@receiver(user_login_failed)
+@receiver(user_login_failed, dispatch_uid="core.log_user_login_failed")
 def log_user_login_failed(sender, credentials, request, **kwargs):
     ip = get_client_ip(request)
     ua = get_user_agent(request)

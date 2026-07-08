@@ -52,6 +52,7 @@ services:
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
       COLLECTSTATIC: ${COLLECTSTATIC:-1}
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
+      REALTIME_SNAPSHOT_SCHEDULER_ENABLED: "False"
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
@@ -60,6 +61,7 @@ services:
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
+      - ./secrets:/run/secrets/vsh:ro
     command: run.sh
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/ || exit 1"]
@@ -97,12 +99,14 @@ services:
       CORS_ALLOW_ALL_ORIGINS: "False"
       KHO_BACKEND_BASE_URL: ${KHO_BACKEND_BASE_URL:-http://localhost:8000}
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
+      REALTIME_SNAPSHOT_SCHEDULER_ENABLED: "False"
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
+      - ./secrets:/run/secrets/vsh:ro
     command: >
       sh -c "
         python manage.py wait_for_db &&
@@ -140,12 +144,14 @@ services:
       CORS_ALLOW_ALL_ORIGINS: "False"
       KHO_BACKEND_BASE_URL: ${KHO_BACKEND_BASE_URL:-http://localhost:8000}
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
+      REALTIME_SNAPSHOT_SCHEDULER_ENABLED: "False"
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
+      - ./secrets:/run/secrets/vsh:ro
     command: >
       sh -c "
         python manage.py wait_for_db &&

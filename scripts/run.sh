@@ -38,12 +38,12 @@ fi
 
 # ----- Create superuser (optional) -----
 # Cấu hình các biến trước khi chạy container để tự tạo:
-# DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, DJANGO_SUPERUSER_PASSWORD
-if [ "$CREATE_SUPERUSER" = "1" ] && [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ]; then
+# DJANGO_SUPERUSER_EMAIL, DJANGO_SUPERUSER_PASSWORD
+if [ "$CREATE_SUPERUSER" = "1" ] && [ -n "${DJANGO_SUPERUSER_EMAIL:-}" ]; then
   echo "👤 Ensuring superuser exists..."
   python manage.py createsuperuser --noinput || true
 else
-  echo "👤 Skip creating superuser (CREATE_SUPERUSER=0 or missing envs)"
+  echo "👤 Skip creating superuser (CREATE_SUPERUSER=0 or missing DJANGO_SUPERUSER_EMAIL)"
 fi
 
 # ----- Start server -----
