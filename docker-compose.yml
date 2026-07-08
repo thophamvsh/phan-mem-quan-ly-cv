@@ -56,12 +56,7 @@ services:
       - dev-media-data:/vol/web/media # user uploads
       - dev-static-data:/vol/web/static
       - dev-logs-data:/vol/web/logs
-    command: >
-      sh -c "
-        python manage.py wait_for_db &&
-        python manage.py migrate &&
-        python manage.py runserver 0.0.0.0:8000
-      "
+    command: run.sh
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/ || exit 1"]
       interval: 30s
