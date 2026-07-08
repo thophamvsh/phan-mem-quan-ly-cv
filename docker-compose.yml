@@ -1,5 +1,3 @@
-version: "3.9"
-
 name: vsh-dev # cố định tên project để tránh đổi tên volumes ngoài ý muốn
 
 services:
