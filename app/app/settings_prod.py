@@ -12,3 +12,8 @@ if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ['localhost']
 
 CORS_ALLOW_ALL_ORIGINS = False
+
+STATIC_ROOT = '/vol/web/static'
+MEDIA_ROOT = '/vol/web/media'
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
