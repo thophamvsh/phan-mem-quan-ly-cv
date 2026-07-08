@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.utils.html import format_html
 from import_export.results import RowResult
 from django.utils.text import slugify
@@ -341,6 +342,48 @@ class ThietBiResource(resources.ModelResource):
     def _norm(self, s):
         return "" if s is None else str(s).strip().strip(" .")
 
+    def _parent_code_from_ma_day_du(self, ma_day_du):
+        parts = [p for p in self._norm(ma_day_du).split(".") if p]
+        if len(parts) <= 3:
+            return ""
+        return ".".join(parts[:-1])
+
+    def _code_depth(self, ma_day_du):
+        parts = [p for p in self._norm(ma_day_du).split(".") if p]
+        return max(len(parts) - 3, 0)
+
+    def _parent_exists(self, parent_code):
+        if not parent_code:
+            return True
+        return ThietBi.objects.filter(ma_day_du__iexact=parent_code).exists()
+
+    def _validate_parent_codes(self, rows, available_codes):
+        available_codes_lower = {code.lower() for code in available_codes if code}
+        missing = []
+
+        for row in rows:
+            parent_code = row.get("cha_ma_day_du")
+            if not parent_code:
+                continue
+            if parent_code.lower() in available_codes_lower:
+                continue
+            if self._parent_exists(parent_code):
+                continue
+
+            missing.append(
+                f"Dong {row.get('__source_line', '?')}: Thiet bi cha "
+                f"'{parent_code}' cua '{row.get('ma_day_du')}' khong ton tai."
+            )
+
+        if missing:
+            preview = "\n".join(missing[:20])
+            extra = f"\n... va {len(missing) - 20} dong khac." if len(missing) > 20 else ""
+            raise ValidationError(
+                "Import ThietBi bi dung vi thieu thiet bi cha.\n"
+                "Hay import/cap nhat dong cha truoc, hoac them dong cha vao file.\n"
+                f"{preview}{extra}"
+            )
+
     def _ensure_codes(self, row: dict) -> dict:
         """
         Đồng bộ mã: TỪ MA_DAY_DU TỰ ĐỘNG SUY RA MA & CHA_MA_DAY_DU.
@@ -361,13 +404,11 @@ class ThietBiResource(resources.ModelResource):
             parts = [p for p in row["ma_day_du"].split(".") if p]
             if parts:
                 # LUÔN gán ma từ ma_day_du (ghi đè Excel nếu có)
-                row["ma"] = parts[-1]
+                parent_code = self._parent_code_from_ma_day_du(row["ma_day_du"])
+                row["ma"] = row["ma_day_du"][len(parent_code) + 1:] if parent_code else row["ma_day_du"]
+                row["cha_ma_day_du"] = parent_code
 
-                # Logic cấp độ: SH.TB.1 = cấp 0, SH.TB.1.2 = cấp 1, SH.TB.1.2.3 = cấp 2
-                # Cấp = số dấu chấm - 1 (vì SH.TB.1 có 2 dấu chấm nhưng là cấp 0)
-                level = len(parts) - 2  # SH.TB.1 = 3-2=1, nhưng thực tế là cấp 0
-
-                if level <= 0:
+                if len(parts) <= 3:
                     # Cấp 0: SH.TB.1, SH.TB.2, etc. (không có cha)
                     row["cha_ma_day_du"] = ""
                 else:
@@ -410,9 +451,12 @@ class ThietBiResource(resources.ModelResource):
 
         new_ds = tablib.Dataset(headers=headers)
         seen = set()
-        for idx, raw in enumerate(dataset, start=1):
+        rows = []
+
+        for idx, raw in enumerate(dataset, start=2):
             row = dict(zip(dataset.headers, raw)) if not isinstance(raw, dict) else {**raw}
             row = self._ensure_codes(row)
+            row["__source_line"] = idx
             code = row.get("ma_day_du")
 
             if not code:
@@ -423,6 +467,12 @@ class ThietBiResource(resources.ModelResource):
                 continue
 
             seen.add(code)
+            rows.append(row)
+
+        self._validate_parent_codes(rows, seen)
+
+        rows.sort(key=lambda row: (self._code_depth(row.get("ma_day_du")), row.get("ma_day_du", "")))
+        for row in rows:
             new_ds.append(tuple(row.get(h, "") for h in headers))
 
         dataset._data = new_ds._data
@@ -434,6 +484,11 @@ class ThietBiResource(resources.ModelResource):
         Đồng bộ lại mã từng dòng (an toàn nếu before_import không chạy trong 1 số context).
         """
         row.update(self._ensure_codes(row))
+        parent_code = row.get("cha_ma_day_du")
+        if parent_code and not self._parent_exists(parent_code):
+            raise ValidationError(
+                f"Thiet bi cha '{parent_code}' cua '{row.get('ma_day_du')}' khong ton tai."
+            )
         return super().before_import_row(row, **kwargs)
 
     # -------------------- Import behavior --------------------
@@ -1502,4 +1557,3 @@ class NguongThongSoAdmin(SafeExportChangeListMixin, ImportExportModelAdmin):
     search_fields = ['ma_thong_so', 'ten_thong_so', 'thiet_bi__ten', 'thiet_bi__ma_day_du']
     autocomplete_fields = ['thiet_bi']
     actions = ['export_selected_to_excel']
-
