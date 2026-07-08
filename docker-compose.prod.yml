@@ -10,9 +10,9 @@ services:
   db:
     image: pgvector/pgvector:pg13
     environment:
-      POSTGRES_DB: ${PROD_DB_NAME:-vsh_prod}
-      POSTGRES_USER: ${PROD_DB_USER:-vsh_user}
-      POSTGRES_PASSWORD: ${PROD_DB_PASS:-changeme}
+      POSTGRES_DB: ${DB_NAME:-vsh_prod}
+      POSTGRES_USER: ${DB_USER:-vsh_user}
+      POSTGRES_PASSWORD: ${DB_PASS:-changeme}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - prod-db-data:/var/lib/postgresql/data
@@ -20,7 +20,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${PROD_DB_USER:-vsh_user} -d ${PROD_DB_NAME:-vsh_prod} -q",
+          "pg_isready -U ${DB_USER:-vsh_user} -d ${DB_NAME:-vsh_prod} -q",
         ]
       interval: 10s
       timeout: 5s
@@ -41,14 +41,14 @@ services:
     environment:
       DJANGO_ENV: prod
       DB_HOST: db
-      DB_NAME: ${PROD_DB_NAME:-vsh_prod}
-      DB_USER: ${PROD_DB_USER:-vsh_user}
-      DB_PASS: ${PROD_DB_PASS:-changeme}
+      DB_NAME: ${DB_NAME:-vsh_prod}
+      DB_USER: ${DB_USER:-vsh_user}
+      DB_PASS: ${DB_PASS:-changeme}
       DEBUG: "False"
-      DJANGO_ALLOWED_HOSTS: ${PROD_DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_ALLOWED_ORIGINS: ${PROD_CORS_ALLOWED_ORIGINS:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       CORS_ALLOW_ALL_ORIGINS: "False"
-      KHO_BACKEND_BASE_URL: ${PROD_KHO_BACKEND_BASE_URL:-http://localhost:8000}
+      KHO_BACKEND_BASE_URL: ${KHO_BACKEND_BASE_URL:-http://localhost:8000}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
       COLLECTSTATIC: ${COLLECTSTATIC:-1}
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
@@ -88,14 +88,14 @@ services:
     environment:
       DJANGO_ENV: prod
       DB_HOST: db
-      DB_NAME: ${PROD_DB_NAME:-vsh_prod}
-      DB_USER: ${PROD_DB_USER:-vsh_user}
-      DB_PASS: ${PROD_DB_PASS:-changeme}
+      DB_NAME: ${DB_NAME:-vsh_prod}
+      DB_USER: ${DB_USER:-vsh_user}
+      DB_PASS: ${DB_PASS:-changeme}
       DEBUG: "False"
-      DJANGO_ALLOWED_HOSTS: ${PROD_DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_ALLOWED_ORIGINS: ${PROD_CORS_ALLOWED_ORIGINS:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       CORS_ALLOW_ALL_ORIGINS: "False"
-      KHO_BACKEND_BASE_URL: ${PROD_KHO_BACKEND_BASE_URL:-http://localhost:8000}
+      KHO_BACKEND_BASE_URL: ${KHO_BACKEND_BASE_URL:-http://localhost:8000}
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
@@ -131,14 +131,14 @@ services:
     environment:
       DJANGO_ENV: prod
       DB_HOST: db
-      DB_NAME: ${PROD_DB_NAME:-vsh_prod}
-      DB_USER: ${PROD_DB_USER:-vsh_user}
-      DB_PASS: ${PROD_DB_PASS:-changeme}
+      DB_NAME: ${DB_NAME:-vsh_prod}
+      DB_USER: ${DB_USER:-vsh_user}
+      DB_PASS: ${DB_PASS:-changeme}
       DEBUG: "False"
-      DJANGO_ALLOWED_HOSTS: ${PROD_DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_ALLOWED_ORIGINS: ${PROD_CORS_ALLOWED_ORIGINS:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       CORS_ALLOW_ALL_ORIGINS: "False"
-      KHO_BACKEND_BASE_URL: ${PROD_KHO_BACKEND_BASE_URL:-http://localhost:8000}
+      KHO_BACKEND_BASE_URL: ${KHO_BACKEND_BASE_URL:-http://localhost:8000}
       DOCUMENTS_USE_CELERY: ${DOCUMENTS_USE_CELERY:-True}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
