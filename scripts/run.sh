@@ -7,6 +7,7 @@ echo "🚀 Starting VSH Project..."
 : "${DJANGO_SETTINGS_MODULE:=app.settings}"
 : "${PORT:=8000}"
 : "${WSGI_SERVER:=gunicorn}"   # gunicorn | uwsgi
+: "${RUN_MIGRATIONS:=1}"       # 0 to skip migrations during container startup
 : "${CREATE_SUPERUSER:=0}"     # 1 để bật tạo superuser tự động
 : "${COLLECTSTATIC:=1}"        # 0 để bỏ qua collectstatic (ví dụ trong dev)
 
@@ -20,8 +21,12 @@ mkdir -p /vol/web/static /vol/web/media /vol/web/logs || true
 echo "⏳ Waiting for database..."
 python manage.py wait_for_db
 
-echo "📊 Applying database migrations..."
-python manage.py migrate --noinput
+if [ "$RUN_MIGRATIONS" = "1" ]; then
+  echo "📊 Applying database migrations..."
+  python manage.py migrate --noinput
+else
+  echo "Skip migrations (RUN_MIGRATIONS=0)"
+fi
 
 # ----- Collect static (optional) -----
 if [ "$COLLECTSTATIC" = "1" ]; then

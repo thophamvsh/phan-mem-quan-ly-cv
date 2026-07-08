@@ -5,6 +5,14 @@
 # Docker
 .docker
 
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+app/*key*.json
+app/*project*.json
+
 # Python
 app/__pycache__/
 app/*/__pycache__/
