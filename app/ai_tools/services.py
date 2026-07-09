@@ -321,11 +321,38 @@ def _history_for_model(user, session_id, message):
 def _as_ai_provider_error(exc):
     message = str(exc)
     lower = message.lower()
-    if "rate_limit" in lower or "request too large" in lower or "tokens per min" in lower:
+    
+    # 1. Loi het tien / het so du
+    if "insufficient_balance" in lower or "insufficient balance" in lower or "out of quota" in lower or "credit" in lower:
+        return AiToolsError(
+            "Tài khoản AI đang bị hết số dư (insufficient balance). Vui lòng nạp thêm tiền vào tài khoản nhà cung cấp dịch vụ LLM để tiếp tục sử dụng."
+        )
+        
+    # 2. Loi sai API Key hoac xac thuc
+    if "invalid_api_key" in lower or "invalid api key" in lower or "api_key" in lower or "authentication" in lower:
+        return AiToolsError(
+            "Khóa API (API Key) cấu hình cho LLM không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại biến môi trường."
+        )
+
+    # 3. Loi qua tai may chu (thuong gap o DeepSeek)
+    if "overloaded" in lower or "server_error" in lower or "503" in lower or "service unavailable" in lower:
+        return AiToolsError(
+            "Máy chủ AI của nhà cung cấp hiện đang quá tải (overloaded). Vui lòng thử lại sau vài giây."
+        )
+
+    # 4. Loi gioi han tan suat (Rate Limit)
+    if "rate_limit" in lower or "tokens per min" in lower or "requests per min" in lower or "requests per day" in lower:
+        return AiToolsError(
+            "Hệ thống đang bị giới hạn tần suất yêu cầu (Rate Limit). Vui lòng đợi một lát trước khi gửi câu hỏi tiếp theo."
+        )
+
+    # 5. Loi qua gioi han token
+    if "request too large" in lower or "context_length_exceeded" in lower or "too many tokens" in lower:
         return AiToolsError(
             "Nội dung hội thoại hoặc dữ liệu trả về đang quá dài so với giới hạn token hiện tại. "
             "Tôi đã rút gọn ngữ cảnh cho các lượt sau; bạn hãy gửi lại câu hỏi hoặc mở phiên trò chuyện mới nếu vẫn gặp lỗi."
         )
+        
     return None
 
 
