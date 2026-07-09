@@ -26,13 +26,15 @@ def _response_chunks(text, chunk_size=80):
         yield text[start:start + chunk_size]
 
 
-def stream_ai_chat(*, user, content, session_id=None):
+def stream_ai_chat(*, user, content, session_id=None, provider=None, model=None):
     yield _sse_event("status", {"message": "Đang xử lý yêu cầu..."})
     try:
         data = run_ai_chat(
             user=user,
             content=content,
             session_id=session_id,
+            provider=provider,
+            model=model,
         )
     except AiToolsError as exc:
         yield _sse_event("error", {"detail": str(exc), "status": 503})
@@ -61,6 +63,8 @@ class AiChatAPIView(APIView):
                     user=request.user,
                     content=serializer.validated_data["content"],
                     session_id=serializer.validated_data.get("session_id") or None,
+                    provider=serializer.validated_data.get("provider", "openai"),
+                    model=serializer.validated_data.get("model", ""),
                 ),
                 content_type="text/event-stream",
             )
@@ -73,6 +77,8 @@ class AiChatAPIView(APIView):
                 user=request.user,
                 content=serializer.validated_data["content"],
                 session_id=serializer.validated_data.get("session_id") or None,
+                provider=serializer.validated_data.get("provider", "openai"),
+                model=serializer.validated_data.get("model", ""),
             )
         except AiToolsError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -93,6 +99,8 @@ class AiChatStreamAPIView(APIView):
                 user=request.user,
                 content=serializer.validated_data["content"],
                 session_id=serializer.validated_data.get("session_id") or None,
+                provider=serializer.validated_data.get("provider", "openai"),
+                model=serializer.validated_data.get("model", ""),
             ),
             content_type="text/event-stream",
         )

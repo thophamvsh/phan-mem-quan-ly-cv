@@ -159,7 +159,14 @@ Hay phan tich tu duy nhiet dong luc hoc chuyen sau thay vi chi so sanh don le:
 - Neu tai rat thap, luu luong lam mat giam thap duoi nguong Alarm van an toan cho nhiet do hien tai, nhung la mot rui ro tiem an rat lon (mat tinh du phong). Neu tang tai dot ngot se gay qua nhiet ngay lap tuc.
 - Neu tai on dinh/giam ma nhiet do tang, day la dau hieu bat thuong co hoc hoac boi tron (ma sat Tang, thieu dau).
 Tra loi ngan gon, ro rang, chuyen nghiep bang tieng Viet.
-Khong neu ten he thong luu tru hoac nguon ky thuat noi bo nhu Supabase, Google Sheets, spreadsheet, worksheet."""
+Khong neu ten he thong luu tru hoac nguon ky thuat noi bo nhu Supabase, Google Sheets, spreadsheet, worksheet.
+
+QUY TAC XAC NHAN THONG TIN:
+- Neu nguoi dung hoi ve du lieu van hanh, bao cao, luu luong hoac luong mua cua ho/nha may ma khong chi ro ten nha may nao (Song Hinh hay Vinh Son), ban tuyet doi khong tu y goi cong cu cua mot nha may cu the. Hay tra loi de nghi nguoi dung cung cap ten nha may muon xem (Song Hinh hay Vinh Son) truoc.
+
+NGUYEN TAC CHONG BIA DAT THONG TIN (BAT BUOC):
+1. Doi voi so lieu van hanh (luu luong, muc nuoc, san luong dien...): Tuyeet doi khong tu y bia dat, uoc luong, suy doan, hoac gia lap bat ky con so nao. Neu cong cu (tool) tra ve ket qua rong, bao loi, hoac thong bao khong tim thay du lieu, ban phai thong bao trung thuc cho nguoi dung rang: "He thong chua co du lieu cho ngay X/thang Y".
+2. Doi voi quy trinh va tai lieu noi bo: Chi duoc tra loi dua tren dung thong tin trích xuat tu cong cu search_internal_documents. Neu tai lieu khong chua thong tin phu hop, hay tra loi rang: "Khong tim thay thong tin nay trong tai lieu quy trinh he thong", tuyet doi khong dung kien thuc ben ngoai de tu che ra cac quy trinh ky thuat."""
 
 
 
@@ -673,7 +680,12 @@ def _lazy_import_tools():
 
 
 def _resolve_model(provider, model):
-    return DEFAULT_PROVIDER, DEFAULT_OPENAI_MODEL
+    provider = (provider or getattr(settings, "AI_TOOLS_PROVIDER", "openai")).lower()
+    if provider == "deepseek":
+        selected_model = model or getattr(settings, "AI_TOOLS_DEEPSEEK_MODEL", "deepseek-chat")
+        return "deepseek", selected_model
+    selected_model = model or getattr(settings, "AI_TOOLS_OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+    return "openai", selected_model
 
 
 def detect_reservoir(message):
@@ -710,12 +722,19 @@ def _agent_tools(tools):
 
 
 def _estimate_cost_usd(provider, model, prompt_tokens, completion_tokens):
-    input_rate, output_rate = 0.150, 0.600
+    if provider == "deepseek":
+        input_rate, output_rate = 0.140, 0.280
+    else:
+        if "gpt-4o-mini" in str(model).lower():
+            input_rate, output_rate = 0.150, 0.600
+        else:
+            input_rate, output_rate = 2.500, 10.000
     return round(
         (prompt_tokens / 1_000_000) * input_rate
         + (completion_tokens / 1_000_000) * output_rate,
         6,
     )
+
 
 
 def _get_tools_and_handlers(user=None):
@@ -758,10 +777,17 @@ def _ensure_tool_allowed(user, tool_name):
         raise AiToolsError("Bạn không có quyền sử dụng công cụ này hoặc công cụ không tồn tại.")
 
 
-def _run_openai_chat(*, user, content, session_id, model):
-    api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", None)
-    if not api_key:
-        raise AiToolsError("Backend chưa cấu hình OPENAI_API_KEY.")
+def _run_openai_chat(*, user, content, session_id, provider, model):
+    if provider == "deepseek":
+        api_key = os.getenv("DEEPSEEK_API_KEY") or getattr(settings, "DEEPSEEK_API_KEY", None)
+        base_url = "https://api.deepseek.com"
+        if not api_key:
+            raise AiToolsError("Backend chưa cấu hình DEEPSEEK_API_KEY.")
+    else:
+        api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", None)
+        base_url = None
+        if not api_key:
+            raise AiToolsError("Backend chưa cấu hình OPENAI_API_KEY.")
 
     try:
         from openai import OpenAI
@@ -787,8 +813,18 @@ def _run_openai_chat(*, user, content, session_id, model):
     elif has_vs and not has_sh:
         all_tools = [t for t in all_tools if "songhinh" not in t["function"]["name"].lower() and "songinh" not in t["function"]["name"].lower()]
 
-    client = OpenAI(api_key=api_key)
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if base_url:
+        client = OpenAI(api_key=api_key, base_url=base_url)
+    else:
+        client = OpenAI(api_key=api_key)
+
+    # Lay ngay gio hien tai cua he thong theo timezone cuc bo
+    current_date_str = timezone.localtime().strftime("%d/%m/%Y")
+    dynamic_system_prompt = (
+        f"{SYSTEM_PROMPT}\n\nHôm nay là ngày: {current_date_str} (dùng ngày này làm mốc để xác định 'hôm nay', 'hôm qua', 'ngày nay', 'ngày mai' khi gọi các công cụ)."
+    )
+
+    messages = [{"role": "system", "content": dynamic_system_prompt}]
     messages.extend(content["history"])
     messages.append({"role": "user", "content": content["text"]})
 
@@ -1093,6 +1129,7 @@ def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
         user=user,
         content=chat_content,
         session_id=session_id,
+        provider=provider,
         model=selected_model,
     )
 
