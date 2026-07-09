@@ -63,7 +63,7 @@ class AiChatAPIView(APIView):
                     user=request.user,
                     content=serializer.validated_data["content"],
                     session_id=serializer.validated_data.get("session_id") or None,
-                    provider=serializer.validated_data.get("provider", "openai"),
+                    provider=serializer.validated_data.get("provider") or None,
                     model=serializer.validated_data.get("model", ""),
                 ),
                 content_type="text/event-stream",
@@ -77,7 +77,7 @@ class AiChatAPIView(APIView):
                 user=request.user,
                 content=serializer.validated_data["content"],
                 session_id=serializer.validated_data.get("session_id") or None,
-                provider=serializer.validated_data.get("provider", "openai"),
+                provider=serializer.validated_data.get("provider") or None,
                 model=serializer.validated_data.get("model", ""),
             )
         except AiToolsError as exc:
@@ -99,7 +99,7 @@ class AiChatStreamAPIView(APIView):
                 user=request.user,
                 content=serializer.validated_data["content"],
                 session_id=serializer.validated_data.get("session_id") or None,
-                provider=serializer.validated_data.get("provider", "openai"),
+                provider=serializer.validated_data.get("provider") or None,
                 model=serializer.validated_data.get("model", ""),
             ),
             content_type="text/event-stream",

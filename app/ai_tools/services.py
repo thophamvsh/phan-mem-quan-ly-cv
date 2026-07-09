@@ -707,7 +707,7 @@ def _lazy_import_tools():
 
 
 def _resolve_model(provider, model):
-    provider = (provider or getattr(settings, "AI_TOOLS_PROVIDER", "openai")).lower()
+    provider = (provider or getattr(settings, "AI_TOOLS_PROVIDER", "openai")).strip().lower()
     if provider == "deepseek":
         selected_model = model or getattr(settings, "AI_TOOLS_DEEPSEEK_MODEL", "deepseek-chat")
         return "deepseek", selected_model
@@ -945,7 +945,7 @@ def _run_openai_chat(*, user, content, session_id, provider, model):
 
 
 
-def run_ai_chat(*, user, content, session_id=None, provider="openai", model=""):
+def run_ai_chat(*, user, content, session_id=None, provider=None, model=""):
     if not content or not content.strip():
         raise AiToolsError("Noi dung cau hoi khong duoc de trong.")
 
