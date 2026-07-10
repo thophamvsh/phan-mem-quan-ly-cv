@@ -186,6 +186,13 @@ def _is_nami_greeting(value):
     }
 
 
+def _response_chunks(value, chunk_size=80):
+    text = str(value or "")
+    size = max(int(chunk_size or 80), 1)
+    for index in range(0, len(text), size):
+        yield text[index:index + size]
+
+
 def _user_profile(user):
     try:
         return getattr(user, "profile", None)
@@ -207,12 +214,6 @@ def _user_display_name(user):
         return full_name
     return _clean_display_text(getattr(user, "username", "") or getattr(user, "email", ""))
 
-
-def _response_chunks(text, chunk_size=40):
-    if not text:
-        return
-    for index in range(0, len(text), chunk_size):
-        yield text[index : index + chunk_size]
 
 
 def _time_of_day_greeting():
@@ -1489,4 +1490,3 @@ def run_ai_chat_stream(*, user, content, session_id=None, provider=None, model="
             "tools_called": tools_called,
         }
     }
-
