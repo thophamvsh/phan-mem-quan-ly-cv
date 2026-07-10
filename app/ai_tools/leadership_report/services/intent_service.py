@@ -28,6 +28,15 @@ class ActualWaterLevelRequest:
     needs_time_clarification: bool = False
 
 
+@dataclass(frozen=True)
+class MonthlyProductionPlanRequest:
+    year: int | None = None
+    month: int | None = None
+    period: str = "month"
+    plant_codes: tuple[str, ...] | None = None
+    needs_time_clarification: bool = False
+
+
 def is_leadership_title(title):
     normalized = normalize_title(title)
     return normalized in LEADERSHIP_TITLES or any(
@@ -405,6 +414,114 @@ def get_three_plant_production_report_date(content):
     if not (has_report and has_production and has_three_plants):
         return None
     return _extract_report_date(content)
+
+
+def _extract_month_year(content):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s/-]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    today = timezone.localdate()
+
+    if "thang nay" in normalized:
+        return today.year, today.month
+    if "thang truoc" in normalized:
+        previous_month = today.month - 1
+        year = today.year
+        if previous_month < 1:
+            previous_month = 12
+            year -= 1
+        return year, previous_month
+
+    month_match = re.search(r"thang\s+(\d{1,2})(?:[/-](\d{2,4})|\s+nam\s+(\d{2,4}))?", normalized)
+    if month_match:
+        month = int(month_match.group(1))
+        year_text = month_match.group(2) or month_match.group(3)
+        year = int(year_text) if year_text else today.year
+        if year < 100:
+            year += 2000
+        if 1 <= month <= 12:
+            return year, month
+
+    return None, None
+
+
+def _extract_year_to_date(content):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s/-]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    today = timezone.localdate()
+
+    has_ytd_phrase = any(
+        phrase in normalized
+        for phrase in (
+            "tu dau nam",
+            "dau nam den gio",
+            "dau nam toi gio",
+            "dau nam den nay",
+            "dau nam toi nay",
+            "luy ke nam",
+            "nam nay",
+        )
+    )
+    explicit_year = re.search(r"nam\s+(\d{4})", normalized)
+    if not has_ytd_phrase and not (explicit_year and "thang" not in normalized):
+        return None, None
+
+    year = today.year
+    if explicit_year:
+        year = int(explicit_year.group(1))
+
+    end_month = today.month
+    end_month_match = re.search(r"(?:den|toi)\s+thang\s+(\d{1,2})", normalized)
+    if end_month_match:
+        parsed_month = int(end_month_match.group(1))
+        if 1 <= parsed_month <= 12:
+            end_month = parsed_month
+
+    return year, end_month
+
+
+def _extract_monthly_plan_plant_codes(normalized):
+    matches = []
+    plant_patterns = (
+        ("songhinh", ("song hinh", "songhinh", "sh")),
+        ("vinhson", ("vinh son", "vinhson", "vs", "vsa", "vsb", "vsc")),
+        ("thuongkontum", ("thuong kon tum", "thuongkontum", "kon tum", "kontum", "tkt")),
+    )
+    for plant_code, aliases in plant_patterns:
+        if any(re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", normalized) for alias in aliases):
+            matches.append(plant_code)
+    return tuple(matches) or None
+
+
+def get_monthly_production_plan_request(content):
+    normalized = normalize_text(content)
+    normalized = re.sub(r"[^a-z0-9\s/-]", " ", normalized)
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return None
+
+    has_production = "san luong" in normalized or "san xuat" in normalized
+    has_qkh = re.search(r"(?<![a-z0-9])qkh(?![a-z0-9])", normalized)
+    has_plan = "ke hoach" in normalized or has_qkh
+    has_qc = re.search(r"(?<![a-z0-9])qc(?![a-z0-9])", normalized)
+    has_question = any(keyword in normalized for keyword in ("bao nhieu", "xem", "bao cao", "cho biet", "la gi"))
+    if not (has_plan and has_qc and (has_qkh or has_production) and (has_question or has_qkh)):
+        return None
+
+    period = "month"
+    year, month = _extract_year_to_date(content)
+    if year and month:
+        period = "year_to_date"
+    else:
+        year, month = _extract_month_year(content)
+    return MonthlyProductionPlanRequest(
+        year=year,
+        month=month,
+        period=period,
+        plant_codes=_extract_monthly_plan_plant_codes(normalized),
+        needs_time_clarification=not (year and month),
+    )
 
 
 def is_weekly_limit_report_request(content):

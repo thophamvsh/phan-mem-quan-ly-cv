@@ -6,6 +6,7 @@ from .services.intent_service import (
     expand_leadership_menu_choice,
     get_actual_water_level_request,
     get_event_statistics_request,
+    get_monthly_production_plan_request,
     get_three_plant_production_report_date,
     has_leadership_production_menu_context,
     has_leadership_rainfall_weather_menu_context,
@@ -23,6 +24,8 @@ from .services.report_service import (
     build_leadership_weekly_limit_report,
     build_leadership_event_report,
     build_leadership_event_statistics_report,
+    build_leadership_monthly_production_plan_report,
+    build_leadership_year_to_date_production_plan_report,
 )
 from .services.response_service import (
     actual_water_level_report_response,
@@ -31,6 +34,7 @@ from .services.response_service import (
     weekly_limit_report_response,
     event_report_response,
     event_statistics_response,
+    monthly_production_plan_response,
 )
 
 __all__ = [
@@ -42,9 +46,12 @@ __all__ = [
     "build_leadership_weekly_limit_report",
     "build_leadership_event_report",
     "build_leadership_event_statistics_report",
+    "build_leadership_monthly_production_plan_report",
+    "build_leadership_year_to_date_production_plan_report",
     "expand_leadership_menu_choice",
     "get_actual_water_level_request",
     "get_event_statistics_request",
+    "get_monthly_production_plan_request",
     "get_three_plant_production_report_date",
     "has_leadership_production_menu_context",
     "has_leadership_rainfall_weather_menu_context",
@@ -58,4 +65,5 @@ __all__ = [
     "weekly_limit_report_response",
     "event_report_response",
     "event_statistics_response",
+    "monthly_production_plan_response",
 ]

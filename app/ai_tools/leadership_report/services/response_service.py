@@ -11,6 +11,8 @@ from .report_service import (
     build_leadership_weekly_limit_report,
     build_leadership_event_report,
     build_leadership_event_statistics_report,
+    build_leadership_monthly_production_plan_report,
+    build_leadership_year_to_date_production_plan_report,
 )
 
 
@@ -101,6 +103,61 @@ def weekly_limit_report_response(*, user, session_id, content, provider, selecte
             "provider": provider,
             "leadership_menu_choice": "weekly_limit_report",
             "weekly_limit_report_source": source,
+        },
+    )
+    return {
+        "session_id": session_id,
+        "response": assistant_message,
+        "provider": provider,
+        "model": selected_model,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+        "latency_ms": latency_ms,
+        "tools_called": 0,
+    }
+
+
+def monthly_production_plan_response(*, user, session_id, content, provider, selected_model, start_time, source, request):
+    if request.needs_time_clarification:
+        assistant_message = (
+            "Dạ, anh/chị muốn xem sản lượng kế hoạch Qkh và Qc của tháng hoặc năm nào ạ? "
+            "Anh/chị có thể nói ví dụ: tháng này, tháng 7/2026, năm 2026 hoặc từ đầu năm đến giờ."
+        )
+    elif getattr(request, "period", "month") == "year_to_date":
+        assistant_message = build_leadership_year_to_date_production_plan_report(
+            request.year,
+            request.month,
+            plant_codes=request.plant_codes,
+        )
+    else:
+        assistant_message = build_leadership_monthly_production_plan_report(
+            request.year,
+            request.month,
+            plant_codes=request.plant_codes,
+        )
+
+    latency_ms = int((time.time() - start_time) * 1000)
+    save_exchange(
+        user=user,
+        session_id=session_id,
+        user_message=content,
+        assistant_message=assistant_message,
+        model=selected_model,
+        total_tokens=0,
+        cost_usd=0,
+        tools_called=0,
+        latency_ms=latency_ms,
+        meta={
+            "reservoir_detected": False,
+            "tools_called": 0,
+            "provider": provider,
+            "leadership_menu_choice": "monthly_production_plan",
+            "monthly_production_plan_source": source,
+            "year": request.year or "",
+            "month": request.month or "",
+            "period": getattr(request, "period", "month"),
+            "plant_codes": ",".join(request.plant_codes or ()),
+            "needs_time_clarification": request.needs_time_clarification,
         },
     )
     return {

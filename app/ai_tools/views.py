@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from .permissions import CanUseAiTools
 from .serializers import AiChatRequestSerializer
-from .services import AiToolsError, run_ai_chat
+from .services import AiToolsError, run_ai_chat, run_ai_chat_stream
 from .storage import delete_session, get_conversation, get_sessions
 
 
@@ -27,15 +27,15 @@ def _response_chunks(text, chunk_size=80):
 
 
 def stream_ai_chat(*, user, content, session_id=None, provider=None, model=None):
-    yield _sse_event("status", {"message": "Đang xử lý yêu cầu..."})
     try:
-        data = run_ai_chat(
+        for stream_event in run_ai_chat_stream(
             user=user,
             content=content,
             session_id=session_id,
             provider=provider,
             model=model,
-        )
+        ):
+            yield _sse_event(stream_event["event"], stream_event["payload"])
     except AiToolsError as exc:
         yield _sse_event("error", {"detail": str(exc), "status": 503})
         return
@@ -43,12 +43,6 @@ def stream_ai_chat(*, user, content, session_id=None, provider=None, model=None)
         logger.exception("AI chat stream request failed")
         yield _sse_event("error", {"detail": "Khong the xu ly yeu cau AI luc nay.", "status": 500})
         return
-
-    for chunk in _response_chunks(data.get("response", "")):
-        yield _sse_event("delta", {"text": chunk})
-        time.sleep(0.02)
-
-    yield _sse_event("done", data)
 
 
 class AiChatAPIView(APIView):

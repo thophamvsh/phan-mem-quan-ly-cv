@@ -518,6 +518,208 @@ class AiToolFactoryScopeTests(TestCase):
         self.assertEqual(response["tools_called"], 0)
         self.assertIn("### Mực nước giới hạn tuần và phân tích", response["response"])
 
+    def test_monthly_production_plan_request_reads_settings_and_production_data(self):
+        report_time = timezone.make_aware(datetime(2026, 7, 9, 7, 0))
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=7,
+            sanluong_kehoach_thang=1000,
+        )
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="vinhson",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=7,
+            sanluong_kehoach_thang=2000,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=report_time,
+            cot_o=950,
+            cot_r=850,
+            sanluong_kh_thang=900,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="vinhson",
+            thoi_gian=report_time,
+            cot_o=1800,
+            cot_r=1650,
+            sanluong_kh_thang=1700,
+        )
+
+        with (
+            patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 7, 10)),
+            patch("ai_tools.services._run_openai_chat") as run_openai,
+        ):
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Sản lượng kế hoạch Qkh và Qc tháng này bao nhiêu?",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("### Sản lượng kế hoạch tháng 07/2026", response["response"])
+        self.assertIn("| Sông Hinh | 1.000 | 950 | 850 |", response["response"])
+        self.assertIn("| Vĩnh Sơn | 2.000 | 1.800 | 1.650 |", response["response"])
+        self.assertIn("| Tổng cộng | 3.000 | 2.750 | 2.500 |", response["response"])
+        self.assertNotIn("ThongSoThuyVanCaiDat", response["response"])
+        self.assertNotIn("ThongsoSanxuat", response["response"])
+        self.assertNotIn("cot_o", response["response"])
+
+    def test_monthly_production_plan_request_for_single_factory_user_uses_own_factory(self):
+        report_time = timezone.make_aware(datetime(2026, 7, 9, 7, 0))
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=7,
+            sanluong_kehoach_thang=1000,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=report_time,
+            cot_o=950,
+        )
+
+        with (
+            patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 7, 10)),
+            patch("ai_tools.services._run_openai_chat") as run_openai,
+        ):
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Sản lượng kế hoạch Qkh và Qc tháng này bao nhiêu?",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertIn("| Sông Hinh | 1.000 | 950 |", response["response"])
+        self.assertNotIn("Vĩnh Sơn", response["response"])
+
+    def test_monthly_production_plan_without_production_word_does_not_use_model_or_rag(self):
+        report_time = timezone.make_aware(datetime(2026, 7, 9, 7, 0))
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=7,
+            sanluong_kehoach_thang=1000,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=report_time,
+            cot_o=950,
+        )
+
+        with (
+            patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 7, 10)),
+            patch("ai_tools.services._run_openai_chat") as run_openai,
+        ):
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Qkh và Qc tháng này của Sông Hinh?",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("### Sản lượng kế hoạch tháng 07/2026", response["response"])
+        self.assertIn("| Sông Hinh | 1.000 | 950 |", response["response"])
+        self.assertNotIn("Dựa theo tài liệu", response["response"])
+
+    def test_year_to_date_production_plan_request_sums_months_until_current_month(self):
+        january_time = timezone.make_aware(datetime(2026, 1, 31, 7, 0))
+        july_time = timezone.make_aware(datetime(2026, 7, 9, 7, 0))
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=1,
+            sanluong_kehoach_thang=1000,
+        )
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=7,
+            sanluong_kehoach_thang=7000,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=january_time,
+            cot_o=900,
+            cot_r=800,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=july_time,
+            cot_o=6500,
+            cot_r=6000,
+        )
+
+        with (
+            patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 7, 10)),
+            patch("ai_tools.services._run_openai_chat") as run_openai,
+        ):
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Qc và Qkh năm 2026 của Sông Hinh?",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("### Qkh và Qc theo tháng năm 2026", response["response"])
+        self.assertIn("**Phạm vi:** Tháng 01/2026 - tháng 07/2026", response["response"])
+        self.assertIn("| Sông Hinh | 01/2026 | 1.000 | 900 | 800 |", response["response"])
+        self.assertIn("| Sông Hinh | 07/2026 | 7.000 | 6.500 | 6.000 |", response["response"])
+        self.assertIn("| Tổng cộng | 01-07/2026 | 8.000 | 7.400 | 6.800 |", response["response"])
+        self.assertIn("```chart", response["response"])
+        self.assertIn('"yKeys": [', response["response"])
+        self.assertIn('"Qkh"', response["response"])
+        self.assertIn('"Qc"', response["response"])
+        self.assertIn('"Thực hiện"', response["response"])
+        self.assertNotIn("Dựa theo tài liệu", response["response"])
+
+    def test_year_to_date_production_plan_uses_current_year_when_asked_from_year_start(self):
+        july_time = timezone.make_aware(datetime(2026, 7, 9, 7, 0))
+        ThongSoThuyVanCaiDat.objects.create(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=7,
+            sanluong_kehoach_thang=7000,
+        )
+        ThongsoSanxuat.objects.create(
+            nha_may="songhinh",
+            thoi_gian=july_time,
+            cot_o=6500,
+        )
+
+        with (
+            patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 7, 10)),
+            patch("ai_tools.services._run_openai_chat") as run_openai,
+        ):
+            response = run_ai_chat(
+                user=self.songhinh_user,
+                content="Qc, Qkh từ đầu năm đến giờ",
+                provider="openai",
+                model="",
+        )
+
+        run_openai.assert_not_called()
+        self.assertIn("### Qkh và Qc theo tháng năm 2026", response["response"])
+        self.assertIn("| Sông Hinh | 07/2026 | 7.000 | 6.500 |", response["response"])
+        self.assertIn("| Tổng cộng | 01-07/2026 | 7.000 | 6.500 |", response["response"])
+        self.assertIn("```chart", response["response"])
+        self.assertNotIn("Vĩnh Sơn", response["response"])
+
     def test_direct_three_plant_yesterday_production_request_uses_current_date(self):
         self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
         self.all_factories_user.profile.save()
@@ -546,6 +748,74 @@ class AiToolFactoryScopeTests(TestCase):
         self.assertEqual(response["tools_called"], 0)
         self.assertIn(f"**Ngày báo cáo:** {report_date.strftime('%d/%m/%Y')}", response["response"])
         self.assertNotIn("04/10/2023", response["response"])
+
+    def test_ambiguous_production_report_asks_for_plant_before_model(self):
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Báo cáo sản lượng hôm qua?",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("muốn xem báo cáo sản lượng của nhà máy nào", response["response"])
+        self.assertIn("Sông Hinh", response["response"])
+        self.assertIn("Vĩnh Sơn", response["response"])
+        self.assertIn("3 nhà máy", response["response"])
+
+    def test_specific_plant_report_without_time_asks_for_time_before_model(self):
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Báo cáo Vĩnh Sơn",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("thời gian nào", response["response"])
+        self.assertIn("ngày cụ thể", response["response"])
+        self.assertIn("tháng/năm", response["response"])
+
+    def test_specific_plant_parameter_without_time_asks_for_time_before_model(self):
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                content="Nhiệt độ MBA T1 Vĩnh Sơn",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_not_called()
+        self.assertEqual(response["tools_called"], 0)
+        self.assertIn("thời gian nào", response["response"])
+
+    def test_production_clarification_followup_keeps_today_context(self):
+        first_response = run_ai_chat(
+            user=self.all_factories_user,
+            content="Báo cáo sản lượng hôm nay?",
+            provider="openai",
+            model="",
+        )
+
+        with patch("ai_tools.services._run_openai_chat") as run_openai:
+            run_openai.return_value = ("Không tìm thấy dữ liệu cho ngày 10/07/2026.", 1, 0, 0, 0)
+            response = run_ai_chat(
+                user=self.all_factories_user,
+                session_id=first_response["session_id"],
+                content="Sông Hinh đi",
+                provider="openai",
+                model="",
+            )
+
+        run_openai.assert_called_once()
+        model_content = run_openai.call_args.kwargs["content"]
+        self.assertIn("Báo cáo sản lượng hôm nay", model_content["text"])
+        self.assertIn("Nhà máy: Sông Hinh", model_content["text"])
+        self.assertIn("chỉ có số liệu đã chốt đến D-1", response["response"])
 
     def test_direct_three_plant_production_request_accepts_explicit_date(self):
         self.all_factories_user.profile.chuc_danh = "Phó Tổng Giám Đốc"
@@ -616,7 +886,7 @@ class AiToolFactoryScopeTests(TestCase):
             run_openai.return_value = ("Đang xử lý yêu cầu.", 0, 0, 0, 0)
             response = run_ai_chat(
                 user=self.songhinh_user,
-                content="Hi Nami phân tích nhiệt độ ổ hướng tuabin H1 Sông Hinh",
+                content="Hi Nami phân tích nhiệt độ ổ hướng tuabin H1 Sông Hinh hôm qua",
                 provider="openai",
                 model="",
             )

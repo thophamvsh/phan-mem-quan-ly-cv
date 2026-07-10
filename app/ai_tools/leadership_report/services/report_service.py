@@ -1178,6 +1178,238 @@ def build_leadership_hydrology_report(report_date):
 """.strip()
 
 
+def _month_bounds(year, month):
+    start_date = datetime(year, month, 1).date()
+    if month == 12:
+        end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+    else:
+        end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+    return start_date, end_date
+
+
+def _format_monthly_production_plan_row(plant_name, qkh, qc_month, thuc_hien, latest_record):
+    latest_time = _fmt_report_datetime(latest_record.thoi_gian) if latest_record else "-"
+    return "| {plant} | {qkh} | {qc_month} | {thuc_hien} | {latest_time} |".format(
+        plant=plant_name,
+        qkh=fmt_report_number(qkh),
+        qc_month=fmt_report_number(qc_month),
+        thuc_hien=fmt_report_number(thuc_hien),
+        latest_time=latest_time,
+    )
+
+
+def build_leadership_monthly_production_plan_report(year, month, plant_codes=None):
+    from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
+
+    selected_plants = [
+        (plant_code, plant_name)
+        for plant_code, plant_name in LEADERSHIP_PRODUCTION_PLANTS
+        if not plant_codes or plant_code in plant_codes
+    ]
+    if not selected_plants:
+        selected_plants = list(LEADERSHIP_PRODUCTION_PLANTS)
+
+    selected_codes = [plant_code for plant_code, _ in selected_plants]
+    start_date, end_date = _month_bounds(year, month)
+
+    monthly_settings = {
+        record.nha_may: record.sanluong_kehoach_thang
+        for record in ThongSoThuyVanCaiDat.objects.filter(
+            nha_may__in=selected_codes,
+            nam=year,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang=month,
+        )
+        if record.sanluong_kehoach_thang is not None
+    }
+
+    latest_records = {}
+    for plant_code in selected_codes:
+        latest_records[plant_code] = (
+            ThongsoSanxuat.objects.filter(
+                nha_may=plant_code,
+                thoi_gian__date__gte=start_date,
+                thoi_gian__date__lte=end_date,
+            )
+            .order_by("-thoi_gian", "-id")
+            .first()
+        )
+
+    rows = []
+    total_qkh = None
+    total_qc_month = None
+    total_thuc_hien = None
+    for plant_code, plant_name in selected_plants:
+        latest_record = latest_records.get(plant_code)
+        qkh = monthly_settings.get(plant_code)
+        if qkh is None:
+            qkh = record_value(latest_record, "sanluong_kh_thang")
+        qc_month = record_value(latest_record, "cot_o")
+        thuc_hien = record_value(latest_record, "cot_r")
+
+        if qkh is not None:
+            total_qkh = (total_qkh or 0.0) + qkh
+        if qc_month is not None:
+            total_qc_month = (total_qc_month or 0.0) + qc_month
+        if thuc_hien is not None:
+            total_thuc_hien = (total_thuc_hien or 0.0) + thuc_hien
+
+        rows.append(_format_monthly_production_plan_row(plant_name, qkh, qc_month, thuc_hien, latest_record))
+
+    if len(selected_plants) > 1:
+        rows.append(_format_monthly_production_plan_row("Tổng cộng", total_qkh, total_qc_month, total_thuc_hien, None))
+
+    return f"""
+### Sản lượng kế hoạch tháng {month:02d}/{year}
+
+| Nhà máy | Qkh tháng | Qc tháng | Thực hiện tháng | Dòng SX mới nhất trong tháng |
+|---------|-----------|----------|-----------------|-------------------------------|
+{chr(10).join(rows)}
+""".strip()
+
+
+def _format_year_to_date_production_plan_row(plant_name, qkh, qc):
+    return "| {plant} | {qkh} | {qc} |".format(
+        plant=plant_name,
+        qkh=fmt_report_number(qkh),
+        qc=fmt_report_number(qc),
+    )
+
+
+def _format_year_to_date_production_plan_detail_row(plant_name, month_label, qkh, qc, thuc_hien):
+    return "| {plant} | {month} | {qkh} | {qc} | {thuc_hien} |".format(
+        plant=plant_name,
+        month=month_label,
+        qkh=fmt_report_number(qkh),
+        qc=fmt_report_number(qc),
+        thuc_hien=fmt_report_number(thuc_hien),
+    )
+
+
+def _production_plan_chart_block(chart_rows, title):
+    if not chart_rows:
+        return ""
+    chart_json = {
+        "type": "bar",
+        "title": title,
+        "xKey": "Tháng",
+        "yKeys": ["Qkh", "Qc", "Thực hiện"],
+        "data": chart_rows,
+        "colors": ["#2563eb", "#f97316", "#10b981"],
+    }
+    return f"```chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```"
+
+
+def build_leadership_year_to_date_production_plan_report(year, end_month, plant_codes=None):
+    from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
+
+    selected_plants = [
+        (plant_code, plant_name)
+        for plant_code, plant_name in LEADERSHIP_PRODUCTION_PLANTS
+        if not plant_codes or plant_code in plant_codes
+    ]
+    if not selected_plants:
+        selected_plants = list(LEADERSHIP_PRODUCTION_PLANTS)
+
+    selected_codes = [plant_code for plant_code, _ in selected_plants]
+    end_month = max(1, min(int(end_month or 1), 12))
+
+    monthly_settings = {
+        (record.nha_may, record.thang): record.sanluong_kehoach_thang
+        for record in ThongSoThuyVanCaiDat.objects.filter(
+            nha_may__in=selected_codes,
+            nam=year,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
+            thang__gte=1,
+            thang__lte=end_month,
+        )
+        if record.sanluong_kehoach_thang is not None
+    }
+
+    latest_records = {}
+    for plant_code in selected_codes:
+        for month in range(1, end_month + 1):
+            start_date, end_date = _month_bounds(year, month)
+            latest_records[(plant_code, month)] = (
+                ThongsoSanxuat.objects.filter(
+                    nha_may=plant_code,
+                    thoi_gian__date__gte=start_date,
+                    thoi_gian__date__lte=end_date,
+                )
+                .order_by("-thoi_gian", "-id")
+                .first()
+            )
+
+    rows = []
+    total_qkh = None
+    total_qc = None
+    total_thuc_hien = None
+    chart_totals_by_month = {
+        month: {"qkh": None, "qc": None, "thuc_hien": None}
+        for month in range(1, end_month + 1)
+    }
+    for plant_code, plant_name in selected_plants:
+        for month in range(1, end_month + 1):
+            latest_record = latest_records.get((plant_code, month))
+            qkh = monthly_settings.get((plant_code, month))
+            if qkh is None:
+                qkh = record_value(latest_record, "sanluong_kh_thang")
+            qc = record_value(latest_record, "cot_o")
+            thuc_hien = record_value(latest_record, "cot_r")
+
+            month_label = f"{month:02d}/{year}"
+            rows.append(_format_year_to_date_production_plan_detail_row(plant_name, month_label, qkh, qc, thuc_hien))
+
+            if qkh is not None:
+                total_qkh = (total_qkh or 0.0) + qkh
+                chart_totals_by_month[month]["qkh"] = (chart_totals_by_month[month]["qkh"] or 0.0) + qkh
+            if qc is not None:
+                total_qc = (total_qc or 0.0) + qc
+                chart_totals_by_month[month]["qc"] = (chart_totals_by_month[month]["qc"] or 0.0) + qc
+            if thuc_hien is not None:
+                total_thuc_hien = (total_thuc_hien or 0.0) + thuc_hien
+                chart_totals_by_month[month]["thuc_hien"] = (chart_totals_by_month[month]["thuc_hien"] or 0.0) + thuc_hien
+
+    rows.append(
+        _format_year_to_date_production_plan_detail_row(
+            "Tổng cộng",
+            f"01-{end_month:02d}/{year}",
+            total_qkh,
+            total_qc,
+            total_thuc_hien,
+        )
+    )
+    chart_rows = []
+    for month in range(1, end_month + 1):
+        month_totals = chart_totals_by_month[month]
+        chart_item = {"Tháng": f"{month:02d}/{year}"}
+        has_value = False
+        if month_totals["qkh"] is not None:
+            chart_item["Qkh"] = round(month_totals["qkh"], 2)
+            has_value = True
+        if month_totals["qc"] is not None:
+            chart_item["Qc"] = round(month_totals["qc"], 2)
+            has_value = True
+        if month_totals["thuc_hien"] is not None:
+            chart_item["Thực hiện"] = round(month_totals["thuc_hien"], 2)
+            has_value = True
+        if has_value:
+            chart_rows.append(chart_item)
+    chart_section = _production_plan_chart_block(chart_rows, f"Qkh, Qc và Thực hiện theo tháng năm {year}")
+
+    return f"""
+### Qkh và Qc theo tháng năm {year}
+
+**Phạm vi:** Tháng 01/{year} - tháng {end_month:02d}/{year}
+
+| Nhà máy | Tháng | Qkh | Qc | Thực hiện |
+|---------|-------|-----|----|-----------|
+{chr(10).join(rows)}
+
+{chart_section}
+""".strip()
+
+
 def build_leadership_production_report(report_date):
     from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
 

@@ -7,6 +7,7 @@ from ai_tools.leadership_report import (
     expand_leadership_menu_choice,
     get_actual_water_level_request,
     get_event_statistics_request,
+    get_monthly_production_plan_request,
     get_three_plant_production_report_date,
     has_leadership_event_menu_context,
     has_leadership_production_menu_context,
@@ -89,6 +90,44 @@ class LeadershipIntentTests(SimpleTestCase):
         for content in ("", "muc nuoc gioi han tuan", "bao cao muc nuoc"):
             with self.subTest(content=content):
                 self.assertFalse(is_weekly_limit_report_request(content))
+
+    @patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 7, 10))
+    def test_monthly_production_plan_request_extracts_current_or_explicit_month(self, _localdate):
+        current_month = get_monthly_production_plan_request("Sản lượng kế hoạch Qkh và Qc tháng này bao nhiêu?")
+        self.assertEqual(current_month.year, 2026)
+        self.assertEqual(current_month.month, 7)
+        self.assertIsNone(current_month.plant_codes)
+        self.assertFalse(current_month.needs_time_clarification)
+
+        explicit_month = get_monthly_production_plan_request("Cho biết QKH và QC sản lượng Vĩnh Sơn tháng 6/2026")
+        self.assertEqual(explicit_month.year, 2026)
+        self.assertEqual(explicit_month.month, 6)
+        self.assertEqual(explicit_month.plant_codes, ("vinhson",))
+        self.assertFalse(explicit_month.needs_time_clarification)
+
+        no_production_word = get_monthly_production_plan_request("Qkh và Qc tháng này của Sông Hinh?")
+        self.assertEqual(no_production_word.year, 2026)
+        self.assertEqual(no_production_word.month, 7)
+        self.assertEqual(no_production_word.period, "month")
+        self.assertEqual(no_production_word.plant_codes, ("songhinh",))
+        self.assertFalse(no_production_word.needs_time_clarification)
+
+        yearly = get_monthly_production_plan_request("Qc và Qkh năm 2026 của Sông Hinh?")
+        self.assertEqual(yearly.year, 2026)
+        self.assertEqual(yearly.month, 7)
+        self.assertEqual(yearly.period, "year_to_date")
+        self.assertEqual(yearly.plant_codes, ("songhinh",))
+
+        ytd = get_monthly_production_plan_request("Qc, Qkh từ đầu năm đến giờ")
+        self.assertEqual(ytd.year, 2026)
+        self.assertEqual(ytd.month, 7)
+        self.assertEqual(ytd.period, "year_to_date")
+
+        missing_month = get_monthly_production_plan_request("Sản lượng kế hoạch Qkh và Qc bao nhiêu?")
+        self.assertTrue(missing_month.needs_time_clarification)
+
+    def test_monthly_production_plan_request_rejects_unrelated_production_questions(self):
+        self.assertIsNone(get_monthly_production_plan_request("Báo cáo sản lượng hôm qua"))
 
     @patch("ai_tools.leadership_report.services.intent_service.timezone.localdate", return_value=date(2026, 6, 24))
     def test_actual_water_level_request_requires_or_extracts_time(self, _localdate):

@@ -237,3 +237,28 @@ SIMPLE_JWT = {
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# =============================
+# AI Tools Configurations
+# =============================
+AI_TOOLS_RATED_POWER_MAP = {
+    "SH": 37.0,   # Sông Hinh: 37 MW/tổ máy
+    "VS": 33.0,   # Vĩnh Sơn: 33 MW/tổ máy
+    "TKT": 110.0, # Thượng Kon Tum: 110 MW/tổ máy
+}
+
+AI_TOOLS_RAINFALL_STATIONS = {
+    "songhinh": [
+        "Xa_Ea_M_doan",
+        "Thon_10_Xa_Ea_M_Doal",
+        "UBND_xa_Song_Hinh",
+        "Cu_Kroa",
+        "Xa_Ea_Trang",
+        "Dap_Tran",
+    ],
+    "vinhson": [
+        "Ho_A_TD_Vinh_Son",
+        "Ho_B_TD_Vinh_Son",
+        "Ho_C_TD_Vinh_Son",
+    ],
+}
+

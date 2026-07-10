@@ -4,6 +4,8 @@ Operational service - Get operational data for Vĩnh Sơn
 
 from datetime import datetime
 from typing import Optional
+from django.utils import timezone
+from thongsothuyvan.models import ThongsoSanxuat, Vinhson_HoA, Vinhson_HoB, Vinhson_Hoc
 from ..config.columns import (
     COL_DATE, COL_RESERVOIR, COL_WATER_LEVEL, COL_VOLUME, COL_INFLOW,
     COL_TURBINE, COL_SPILLWAY, COL_OUTPUT_DAY, COL_COMMERCIAL_DAY,COL_QC_DAY,COL_QC_MONTH_ACC ,COL_QC_YEAR_ACC,
@@ -65,17 +67,73 @@ Không thể kết nối CSDL thongsothuyvan. Vui lòng kiểm tra:
 
 Xem console log để biết chi tiết lỗi."""
 
-            # Get all data (with retry)
-            def fetch_operational_data():
-                return worksheet.get_all_values()
+            # Direct DB queries bypassing sheets wrapper if using default DummyWorksheet
+            if type(worksheet).__name__ != "DummyWorksheet" and type(worksheet).__name__ != "DummyWorksheetWrapper":
+                all_data = retry_with_backoff(lambda: worksheet.get_all_values(), max_retries=3, initial_delay=1)
+                if len(all_data) < 3:
+                    return "Không có dữ liệu trong CSDL thongsothuyvan"
+                data_rows = all_data[2:]
+            else:
+                records = ThongsoSanxuat.objects.filter(nha_may='vinhson').order_by('thoi_gian')
+                record_dates = [timezone.localtime(r.thoi_gian).date() for r in records if r.thoi_gian]
+                map_a = {timezone.localtime(r.created_at).date(): r for r in Vinhson_HoA.objects.filter(created_at__date__in=record_dates) if r.created_at}
+                map_b = {timezone.localtime(r.created_at).date(): r for r in Vinhson_HoB.objects.filter(created_at__date__in=record_dates) if r.created_at}
+                map_c = {timezone.localtime(r.created_at).date(): r for r in Vinhson_Hoc.objects.filter(created_at__date__in=record_dates) if r.created_at}
 
-            all_data = retry_with_backoff(fetch_operational_data, max_retries=3, initial_delay=1)
-
-            if len(all_data) < 3:
-                return "Không có dữ liệu trong CSDL thongsothuyvan"
-
-            headers = all_data[1]
-            data_rows = all_data[2:]
+                data_rows = []
+                for rec in records:
+                    row = [""] * 30
+                    rec_time = timezone.localtime(rec.thoi_gian)
+                    rec_date = rec_time.date()
+                    row[COL_DATE] = rec_time.strftime("%d/%m/%Y")
+                    
+                    res_name = (rec.cot_c or "").strip()
+                    row[COL_RESERVOIR] = res_name
+                    
+                    sh = None
+                    res_upper = res_name.upper()
+                    if "A" in res_upper:
+                        sh = map_a.get(rec_date)
+                    elif "B" in res_upper:
+                        sh = map_b.get(rec_date)
+                    elif "C" in res_upper:
+                        sh = map_c.get(rec_date)
+                        
+                    if sh:
+                        row[COL_WATER_LEVEL] = str(sh.Mucnuoc) if sh.Mucnuoc is not None else ""
+                        row[COL_VOLUME] = str(sh.dungtich) if sh.dungtich is not None else ""
+                    else:
+                        row[COL_WATER_LEVEL] = str(rec.cot_g) if rec.cot_g is not None else ""
+                        row[COL_VOLUME] = str(rec.cot_h) if rec.cot_h is not None else ""
+                        
+                    inflow = None
+                    if rec.cot_i is not None:
+                        tot_inflow = float(rec.cot_i)
+                        if "B" in res_upper:
+                            inflow = float(rec.luuluong_ve_ho_b) if rec.luuluong_ve_ho_b is not None else 0.0
+                        elif "C" in res_upper:
+                            inflow = float(rec.luuluong_ve_ho_c) if rec.luuluong_ve_ho_c is not None else 0.0
+                        else: # Lake A
+                            inflow_b = float(rec.luuluong_ve_ho_b) if rec.luuluong_ve_ho_b is not None else 0.0
+                            inflow_c = float(rec.luuluong_ve_ho_c) if rec.luuluong_ve_ho_c is not None else 0.0
+                            inflow = round(tot_inflow - inflow_b - inflow_c, 2)
+                    
+                    row[COL_INFLOW] = str(inflow) if inflow is not None else ""
+                    row[COL_TURBINE] = str(rec.cot_j) if rec.cot_j is not None else ""
+                    row[COL_SPILLWAY] = str(rec.cot_k) if rec.cot_k is not None else ""
+                    row[COL_QC_DAY] = str(rec.cot_l) if rec.cot_l is not None else ""
+                    row[COL_OUTPUT_DAY] = str(rec.cot_m) if rec.cot_m is not None else ""
+                    row[COL_COMMERCIAL_DAY] = str(rec.cot_n) if rec.cot_n is not None else ""
+                    row[COL_QC_MONTH_ACC] = str(rec.cot_p) if rec.cot_p is not None else ""
+                    row[COL_OUTPUT_MONTH] = str(rec.cot_q) if rec.cot_q is not None else ""
+                    row[COL_COMMERCIAL_MONTH] = str(rec.cot_r) if rec.cot_r is not None else ""
+                    row[COL_QC_YEAR_ACC] = str(rec.cot_t) if rec.cot_t is not None else ""
+                    row[COL_OUTPUT_YEAR] = str(rec.cot_u) if rec.cot_u is not None else ""
+                    row[COL_COMMERCIAL_YEAR] = str(rec.cot_v) if rec.cot_v is not None else ""
+                    row[COL_PLAN_YEAR] = str(rec.cot_w) if rec.cot_w is not None else ""
+                    row[COL_SELF_USE] = str(rec.cot_x) if rec.cot_x is not None else ""
+                    
+                    data_rows.append(row)
 
             filtered_data = []
 
