@@ -1187,13 +1187,22 @@ def _month_bounds(year, month):
     return start_date, end_date
 
 
-def _format_monthly_production_plan_row(plant_name, qkh, qc_month, thuc_hien, latest_record):
+def _format_participation_pct(thuc_hien, qc):
+    if thuc_hien is None or qc is None or qc <= 0:
+        return "-"
+    pct = ((thuc_hien - qc) / qc) * 100.0
+    sign = "+" if pct > 0 else ""
+    return f"{sign}{fmt_report_number(pct)}%"
+
+
+def _format_monthly_production_plan_row(plant_name, qkh, qc_month, thuc_hien, pct_participation, latest_record):
     latest_time = _fmt_report_datetime(latest_record.thoi_gian) if latest_record else "-"
-    return "| {plant} | {qkh} | {qc_month} | {thuc_hien} | {latest_time} |".format(
+    return "| {plant} | {qkh} | {qc_month} | {thuc_hien} | {pct_participation} | {latest_time} |".format(
         plant=plant_name,
         qkh=fmt_report_number(qkh),
         qc_month=fmt_report_number(qc_month),
         thuc_hien=fmt_report_number(thuc_hien),
+        pct_participation=pct_participation,
         latest_time=latest_time,
     )
 
@@ -1246,6 +1255,7 @@ def build_leadership_monthly_production_plan_report(year, month, plant_codes=Non
             qkh = record_value(latest_record, "sanluong_kh_thang")
         qc_month = record_value(latest_record, "cot_o")
         thuc_hien = record_value(latest_record, "cot_r")
+        pct_participation = _format_participation_pct(thuc_hien, qc_month)
 
         if qkh is not None:
             total_qkh = (total_qkh or 0.0) + qkh
@@ -1254,16 +1264,17 @@ def build_leadership_monthly_production_plan_report(year, month, plant_codes=Non
         if thuc_hien is not None:
             total_thuc_hien = (total_thuc_hien or 0.0) + thuc_hien
 
-        rows.append(_format_monthly_production_plan_row(plant_name, qkh, qc_month, thuc_hien, latest_record))
+        rows.append(_format_monthly_production_plan_row(plant_name, qkh, qc_month, thuc_hien, pct_participation, latest_record))
 
     if len(selected_plants) > 1:
-        rows.append(_format_monthly_production_plan_row("Tổng cộng", total_qkh, total_qc_month, total_thuc_hien, None))
+        total_pct = _format_participation_pct(total_thuc_hien, total_qc_month)
+        rows.append(_format_monthly_production_plan_row("Tổng cộng", total_qkh, total_qc_month, total_thuc_hien, total_pct, None))
 
     return f"""
 ### Sản lượng kế hoạch tháng {month:02d}/{year}
 
-| Nhà máy | Qkh tháng | Qc tháng | Thực hiện tháng | Dòng SX mới nhất trong tháng |
-|---------|-----------|----------|-----------------|-------------------------------|
+| Nhà máy | Qkh tháng | Qc tháng | Thực hiện tháng | % tham gia TTĐ | Dòng SX mới nhất trong tháng |
+|---------|-----------|----------|-----------------|----------------|-------------------------------|
 {chr(10).join(rows)}
 """.strip()
 
@@ -1276,13 +1287,14 @@ def _format_year_to_date_production_plan_row(plant_name, qkh, qc):
     )
 
 
-def _format_year_to_date_production_plan_detail_row(plant_name, month_label, qkh, qc, thuc_hien):
-    return "| {plant} | {month} | {qkh} | {qc} | {thuc_hien} |".format(
+def _format_year_to_date_production_plan_detail_row(plant_name, month_label, qkh, qc, thuc_hien, pct_participation):
+    return "| {plant} | {month} | {qkh} | {qc} | {thuc_hien} | {pct_participation} |".format(
         plant=plant_name,
         month=month_label,
         qkh=fmt_report_number(qkh),
         qc=fmt_report_number(qc),
         thuc_hien=fmt_report_number(thuc_hien),
+        pct_participation=pct_participation,
     )
 
 
@@ -1356,9 +1368,10 @@ def build_leadership_year_to_date_production_plan_report(year, end_month, plant_
                 qkh = record_value(latest_record, "sanluong_kh_thang")
             qc = record_value(latest_record, "cot_o")
             thuc_hien = record_value(latest_record, "cot_r")
+            pct_participation = _format_participation_pct(thuc_hien, qc)
 
             month_label = f"{month:02d}/{year}"
-            rows.append(_format_year_to_date_production_plan_detail_row(plant_name, month_label, qkh, qc, thuc_hien))
+            rows.append(_format_year_to_date_production_plan_detail_row(plant_name, month_label, qkh, qc, thuc_hien, pct_participation))
 
             if qkh is not None:
                 total_qkh = (total_qkh or 0.0) + qkh
@@ -1370,6 +1383,7 @@ def build_leadership_year_to_date_production_plan_report(year, end_month, plant_
                 total_thuc_hien = (total_thuc_hien or 0.0) + thuc_hien
                 chart_totals_by_month[month]["thuc_hien"] = (chart_totals_by_month[month]["thuc_hien"] or 0.0) + thuc_hien
 
+    total_pct = _format_participation_pct(total_thuc_hien, total_qc)
     rows.append(
         _format_year_to_date_production_plan_detail_row(
             "Tổng cộng",
@@ -1377,6 +1391,7 @@ def build_leadership_year_to_date_production_plan_report(year, end_month, plant_
             total_qkh,
             total_qc,
             total_thuc_hien,
+            total_pct,
         )
     )
     chart_rows = []
@@ -1402,8 +1417,8 @@ def build_leadership_year_to_date_production_plan_report(year, end_month, plant_
 
 **Phạm vi:** Tháng 01/{year} - tháng {end_month:02d}/{year}
 
-| Nhà máy | Tháng | Qkh | Qc | Thực hiện |
-|---------|-------|-----|----|-----------|
+| Nhà máy | Tháng | Qkh | Qc | Thực hiện | % tham gia TTĐ |
+|---------|-------|-----|----|-----------|----------------|
 {chr(10).join(rows)}
 
 {chart_section}

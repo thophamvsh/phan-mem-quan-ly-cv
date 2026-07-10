@@ -459,32 +459,45 @@ Xem console log để biết chi tiết lỗi."""
                 for current_row in filtered_data:
                     reservoir_name = current_row[COL_RESERVOIR] if len(current_row) > COL_RESERVOIR else ""
 
+                    def fmt_num(val_str):
+                        if not val_str or val_str == "-":
+                            return "-"
+                        val = parse_number(val_str)
+                        if val is None:
+                            return val_str
+                        if abs(val - round(val)) < 0.000001:
+                            return f"{round(val):,}".replace(",", ".")
+                        res = f"{val:,.3f}".replace(",", "_").replace(".", ",").replace("_", ".")
+                        if "," in res:
+                            res = res.rstrip("0").rstrip(",")
+                        return res
+
                     date_current = current_row[COL_DATE] if len(current_row) > COL_DATE else ""
-                    water_level_current = current_row[COL_WATER_LEVEL] if len(current_row) > COL_WATER_LEVEL else ""
-                    volume_current = current_row[COL_VOLUME] if len(current_row) > COL_VOLUME else ""
-                    inflow_current = current_row[COL_INFLOW] if len(current_row) > COL_INFLOW else ""
-                    turbine_current = current_row[COL_TURBINE] if len(current_row) > COL_TURBINE else ""
-                    spillway_current = current_row[COL_SPILLWAY] if len(current_row) > COL_SPILLWAY else ""
-                    output_day_current = current_row[COL_OUTPUT_DAY] if len(current_row) > COL_OUTPUT_DAY else ""
-                    commercial_day_current = current_row[COL_COMMERCIAL_DAY] if len(current_row) > COL_COMMERCIAL_DAY else ""
+                    water_level_raw = current_row[COL_WATER_LEVEL] if len(current_row) > COL_WATER_LEVEL else ""
+                    volume_raw = current_row[COL_VOLUME] if len(current_row) > COL_VOLUME else ""
+                    inflow_raw = current_row[COL_INFLOW] if len(current_row) > COL_INFLOW else ""
+                    turbine_raw = current_row[COL_TURBINE] if len(current_row) > COL_TURBINE else ""
+                    spillway_raw = current_row[COL_SPILLWAY] if len(current_row) > COL_SPILLWAY else ""
+                    output_day_raw = current_row[COL_OUTPUT_DAY] if len(current_row) > COL_OUTPUT_DAY else ""
+                    commercial_day_raw = current_row[COL_COMMERCIAL_DAY] if len(current_row) > COL_COMMERCIAL_DAY else ""
                     # Ngày 1 tháng: "tháng" = lũy kế tháng = chỉ ngày đó; sheet có thể ghi nhầm tổng tháng trước
                     if target_date.day == 1:
-                        output_month_current = output_day_current
-                        commercial_month_current = commercial_day_current
+                        output_month_raw = output_day_raw
+                        commercial_month_raw = commercial_day_raw
                     else:
-                        output_month_current = current_row[COL_OUTPUT_MONTH] if len(current_row) > COL_OUTPUT_MONTH else ""
-                        commercial_month_current = current_row[COL_COMMERCIAL_MONTH] if len(current_row) > COL_COMMERCIAL_MONTH else ""
-                    output_year_current = current_row[COL_OUTPUT_YEAR] if len(current_row) > COL_OUTPUT_YEAR else ""
-                    commercial_year_current = current_row[COL_COMMERCIAL_YEAR] if len(current_row) > COL_COMMERCIAL_YEAR else ""
-                    plan_year_current = current_row[COL_PLAN_YEAR] if len(current_row) > COL_PLAN_YEAR else ""
-                    self_use_current = current_row[COL_SELF_USE] if len(current_row) > COL_SELF_USE else ""
-                    qc_day_current = current_row[COL_QC_DAY] if len(current_row) > COL_QC_DAY else ""
-                    qc_month_current = (
-                        qc_day_current
+                        output_month_raw = current_row[COL_OUTPUT_MONTH] if len(current_row) > COL_OUTPUT_MONTH else ""
+                        commercial_month_raw = current_row[COL_COMMERCIAL_MONTH] if len(current_row) > COL_COMMERCIAL_MONTH else ""
+                    output_year_raw = current_row[COL_OUTPUT_YEAR] if len(current_row) > COL_OUTPUT_YEAR else ""
+                    commercial_year_raw = current_row[COL_COMMERCIAL_YEAR] if len(current_row) > COL_COMMERCIAL_YEAR else ""
+                    plan_year_raw = current_row[COL_PLAN_YEAR] if len(current_row) > COL_PLAN_YEAR else ""
+                    self_use_raw = current_row[COL_SELF_USE] if len(current_row) > COL_SELF_USE else ""
+                    qc_day_raw = current_row[COL_QC_DAY] if len(current_row) > COL_QC_DAY else ""
+                    qc_month_raw = (
+                        qc_day_raw
                         if target_date.day == 1
                         else current_row[COL_QC_MONTH_ACC] if len(current_row) > COL_QC_MONTH_ACC else ""
                     )
-                    qc_year_current = current_row[COL_QC_YEAR_ACC] if len(current_row) > COL_QC_YEAR_ACC else ""
+                    qc_year_raw = current_row[COL_QC_YEAR_ACC] if len(current_row) > COL_QC_YEAR_ACC else ""
 
                     def pct_complete(plan_s: str, commercial_s: str) -> str:
                         plan_val = parse_number(plan_s)
@@ -493,35 +506,63 @@ Xem console log để biết chi tiết lỗi."""
                             return "-"
                         return f"{(commercial_val / plan_val * 100):.2f}%"
 
-                    plan_year_for_report = plan_year_current or qc_year_current
-                    percent_day_current = pct_complete(qc_day_current, commercial_day_current)
-                    percent_month_current = pct_complete(qc_month_current, commercial_month_current)
-                    percent_complete_current = pct_complete(plan_year_for_report, commercial_year_current)
+                    plan_year_for_report_raw = plan_year_raw or qc_year_raw
+                    percent_day_current = pct_complete(qc_day_raw, commercial_day_raw)
+                    percent_month_current = pct_complete(qc_month_raw, commercial_month_raw)
+                    percent_complete_current = pct_complete(plan_year_for_report_raw, commercial_year_raw)
 
                     hours_current = self.hours_service.get_hours_data(date_obj, reservoir_name, worksheet_hours)
                     units_current = hours_current.get('units', [])
-                    h1_operating_current = "-"
-                    h1_stopped_current = "-"
-                    h1_ytd_current = "-"
-                    h2_operating_current = "-"
-                    h2_stopped_current = "-"
-                    h2_ytd_current = "-"
+                    h1_operating_raw = "-"
+                    h1_stopped_raw = "-"
+                    h1_ytd_raw = "-"
+                    h2_operating_raw = "-"
+                    h2_stopped_raw = "-"
+                    h2_ytd_raw = "-"
 
                     for unit in units_current:
                         if unit.get('unit') == 'H1':
-                            h1_operating_current = unit.get('hours_operating', '-')
-                            h1_stopped_current = unit.get('hours_stopped', '-')
-                            h1_ytd_current = unit.get('ytd', '-')
+                            h1_operating_raw = unit.get('hours_operating', '-')
+                            h1_stopped_raw = unit.get('hours_stopped', '-')
+                            h1_ytd_raw = unit.get('ytd', '-')
                         elif unit.get('unit') == 'H2':
-                            h2_operating_current = unit.get('hours_operating', '-')
-                            h2_stopped_current = unit.get('hours_stopped', '-')
-                            h2_ytd_current = unit.get('ytd', '-')
+                            h2_operating_raw = unit.get('hours_operating', '-')
+                            h2_stopped_raw = unit.get('hours_stopped', '-')
+                            h2_ytd_raw = unit.get('ytd', '-')
 
-                    self_use_ratio_current = "-"
-                    output_year_val = parse_number(output_year_current)
-                    commercial_year_val = parse_number(commercial_year_current)
+                    self_use_ratio_current_raw = "-"
+                    output_year_val = parse_number(output_year_raw)
+                    commercial_year_val = parse_number(commercial_year_raw)
                     if output_year_val is not None and commercial_year_val is not None and output_year_val > 0:
-                        self_use_ratio_current = f"{((output_year_val - commercial_year_val) / output_year_val * 100):.3f}"
+                        self_use_ratio_current_raw = f"{((output_year_val - commercial_year_val) / output_year_val * 100):.3f}"
+
+                    # Format display variables
+                    water_level_current = fmt_num(water_level_raw)
+                    volume_current = fmt_num(volume_raw)
+                    inflow_current = fmt_num(inflow_raw)
+                    turbine_current = fmt_num(turbine_raw)
+                    spillway_current = fmt_num(spillway_raw)
+                    self_use_current = fmt_num(self_use_raw)
+
+                    output_day_current = fmt_num(output_day_raw)
+                    commercial_day_current = fmt_num(commercial_day_raw)
+                    qc_day_current = fmt_num(qc_day_raw)
+
+                    output_month_current = fmt_num(output_month_raw)
+                    commercial_month_current = fmt_num(commercial_month_raw)
+                    qc_month_current = fmt_num(qc_month_raw)
+
+                    output_year_current = fmt_num(output_year_raw)
+                    commercial_year_current = fmt_num(commercial_year_raw)
+                    plan_year_for_report = fmt_num(plan_year_for_report_raw)
+                    self_use_ratio_current = fmt_num(self_use_ratio_current_raw)
+
+                    h1_operating_current = fmt_num(h1_operating_raw)
+                    h1_stopped_current = fmt_num(h1_stopped_raw)
+                    h1_ytd_current = fmt_num(h1_ytd_raw)
+                    h2_operating_current = fmt_num(h2_operating_raw)
+                    h2_stopped_current = fmt_num(h2_stopped_raw)
+                    h2_ytd_current = fmt_num(h2_ytd_raw)
 
                     result = f"""
 ### Dữ liệu vận hành Thủy điện Vĩnh Sơn - {reservoir_name}

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Operational service - Get operational data for Sông Hinh
 """
 
@@ -209,31 +209,45 @@ Xem console log để biết chi tiết lỗi.
                 # Return default only if val is truly empty (after strip)
                 return val if val else default
 
+            def fmt_num(val_str):
+                if not val_str or val_str == "-":
+                    return "-"
+                from ai_tools.songhinh_tools.utils.numbers import parse_float_loose
+                val = parse_float_loose(val_str)
+                if val is None:
+                    return val_str
+                if abs(val - round(val)) < 0.000001:
+                    return f"{round(val):,}".replace(",", ".")
+                res = f"{val:,.3f}".replace(",", "_").replace(".", ",").replace("_", ".")
+                if "," in res:
+                    res = res.rstrip("0").rstrip(",")
+                return res
+
             date_current = c(self.cols.COL_DATE, "-")
 
-            water_level_current = c(self.cols.COL_WATER_LEVEL)
-            volume_current = c(self.cols.COL_VOLUME)
-            inflow_current = c(self.cols.COL_INFLOW)
-            turbine_current = c(self.cols.COL_TURBINE)
-            spillway_current = c(self.cols.COL_SPILLWAY)
+            water_level_raw = c(self.cols.COL_WATER_LEVEL)
+            volume_raw = c(self.cols.COL_VOLUME)
+            inflow_raw = c(self.cols.COL_INFLOW)
+            turbine_raw = c(self.cols.COL_TURBINE)
+            spillway_raw = c(self.cols.COL_SPILLWAY)
 
-            output_day_current = c(self.cols.COL_OUTPUT_DAY)
-            commercial_day_current = c(self.cols.COL_COMMERCIAL_DAY)
-            qc_day_current = c(self.cols.COL_QC_DAY)
+            output_day_raw = c(self.cols.COL_OUTPUT_DAY)
+            commercial_day_raw = c(self.cols.COL_COMMERCIAL_DAY)
+            qc_day_raw = c(self.cols.COL_QC_DAY)
             # Ngày 1 tháng: "tháng" = lũy kế tháng = chỉ ngày đó; sheet có thể ghi nhầm tổng tháng trước
             if target.day == 1:
-                output_month_current = output_day_current
-                commercial_month_current = commercial_day_current
-                qc_month_current = qc_day_current
+                output_month_raw = output_day_raw
+                commercial_month_raw = commercial_day_raw
+                qc_month_raw = qc_day_raw
             else:
-                output_month_current = c(self.cols.COL_OUTPUT_MONTH)
-                commercial_month_current = c(self.cols.COL_COMMERCIAL_MONTH)
-                qc_month_current = c(self.cols.COL_QC_MONTH_ACC)
-            output_year_current = c(self.cols.COL_OUTPUT_YEAR)
-            commercial_year_current = c(self.cols.COL_COMMERCIAL_YEAR)
-            qc_year_current = c(self.cols.COL_QC_YEAR_ACC)
-            plan_year_current = c(self.cols.COL_PLAN_YEAR)
-            self_use_current = c(self.cols.COL_SELF_USE)
+                output_month_raw = c(self.cols.COL_OUTPUT_MONTH)
+                commercial_month_raw = c(self.cols.COL_COMMERCIAL_MONTH)
+                qc_month_raw = c(self.cols.COL_QC_MONTH_ACC)
+            output_year_raw = c(self.cols.COL_OUTPUT_YEAR)
+            commercial_year_raw = c(self.cols.COL_COMMERCIAL_YEAR)
+            qc_year_raw = c(self.cols.COL_QC_YEAR_ACC)
+            plan_year_raw = c(self.cols.COL_PLAN_YEAR)
+            self_use_raw = c(self.cols.COL_SELF_USE)
 
             # percent complete
             def pct_complete(plan_s: str, commercial_s: str) -> str:
@@ -246,10 +260,10 @@ Xem console log để biết chi tiết lỗi.
                 print(f"[DEBUG] pct_complete success: {comm}/{plan}*100 = {result}", flush=True)
                 return result
 
-            plan_year_for_report = plan_year_current if plan_year_current != "-" else qc_year_current
-            percent_day_current = pct_complete(qc_day_current, commercial_day_current)
-            percent_month_current = pct_complete(qc_month_current, commercial_month_current)
-            percent_complete_current = pct_complete(plan_year_for_report, commercial_year_current)
+            plan_year_for_report_raw = plan_year_raw if plan_year_raw != "-" else qc_year_raw
+            percent_day_current = pct_complete(qc_day_raw, commercial_day_raw)
+            percent_month_current = pct_complete(qc_month_raw, commercial_month_raw)
+            percent_complete_current = pct_complete(plan_year_for_report_raw, commercial_year_raw)
 
             # hours data
             if self.hours:
@@ -281,7 +295,35 @@ Xem console log để biết chi tiết lỗi.
                 print(f"[DEBUG] self_use_ratio success: ({outv}-{comv})/{outv}*100 = {result}", flush=True)
                 return result
 
-            self_use_ratio_current = self_use_ratio(output_year_current, commercial_year_current)
+            self_use_ratio_current_raw = self_use_ratio(output_year_raw, commercial_year_raw)
+
+            # Format all display strings
+            water_level_current = fmt_num(water_level_raw)
+            volume_current = fmt_num(volume_raw)
+            inflow_current = fmt_num(inflow_raw)
+            turbine_current = fmt_num(turbine_raw)
+            spillway_current = fmt_num(spillway_raw)
+            self_use_current = fmt_num(self_use_raw)
+
+            output_day_current = fmt_num(output_day_raw)
+            commercial_day_current = fmt_num(commercial_day_raw)
+            qc_day_current = fmt_num(qc_day_raw)
+
+            output_month_current = fmt_num(output_month_raw)
+            commercial_month_current = fmt_num(commercial_month_raw)
+            qc_month_current = fmt_num(qc_month_raw)
+
+            output_year_current = fmt_num(output_year_raw)
+            commercial_year_current = fmt_num(commercial_year_raw)
+            plan_year_for_report = fmt_num(plan_year_for_report_raw)
+            self_use_ratio_current = fmt_num(self_use_ratio_current_raw)
+
+            tm1_op_cur = fmt_num(tm1_op_cur)
+            tm2_op_cur = fmt_num(tm2_op_cur)
+            tm1_stop_cur = fmt_num(tm1_stop_cur)
+            tm2_stop_cur = fmt_num(tm2_stop_cur)
+            tm1_ytd_cur = fmt_num(tm1_ytd_cur)
+            tm2_ytd_cur = fmt_num(tm2_ytd_cur)
 
             return f"""
 ### Dữ liệu vận hành Thủy điện Sông Hinh

@@ -134,7 +134,10 @@ def _fetch_vinhson_hours() -> List[List[str]]:
             if not rec.ngay:
                 continue
             row[COL_HOURS_DATE] = rec.ngay.strftime("%d/%m/%Y")
-            row[COL_HOURS_UNIT] = str(rec.to_may)
+            to_may_str = str(rec.to_may) if rec.to_may is not None else ""
+            if to_may_str and not to_may_str.startswith("H"):
+                to_may_str = f"H{to_may_str}"
+            row[COL_HOURS_UNIT] = to_may_str
             row[COL_HOURS_OPERATING] = str(rec.gio_phat_dien) if rec.gio_phat_dien is not None else ""
             row[COL_HOURS_STOPPED] = str(rec.gio_ngung) if rec.gio_ngung is not None else ""
             data.append(row)

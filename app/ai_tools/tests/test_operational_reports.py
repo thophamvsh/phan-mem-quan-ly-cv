@@ -92,8 +92,8 @@ class OperationalSingleDayReportTests(SimpleTestCase):
         self.assertIn("**Ngày báo cáo:** 12/06/2026", report)
         self.assertNotIn("**So sánh:**", report)
         self.assertIn("| Ngày | 95 | 90 | 100 | 90.00% |", report)
-        self.assertIn("| Tháng | 950 | 900 | 1000 | 90.00% |", report)
-        self.assertIn("| Năm | 9500 | 9000 | 12000 | 75.00% |", report)
+        self.assertIn("| Tháng | 950 | 900 | 1.000 | 90.00% |", report)
+        self.assertIn("| Năm | 9.500 | 9.000 | 12.000 | 75.00% |", report)
 
     def test_vinhson_specific_date_reports_current_production_without_comparison(self):
         row = _row()
@@ -125,5 +125,5 @@ class OperationalSingleDayReportTests(SimpleTestCase):
         self.assertIn("**Ngày báo cáo:** 12/06/2026", report)
         self.assertNotIn("**So sánh:**", report)
         self.assertIn("| Ngày | 95 | 90 | 100 | 90.00% |", report)
-        self.assertIn("| Tháng | 950 | 900 | 1000 | 90.00% |", report)
-        self.assertIn("| Năm | 9500 | 9000 | 12000 | 75.00% |", report)
+        self.assertIn("| Tháng | 950 | 900 | 1.000 | 90.00% |", report)
+        self.assertIn("| Năm | 9.500 | 9.000 | 12.000 | 75.00% |", report)
