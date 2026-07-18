@@ -3,8 +3,8 @@ from django.db import models
 
 
 class BaseThuyVan(models.Model):
-    Mucnuoc = models.DecimalField(max_digits=10, decimal_places=2)
-    dungtich = models.DecimalField(max_digits=14, decimal_places=2)
+    Mucnuoc = models.DecimalField(max_digits=11, decimal_places=3)
+    dungtich = models.DecimalField(max_digits=15, decimal_places=3)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

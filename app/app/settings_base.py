@@ -262,3 +262,7 @@ AI_TOOLS_RAINFALL_STATIONS = {
     ],
 }
 
+# Nang gioi han parameter gui len tu form Django Admin de tránh loi TooManyFieldsSent khi xử lý bảng dữ liệu lớn
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
+
+
