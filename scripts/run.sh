@@ -70,7 +70,10 @@ else
       exec gunicorn app.wsgi:application \
         --bind 0.0.0.0:"${PORT}" \
         --workers "${GUNICORN_WORKERS:-3}" \
-        --threads "${GUNICORN_THREADS:-2}" \
+        --worker-class "sync" \
+        --worker-tmp-dir /dev/shm \
+        --max-requests "${GUNICORN_MAX_REQUESTS:-500}" \
+        --max-requests-jitter "${GUNICORN_MAX_REQUESTS_JITTER:-50}" \
         --timeout "${GUNICORN_TIMEOUT:-120}" \
         --no-control-socket \
         --access-logfile "-" --error-logfile "-"
