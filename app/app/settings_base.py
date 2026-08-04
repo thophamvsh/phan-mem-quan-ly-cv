@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,6 +28,16 @@ def env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_required(name: str) -> str:
+    """Return a required environment value or stop startup with a clear error."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise ImproperlyConfigured(
+            f"Missing required environment variable: {name}"
+        )
+    return value
 
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-dev-only-change-me")
@@ -170,6 +181,19 @@ CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', False)
 CORS_ALLOWED_ORIGINS = [
     origin.strip() for origin in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()
 ]
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()
+]
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.environ.get('REDIS_CACHE_URL', 'redis://redis:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+    }
+}
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -187,6 +211,12 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'URL_FORMAT_OVERRIDE': None,
+    'DEFAULT_THROTTLE_RATES': {
+        'register': os.environ.get('THROTTLE_REGISTER_RATE', '3/hour'),
+        'login': os.environ.get('THROTTLE_LOGIN_RATE', '5/minute'),
+        'token': os.environ.get('THROTTLE_TOKEN_RATE', '20/minute'),
+        'ai': os.environ.get('THROTTLE_AI_RATE', '20/hour'),
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [

@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.http import JsonResponse
 
 from .models import User, UserProfile
+from .throttles import LoginRateThrottle, RegistrationRateThrottle
 from .serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
@@ -20,6 +21,7 @@ def health_check(request):
 class UserRegistrationAPIView(APIView):
     """API đăng ký user mới"""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [RegistrationRateThrottle]
 
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
@@ -41,6 +43,7 @@ class UserRegistrationAPIView(APIView):
 class UserLoginAPIView(APIView):
     """API đăng nhập cho user"""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data)

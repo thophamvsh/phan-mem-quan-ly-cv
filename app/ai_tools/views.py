@@ -11,6 +11,7 @@ from .permissions import CanUseAiTools
 from .serializers import AiChatRequestSerializer
 from .services import AiToolsError, run_ai_chat, run_ai_chat_stream
 from .storage import delete_session, get_conversation, get_sessions
+from core.throttles import AiRateThrottle
 
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ def stream_ai_chat(*, user, content, session_id=None, provider=None, model=None)
 
 class AiChatAPIView(APIView):
     permission_classes = [CanUseAiTools]
+    throttle_classes = [AiRateThrottle]
 
     def post(self, request):
         serializer = AiChatRequestSerializer(data=request.data)
@@ -84,6 +86,7 @@ class AiChatAPIView(APIView):
 
 class AiChatStreamAPIView(APIView):
     permission_classes = [CanUseAiTools]
+    throttle_classes = [AiRateThrottle]
 
     def post(self, request):
         serializer = AiChatRequestSerializer(data=request.data)
