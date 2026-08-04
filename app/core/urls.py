@@ -26,6 +26,10 @@ urlpatterns = [
     # ===== Public endpoints =====
     path('auth/register/', auth_views.UserRegistrationAPIView.as_view(), name='user-register'),
     path('auth/login/', auth_views.UserLoginAPIView.as_view(), name='user-login'),
+    path('auth/csrf-token/', auth_views.CSRFTokenAPIView.as_view(), name='csrf-token'),
+    path('auth/login-secure/', auth_views.SecureUserLoginAPIView.as_view(), name='secure-login'),
+    path('auth/refresh-secure/', auth_views.SecureTokenRefreshAPIView.as_view(), name='secure-refresh'),
+    path('auth/logout-secure/', auth_views.SecureUserLogoutAPIView.as_view(), name='secure-logout'),
     path('auth/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', ThrottledTokenRefreshView.as_view(), name='token_refresh'),
     path('auth/token/verify/', ThrottledTokenVerifyView.as_view(), name='token_verify'),

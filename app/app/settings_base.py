@@ -261,6 +261,19 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
+AUTH_COOKIE_NAME = os.environ.get('AUTH_COOKIE_NAME', 'refresh_token')
+AUTH_COOKIE_SECURE = env_bool('AUTH_COOKIE_SECURE', not env_bool('DEBUG', False))
+AUTH_COOKIE_SAMESITE = os.environ.get('AUTH_COOKIE_SAMESITE', 'Lax')
+AUTH_COOKIE_PATH = os.environ.get('AUTH_COOKIE_PATH', '/api/v1/auth/')
+AUTH_COOKIE_DOMAIN = os.environ.get('AUTH_COOKIE_DOMAIN') or None
+
+if AUTH_COOKIE_SAMESITE not in ('Lax', 'Strict', 'None'):
+    raise ImproperlyConfigured('AUTH_COOKIE_SAMESITE must be Lax, Strict, or None')
+if not AUTH_COOKIE_PATH.startswith('/'):
+    raise ImproperlyConfigured('AUTH_COOKIE_PATH must start with /')
+if AUTH_COOKIE_SAMESITE == 'None' and not AUTH_COOKIE_SECURE:
+    raise ImproperlyConfigured('AUTH_COOKIE_SECURE must be True when SameSite=None')
+
 # =============================
 # Telegram Notifications
 # =============================

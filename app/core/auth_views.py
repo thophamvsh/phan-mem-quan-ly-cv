@@ -3,10 +3,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.http import JsonResponse
+from django.conf import settings
+from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 
 from .models import User, UserProfile
-from .throttles import LoginRateThrottle, RegistrationRateThrottle
+from .auth_cookies import delete_refresh_cookie, set_refresh_cookie
+from .throttles import LoginRateThrottle, RegistrationRateThrottle, TokenRateThrottle
 from .serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
@@ -16,6 +23,134 @@ from .serializers import (
 
 def health_check(request):
     return JsonResponse({"status": "ok"})
+
+
+def _serialize_login_user(user, request):
+    try:
+        return UserProfileSerializer(
+            user.profile,
+            context={'request': request},
+        ).data
+    except UserProfile.DoesNotExist:
+        return UserSerializer(user).data
+
+
+def _send_login_signal(request, user):
+    from django.contrib.auth.signals import user_logged_in
+    user_logged_in.send(sender=user.__class__, request=request, user=user)
+
+
+@method_decorator(ensure_csrf_cookie, name='dispatch')
+class CSRFTokenAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return Response({'csrfToken': get_token(request)})
+
+
+@method_decorator(csrf_protect, name='dispatch')
+class SecureUserLoginAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        serializer = UserLoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            errors = serializer.errors
+            error_message = (
+                errors.get('non_field_errors', [None])[0]
+                or errors.get('username', [None])[0]
+                or errors.get('email', [None])[0]
+                or errors.get('password', [None])[0]
+                or 'Đăng nhập thất bại'
+            )
+            return Response({
+                'success': False,
+                'message': str(error_message),
+                'errors': errors,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        user = serializer.validated_data['user']
+        refresh = RefreshToken.for_user(user)
+        _send_login_signal(request, user)
+        response = Response({
+            'success': True,
+            'message': 'Đăng nhập thành công',
+            'access': str(refresh.access_token),
+            'user': _serialize_login_user(user, request),
+        }, status=status.HTTP_200_OK)
+        return set_refresh_cookie(response, str(refresh))
+
+
+@method_decorator(csrf_protect, name='dispatch')
+class SecureTokenRefreshAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [TokenRateThrottle]
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get(settings.AUTH_COOKIE_NAME)
+        if not refresh_token:
+            return Response(
+                {'detail': 'Refresh token cookie is required.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        serializer = TokenRefreshSerializer(data={'refresh': refresh_token})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (InvalidToken, TokenError):
+            response = Response(
+                {'detail': 'Refresh token is invalid or expired.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            return delete_refresh_cookie(response)
+
+        token_data = serializer.validated_data
+        response = Response(
+            {'access': token_data['access']},
+            status=status.HTTP_200_OK,
+        )
+        rotated_refresh = token_data.get('refresh')
+        if rotated_refresh:
+            set_refresh_cookie(response, rotated_refresh)
+        return response
+
+
+@method_decorator(csrf_protect, name='dispatch')
+class SecureUserLogoutAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [TokenRateThrottle]
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get(settings.AUTH_COOKIE_NAME)
+        logout_user = None
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                logout_user = User.objects.filter(
+                    id=token.get(settings.SIMPLE_JWT['USER_ID_CLAIM']),
+                ).first()
+                token.blacklist()
+            except TokenError:
+                pass
+
+        if logout_user:
+            from django.contrib.auth.signals import user_logged_out
+            user_logged_out.send(
+                sender=logout_user.__class__,
+                request=request,
+                user=logout_user,
+            )
+
+        response = Response({
+            'success': True,
+            'message': 'Đăng xuất thành công',
+        }, status=status.HTTP_200_OK)
+        return delete_refresh_cookie(response)
 
 
 class UserRegistrationAPIView(APIView):
