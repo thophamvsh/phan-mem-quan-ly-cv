@@ -5,6 +5,12 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.formats import base_formats
 from import_export.widgets import ForeignKeyWidget
 
+class StripForeignKeyWidget(ForeignKeyWidget):
+    def clean(self, value, row=None, *args, **kwargs):
+        if value:
+            value = str(value).strip()
+        return super().clean(value, row, *args, **kwargs)
+
 from khovattu.models import Bang_nha_may
 from quanlyvanhanh.models import ThietBi
 
@@ -85,12 +91,12 @@ class MauChuyenDoiThietBiResource(resources.ModelResource):
     nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="nha_may",
-        widget=ForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=StripForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
     )
     thiet_bi = fields.Field(
         column_name="thiet_bi_ma_day_du",
         attribute="thiet_bi",
-        widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
+        widget=StripForeignKeyWidget(ThietBi, "ma_day_du"),
     )
 
     class Meta:
@@ -113,12 +119,12 @@ class MauChuyenDoiTBThangResource(resources.ModelResource):
     nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="nha_may",
-        widget=ForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=StripForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
     )
     thiet_bi = fields.Field(
         column_name="thiet_bi_ma_day_du",
         attribute="thiet_bi",
-        widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
+        widget=StripForeignKeyWidget(ThietBi, "ma_day_du"),
     )
 
     class Meta:
@@ -144,12 +150,12 @@ class SoChuyenDoiTBThangResource(resources.ModelResource):
     nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="nha_may",
-        widget=ForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=StripForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
     )
     nguoi_tao = fields.Field(
         column_name="nguoi_tao_email",
         attribute="nguoi_tao",
-        widget=ForeignKeyWidget(User, "email"),
+        widget=StripForeignKeyWidget(User, "email"),
     )
 
     class Meta:
@@ -173,12 +179,12 @@ class ChiTietChuyenDoiTBThangResource(resources.ModelResource):
     so = fields.Field(
         column_name="so_id",
         attribute="so",
-        widget=ForeignKeyWidget(SoChuyenDoiTBThang, "id"),
+        widget=StripForeignKeyWidget(SoChuyenDoiTBThang, "id"),
     )
     thiet_bi = fields.Field(
         column_name="thiet_bi_ma_day_du",
         attribute="thiet_bi",
-        widget=ForeignKeyWidget(ThietBi, "ma_day_du"),
+        widget=StripForeignKeyWidget(ThietBi, "ma_day_du"),
     )
 
     class Meta:
