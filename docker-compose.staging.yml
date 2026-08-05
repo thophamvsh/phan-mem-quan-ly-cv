@@ -1,0 +1,56 @@
+name: vsh-staging
+
+services:
+  proxy:
+    image: caddy:2.10-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./staging/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../VshProject/dist:/srv:ro
+      - staging-caddy-data:/data
+      - staging-caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vsh-net
+
+  db:
+    volumes:
+      - staging-db-data-pg16:/var/lib/postgresql/data
+
+  app:
+    env_file: !override
+      - .env.staging
+    ports:
+      - "${APP_PORT:-18000}:8000"
+    volumes:
+      - ./vol/staging/media:/vol/web/media
+      - ./vol/staging/static:/vol/web/static
+      - ./vol/staging/logs:/vol/web/logs
+      - ./secrets:/run/secrets/vsh:ro
+
+  worker:
+    env_file: !override
+      - .env.staging
+    volumes:
+      - ./vol/staging/media:/vol/web/media
+      - ./vol/staging/static:/vol/web/static
+      - ./vol/staging/logs:/vol/web/logs
+      - ./secrets:/run/secrets/vsh:ro
+
+  celery-beat:
+    env_file: !override
+      - .env.staging
+    volumes:
+      - ./vol/staging/media:/vol/web/media
+      - ./vol/staging/static:/vol/web/static
+      - ./vol/staging/logs:/vol/web/logs
+      - ./secrets:/run/secrets/vsh:ro
+
+volumes:
+  staging-db-data-pg16:
+  staging-caddy-data:
+  staging-caddy-config:
