@@ -20,8 +20,49 @@ from ..sync_views import (
     safe_float_vinhson_decimal,
     safe_int_vinhson,
 )
+from ..views.views_sanxuat import (
+    parse_float_or_none,
+    parse_production_integer_or_none,
+)
 
 class ThongSoThuyVanParserTests(SimpleTestCase):
+    def test_manual_production_and_decimal_parsers_are_field_specific(self):
+        self.assertEqual(parse_production_integer_or_none("1,234"), 1234.0)
+        self.assertEqual(
+            parse_production_integer_or_none("1,234,567"),
+            1234567.0,
+        )
+        self.assertEqual(parse_production_integer_or_none("1234"), 1234.0)
+        self.assertEqual(parse_float_or_none("208.375"), 208.375)
+        self.assertEqual(parse_float_or_none("12.50"), 12.5)
+        self.assertEqual(parse_float_or_none("357.125"), 357.125)
+
+        with self.assertRaisesMessage(ValueError, "Sản lượng phải là số nguyên"):
+            parse_production_integer_or_none(1.5)
+        with self.assertRaises(ValueError):
+            parse_production_integer_or_none("12.34")
+        with self.assertRaises(ValueError):
+            parse_production_integer_or_none("1.234")
+
+    def test_song_hinh_sheet_uses_integer_parser_for_production(self):
+        row = [""] * 24
+        row[1] = "30/05/2026"
+        row[6] = "208.375"
+        row[8] = "12.50"
+        row[11] = "1.234"
+        row[12] = "1.234.567"
+
+        parsed = parse_san_luong_records_with_metadata(
+            [row],
+            "songhinh",
+            date(2026, 5, 30),
+        )
+
+        self.assertEqual(parsed.data[0]["cot_g"], 208.375)
+        self.assertEqual(parsed.data[0]["cot_i"], 12.5)
+        self.assertEqual(parsed.data[0]["cot_l"], 1234.0)
+        self.assertEqual(parsed.data[0]["cot_m"], 1234567.0)
+
     def test_safe_int_vinhson(self):
         # Kiểm tra chuỗi chứa phân cách dấu chấm
         self.assertEqual(safe_int_vinhson("150.000"), 150000.0)

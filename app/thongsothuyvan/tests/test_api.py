@@ -86,6 +86,33 @@ class ThongSoThuyVanAPITests(APITestCase):
             can_create_hydrology_data=False,
         )
 
+    def test_manual_entry_distinguishes_production_and_decimal_dots(self):
+        self.client.force_authenticate(user=self.sh_user)
+        response = self.client.post(
+            reverse("thongsothuyvan:manual-entry"),
+            {
+                "nhamay": "songhinh",
+                "date": "2026-08-05",
+                "cot_g": "208.375",
+                "cot_h": "357.125",
+                "cot_i": "12.50",
+                "cot_l": "1,234",
+                "cot_m": "1,234,567",
+                "gio_phat_h1": "12.5",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        record = ThongsoSanxuat.objects.get(nha_may="songhinh")
+        self.assertEqual(record.cot_g, 208.375)
+        self.assertEqual(record.cot_h, 357.125)
+        self.assertEqual(record.cot_i, 12.5)
+        self.assertEqual(record.cot_l, 1234.0)
+        self.assertEqual(record.cot_m, 1234567.0)
+        run = ThongsoGioPhat.objects.get(nha_may="songhinh", to_may=1)
+        self.assertEqual(run.gio_phat_dien, 12.5)
+
     def test_factory_scoping_thongsosanxuat_list(self):
         url = reverse("thongsothuyvan:thongsosanxuat-list")
 

@@ -213,6 +213,41 @@ def parse_float_or_none(value):
         raise ValueError("Giá trị số không hợp lệ")
 
 
+def parse_production_integer_or_none(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        raise ValueError("Giá trị sản lượng không hợp lệ")
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if not number.is_integer():
+            raise ValueError("Sản lượng phải là số nguyên")
+        return number
+
+    text = str(value).strip().replace(" ", "")
+    if not text:
+        return None
+    if "." in text:
+        raise ValueError(
+            "Sản lượng dùng dấu phẩy để phân cách hàng nghìn, không dùng dấu chấm"
+        )
+
+    separator = "," if "," in text else None
+    if separator:
+        groups = text.split(separator)
+        if (
+            not groups[0].isdigit()
+            or not 1 <= len(groups[0]) <= 3
+            or any(len(group) != 3 or not group.isdigit() for group in groups[1:])
+        ):
+            raise ValueError("Dấu phân cách hàng nghìn của sản lượng không hợp lệ")
+        text = "".join(groups)
+    elif not text.isdigit():
+        raise ValueError("Giá trị sản lượng không hợp lệ")
+
+    return float(int(text))
+
+
 def get_year_offset_date(value, offset):
     if not value:
         return None
@@ -864,6 +899,12 @@ SANLUONG_FIELDS = [
     "luuluong_ve_ho_c",
 ]
 
+PRODUCTION_FIELDS = {
+    "cot_l", "cot_m", "cot_n", "cot_o", "cot_p", "cot_q", "cot_r",
+    "cot_s", "cot_t", "cot_u", "cot_v", "cot_w", "cot_x",
+    "sanluong_kh_thang",
+}
+
 class ManualHydrologyDataAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -901,6 +942,10 @@ class ManualHydrologyDataAPIView(APIView):
             for field in SANLUONG_FIELDS:
                 if field == "cot_c":
                     defaults[field] = request.data.get(field) or None
+                elif field in PRODUCTION_FIELDS:
+                    defaults[field] = parse_production_integer_or_none(
+                        request.data.get(field)
+                    )
                 else:
                     defaults[field] = parse_float_or_none(request.data.get(field))
 
