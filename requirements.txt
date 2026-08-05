@@ -1,17 +1,18 @@
-Django>=3.2.4,<3.3
-djangorestframework>=3.12.4,<3.13
-djangorestframework-simplejwt>=5.0.0
-django-cors-headers>=4.0.0
+Django>=5.2.16,<5.3
+djangorestframework>=3.16.1,<3.18
+djangorestframework-simplejwt>=5.5.1,<6.0
+django-cors-headers>=4.9.0,<5.0
 psycopg2==2.9.9
 Pillow>=8.0.0
-drf-spectacular>=0.22.1,<0.23
+drf-spectacular>=0.30.0,<0.31
 # Additional libraries for khovattu app
-django-filter>=23.0.0
-django-import-export>=3.0.0
+django-filter>=25.2,<27.0
+django-import-export>=4.3.14,<5.0
 openpyxl>=3.0.0
 pandas>=2.0.0
 qrcode>=7.0.0
 requests>=2.25.0
+pytz>=2025.2
 xlsxwriter>=3.0.0
 numpy>=1.20.0
 gspread>=6.0.0
