@@ -213,7 +213,7 @@ def parse_float_or_none(value):
         raise ValueError("Giá trị số không hợp lệ")
 
 
-def parse_production_integer_or_none(value):
+def parse_production_integer_or_none(value, *, allow_negative=False):
     if value in (None, ""):
         return None
     if isinstance(value, bool):
@@ -222,11 +222,20 @@ def parse_production_integer_or_none(value):
         number = float(value)
         if not number.is_integer():
             raise ValueError("Sản lượng phải là số nguyên")
+        if number < 0 and not allow_negative:
+            raise ValueError("Giá trị sản lượng không được là số âm")
         return number
 
     text = str(value).strip().replace(" ", "")
     if not text:
         return None
+    is_negative = text.startswith("-")
+    if is_negative:
+        if not allow_negative:
+            raise ValueError("Giá trị sản lượng không được là số âm")
+        text = text[1:]
+    if not text:
+        raise ValueError("Giá trị sản lượng không hợp lệ")
     if "." in text:
         raise ValueError(
             "Sản lượng dùng dấu phẩy để phân cách hàng nghìn, không dùng dấu chấm"
@@ -245,7 +254,8 @@ def parse_production_integer_or_none(value):
     elif not text.isdigit():
         raise ValueError("Giá trị sản lượng không hợp lệ")
 
-    return float(int(text))
+    number = float(int(text))
+    return -number if is_negative else number
 
 
 def get_year_offset_date(value, offset):
@@ -904,6 +914,7 @@ PRODUCTION_FIELDS = {
     "cot_s", "cot_t", "cot_u", "cot_v", "cot_w", "cot_x",
     "sanluong_kh_thang",
 }
+SIGNED_COMMERCIAL_PRODUCTION_FIELDS = {"cot_n", "cot_r", "cot_v"}
 
 class ManualHydrologyDataAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -944,7 +955,8 @@ class ManualHydrologyDataAPIView(APIView):
                     defaults[field] = request.data.get(field) or None
                 elif field in PRODUCTION_FIELDS:
                     defaults[field] = parse_production_integer_or_none(
-                        request.data.get(field)
+                        request.data.get(field),
+                        allow_negative=field in SIGNED_COMMERCIAL_PRODUCTION_FIELDS,
                     )
                 else:
                     defaults[field] = parse_float_or_none(request.data.get(field))

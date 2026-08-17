@@ -33,6 +33,10 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
             1234567.0,
         )
         self.assertEqual(parse_production_integer_or_none("1234"), 1234.0)
+        self.assertEqual(
+            parse_production_integer_or_none("-1,234", allow_negative=True),
+            -1234.0,
+        )
         self.assertEqual(parse_float_or_none("208.375"), 208.375)
         self.assertEqual(parse_float_or_none("12.50"), 12.5)
         self.assertEqual(parse_float_or_none("357.125"), 357.125)
@@ -43,6 +47,10 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
             parse_production_integer_or_none("12.34")
         with self.assertRaises(ValueError):
             parse_production_integer_or_none("1.234")
+        with self.assertRaises(ValueError):
+            parse_production_integer_or_none("-1,234")
+        with self.assertRaises(ValueError):
+            parse_production_integer_or_none(-1234)
 
     def test_song_hinh_sheet_uses_integer_parser_for_production(self):
         row = [""] * 24
@@ -63,6 +71,21 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
         self.assertEqual(parsed.data[0]["cot_l"], 1234.0)
         self.assertEqual(parsed.data[0]["cot_m"], 1234567.0)
 
+    def test_sheet_sync_preserves_negative_commercial_production(self):
+        for plant_code in ("vinhson", "songhinh", "thuongkontum"):
+            with self.subTest(plant_code=plant_code):
+                row = [""] * 24
+                row[1] = "30/05/2026"
+                row[13] = "-1,234"
+
+                parsed = parse_san_luong_records_with_metadata(
+                    [row],
+                    plant_code,
+                    date(2026, 5, 30),
+                )
+
+                self.assertEqual(parsed.data[0]["cot_n"], -1234.0)
+
     def test_safe_int_vinhson(self):
         # Kiểm tra chuỗi chứa phân cách dấu chấm
         self.assertEqual(safe_int_vinhson("150.000"), 150000.0)
@@ -71,6 +94,7 @@ class ThongSoThuyVanParserTests(SimpleTestCase):
         # Kiểm tra chuỗi chứa phân cách dấu phẩy
         self.assertEqual(safe_int_vinhson("150,000"), 150000.0)
         self.assertEqual(safe_int_vinhson("1,200,000"), 1200000.0)
+        self.assertEqual(safe_int_vinhson("-1,200,000"), -1200000.0)
 
         # Kiểm tra số nguyên dạng chuỗi thông thường
         self.assertEqual(safe_int_vinhson("150"), 150.0)
