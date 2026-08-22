@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from nhatkyvanhanh.models import SogiaonhancaVH, SuKien
+from nhatkyvanhanh.models import SogiaonhancaHC, SogiaonhancaVH, SuKien
 
 User = get_user_model()
 
@@ -245,6 +245,30 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNotNone(response.data["giao_ca_ky_at"])
         self.assertEqual(response.data["trang_thai"], SogiaonhancaVH.TrangThai.HOAN_THANH)
+
+    def test_sogiaonhancahc_duplicate_factory_date_returns_400(self):
+        self.creator_profile.can_create_admin_shift_handover_logs = True
+        self.creator_profile.save(update_fields=["can_create_admin_shift_handover_logs"])
+        SogiaonhancaHC.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            reverse("nhatkyvanhanh:sogiaonhancahc-list"),
+            {
+                "ngay_truc": str(date.today()),
+                "thoi_gian_giao_ca": timezone.now().isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ngay_truc", response.data)
 
     def test_sogiaonhancavh_viewer_cannot_update_or_delete(self):
         so = SogiaonhancaVH.objects.create(

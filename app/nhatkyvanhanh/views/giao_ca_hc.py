@@ -5,6 +5,7 @@ from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
 
 from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
@@ -105,10 +106,22 @@ class SogiaonhancaHCViewSet(viewsets.ModelViewSet):
         return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
 
     def perform_create(self, serializer):
+        factory_values = apply_request_factory_to_serializer(
+            self.request.user, serializer, "nha_may", "fk"
+        )
+        nha_may = factory_values.get("nha_may") or serializer.validated_data.get("nha_may")
+        ngay_truc = serializer.validated_data.get("ngay_truc")
+        if nha_may and ngay_truc and SogiaonhancaHC.objects.filter(
+            nha_may=nha_may, ngay_truc=ngay_truc
+        ).exists():
+            raise ValidationError(
+                {"ngay_truc": ["Nhà máy đã có sổ giao nhận ca hành chính trong ngày này."]}
+            )
+
         so = serializer.save(
             user_giao_ca=self.request.user,
             nguoi_tao=self.request.user,
-            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+            **factory_values,
         )
         _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
         so.save()
