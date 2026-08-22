@@ -314,3 +314,35 @@ class KhacPhucSuKien(TimestampedUUIDModel):
             if chu_ky:
                 self.chu_ky_nguoi_xac_nhan_xu_ly = chu_ky.name
         return super().save(*args, **kwargs)
+
+
+class AnhTruocSuCo(TimestampedUUIDModel):
+    su_kien = models.ForeignKey(
+        SuKien,
+        on_delete=models.CASCADE,
+        related_name="anh_truoc_su_cos",
+    )
+    hinh_anh = models.ImageField(
+        upload_to="operations/nhat_ky_su_kien/truoc_su_co/",
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "Ảnh trước sự cố"
+        verbose_name_plural = "Ảnh trước sự cố"
+
+
+class AnhSauXuLy(TimestampedUUIDModel):
+    khac_phuc = models.ForeignKey(
+        KhacPhucSuKien,
+        on_delete=models.CASCADE,
+        related_name="anh_sau_xu_lys",
+    )
+    hinh_anh = models.ImageField(
+        upload_to="operations/nhat_ky_su_kien/sau_xu_ly/",
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "Ảnh sau xử lý"
+        verbose_name_plural = "Ảnh sau xử lý"

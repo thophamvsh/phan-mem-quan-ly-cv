@@ -1,5 +1,12 @@
 from .base import TimestampedUUIDModel, _current_year
-from .sukien import SuKien, ChiDaoSuKien, DienBienSuKien, KhacPhucSuKien
+from .sukien import (
+    SuKien,
+    ChiDaoSuKien,
+    DienBienSuKien,
+    KhacPhucSuKien,
+    AnhTruocSuCo,
+    AnhSauXuLy,
+)
 from .giao_ca_vh import (
     SogiaonhancaVH,
     ChiTietSoGiaoNhanCaVH,

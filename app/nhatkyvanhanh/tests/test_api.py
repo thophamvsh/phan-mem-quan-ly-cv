@@ -1,9 +1,12 @@
 from datetime import date
+from io import BytesIO
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
+from PIL import Image
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
 from nhatkyvanhanh.models import SogiaonhancaHC, SogiaonhancaVH, SuKien
@@ -113,6 +116,67 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.client.force_authenticate(user=self.creator)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_nhatkysukien_rejects_unsupported_image_format(self):
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.post(
+            reverse("nhatkyvanhanh:nhatkysukien-list"),
+            {
+                "thoi_gian_xay_ra": timezone.now().isoformat(),
+                "ten_he_thong_thiet_bi": "H1",
+                "hien_tuong_dien_bien": "Test event",
+                "hinh_anh_truoc_su_co": SimpleUploadedFile(
+                    "fake.gif", b"GIF89a-not-an-image", content_type="image/gif"
+                ),
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("hinh_anh_truoc_su_co", response.data)
+
+    def test_nhatkysukien_accepts_valid_jpeg(self):
+        image_buffer = BytesIO()
+        Image.new("RGB", (20, 20), "white").save(image_buffer, format="JPEG")
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.post(
+            reverse("nhatkyvanhanh:nhatkysukien-list"),
+            {
+                "thoi_gian_xay_ra": timezone.now().isoformat(),
+                "ten_he_thong_thiet_bi": "H1",
+                "hien_tuong_dien_bien": "Test event",
+                "hinh_anh_truoc_su_co": SimpleUploadedFile(
+                    "event.jpg", image_buffer.getvalue(), content_type="image/jpeg"
+                ),
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_nhatkysukien_accepts_multiple_before_images(self):
+        uploads = []
+        for index in range(2):
+            image_buffer = BytesIO()
+            Image.new("RGB", (20, 20), "white").save(image_buffer, format="JPEG")
+            uploads.append(
+                SimpleUploadedFile(
+                    f"event-{index}.jpg",
+                    image_buffer.getvalue(),
+                    content_type="image/jpeg",
+                )
+            )
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.post(
+            reverse("nhatkyvanhanh:nhatkysukien-list"),
+            {
+                "thoi_gian_xay_ra": timezone.now().isoformat(),
+                "ten_he_thong_thiet_bi": "H1",
+                "hien_tuong_dien_bien": "Multiple images",
+                "hinh_anh_truoc_su_co_moi": uploads,
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data["hinh_anh_truoc_su_co_urls"]), 2)
 
     def test_nhatkysukien_viewer_cannot_update_or_delete(self):
         event = SuKien.objects.create(

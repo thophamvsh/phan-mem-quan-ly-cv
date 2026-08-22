@@ -4,7 +4,14 @@ from rest_framework.exceptions import PermissionDenied
 
 from core.factory_scope import filter_queryset_by_factory
 from quanlyvanhanh.models import ThietBi
-from nhatkyvanhanh.models import SuKien, ChiDaoSuKien, DienBienSuKien, KhacPhucSuKien
+from nhatkyvanhanh.models import (
+    SuKien,
+    ChiDaoSuKien,
+    DienBienSuKien,
+    KhacPhucSuKien,
+    AnhTruocSuCo,
+    AnhSauXuLy,
+)
 from .mixins import UserSummaryMixin, user_can_edit_chi_dao
 
 class DienBienSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
@@ -46,6 +53,10 @@ class DienBienSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
 
 class KhacPhucSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    hinh_anh_sau_xu_ly_moi = serializers.ListField(
+        child=serializers.ImageField(), required=False, write_only=True, max_length=5
+    )
+    hinh_anh_sau_xu_ly_urls = serializers.SerializerMethodField()
     nguoi_tao_display = serializers.SerializerMethodField()
     ben_xu_ly_su_kien_thiet_bi_display = serializers.SerializerMethodField()
     nguoi_xac_nhan_xu_ly_display = serializers.SerializerMethodField()
@@ -68,6 +79,8 @@ class KhacPhucSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "ket_qua_sau_xu_ly",
             "hinh_anh_sau_xu_ly",
             "hinh_anh_sau_xu_ly_url",
+            "hinh_anh_sau_xu_ly_moi",
+            "hinh_anh_sau_xu_ly_urls",
             "chu_ky_ben_xu_ly_su_kien_thiet_bi",
             "chu_ky_ben_xu_ly_su_kien_thiet_bi_url",
             "chu_ky_nguoi_xac_nhan_xu_ly",
@@ -79,6 +92,27 @@ class KhacPhucSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "created_at",
             "updated_at",
         ]
+
+    def validate_hinh_anh_sau_xu_ly_moi(self, images):
+        for image in images:
+            NhatKySuKienSerializer.validate_event_image(image)
+        return images
+
+    def create(self, validated_data):
+        images = validated_data.pop("hinh_anh_sau_xu_ly_moi", [])
+        instance = super().create(validated_data)
+        for image in images:
+            AnhSauXuLy.objects.create(khac_phuc=instance, hinh_anh=image)
+        return instance
+
+    def update(self, instance, validated_data):
+        images = validated_data.pop("hinh_anh_sau_xu_ly_moi", [])
+        if instance.anh_sau_xu_lys.count() + len(images) > 5:
+            raise serializers.ValidationError({"hinh_anh_sau_xu_ly_moi": "Tối đa 5 ảnh sau xử lý."})
+        instance = super().update(instance, validated_data)
+        for image in images:
+            AnhSauXuLy.objects.create(khac_phuc=instance, hinh_anh=image)
+        return instance
         read_only_fields = [
             "nguoi_tao",
             "nguoi_tao_display",
@@ -101,6 +135,16 @@ class KhacPhucSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
     def get_hinh_anh_sau_xu_ly_url(self, obj):
         return self._build_file_url(obj.hinh_anh_sau_xu_ly)
+
+    def get_hinh_anh_sau_xu_ly_urls(self, obj):
+        urls = []
+        legacy_url = self._build_file_url(obj.hinh_anh_sau_xu_ly)
+        if legacy_url:
+            urls.append(legacy_url)
+        urls.extend(
+            url for url in (self._build_file_url(image.hinh_anh) for image in obj.anh_sau_xu_lys.all()) if url
+        )
+        return urls
 
     def get_chu_ky_ben_xu_ly_su_kien_thiet_bi_url(self, obj):
         return self._build_file_url(obj.chu_ky_ben_xu_ly_su_kien_thiet_bi)
@@ -151,6 +195,13 @@ class ChiDaoSuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
 
 class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    MAX_EVENT_IMAGE_BYTES = 8 * 1024 * 1024
+    MAX_EVENT_IMAGE_PIXELS = 25_000_000
+    hinh_anh_truoc_su_co_moi = serializers.ListField(
+        child=serializers.ImageField(), required=False, write_only=True, max_length=5
+    )
+    hinh_anh_truoc_su_co_urls = serializers.SerializerMethodField()
+    hinh_anh_sau_xu_ly_urls = serializers.SerializerMethodField()
     ten_he_thong_thiet_bi = serializers.CharField(required=False, allow_blank=True)
     thiet_bi = serializers.PrimaryKeyRelatedField(
         required=False,
@@ -227,8 +278,11 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "ket_qua_sau_xu_ly",
             "hinh_anh_truoc_su_co",
             "hinh_anh_truoc_su_co_url",
+            "hinh_anh_truoc_su_co_moi",
+            "hinh_anh_truoc_su_co_urls",
             "hinh_anh_sau_xu_ly",
             "hinh_anh_sau_xu_ly_url",
+            "hinh_anh_sau_xu_ly_urls",
             "chu_ky_ben_ghi_nhan_su_kien",
             "chu_ky_ben_ghi_nhan_su_kien_url",
             "chu_ky_ben_xu_ly_su_kien_thiet_bi_url",
@@ -281,6 +335,31 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
         "ben_xu_ly_su_kien_thiet_bi",
         "nguoi_xac_nhan_xu_ly",
     }
+
+    @classmethod
+    def validate_event_image(cls, image):
+        if image is None:
+            return image
+        if image.size > cls.MAX_EVENT_IMAGE_BYTES:
+            raise serializers.ValidationError("Ảnh sau xử lý không được vượt quá 8 MB.")
+
+        image_format = str(getattr(getattr(image, "image", None), "format", "")).upper()
+        if image_format not in {"JPEG", "PNG", "WEBP"}:
+            raise serializers.ValidationError("Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.")
+
+        width = int(getattr(image, "width", 0) or 0)
+        height = int(getattr(image, "height", 0) or 0)
+        if width * height > cls.MAX_EVENT_IMAGE_PIXELS:
+            raise serializers.ValidationError("Ảnh không được vượt quá 25 megapixel.")
+        return image
+
+    def validate_hinh_anh_truoc_su_co(self, image):
+        return self.validate_event_image(image)
+
+    def validate_hinh_anh_truoc_su_co_moi(self, images):
+        for image in images:
+            self.validate_event_image(image)
+        return images
 
     def validate(self, attrs):
         instance = getattr(self, "instance", None)
@@ -349,18 +428,26 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
         return f"{thiet_bi.ma_day_du} - {thiet_bi.ten}".strip()
 
     def create(self, validated_data):
+        images = validated_data.pop("hinh_anh_truoc_su_co_moi", [])
         self._apply_chi_dao_signature(validated_data)
         remediation_data = self._pop_remediation_data(validated_data)
         su_kien = super().create(validated_data)
+        for image in images:
+            AnhTruocSuCo.objects.create(su_kien=su_kien, hinh_anh=image)
         self._save_remediation(su_kien, remediation_data)
         return su_kien
 
     def update(self, instance, validated_data):
+        images = validated_data.pop("hinh_anh_truoc_su_co_moi", [])
+        if instance.anh_truoc_su_cos.count() + len(images) > 5:
+            raise serializers.ValidationError({"hinh_anh_truoc_su_co_moi": "Tối đa 5 ảnh trước sự cố."})
         if "chi_dao" in validated_data and validated_data.get("chi_dao", "") != instance.chi_dao:
             self._apply_chi_dao_signature(validated_data)
 
         remediation_data = self._pop_remediation_data(validated_data)
         su_kien = super().update(instance, validated_data)
+        for image in images:
+            AnhTruocSuCo.objects.create(su_kien=su_kien, hinh_anh=image)
         self._save_remediation(su_kien, remediation_data)
         return su_kien
 
@@ -468,8 +555,32 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
     def get_hinh_anh_truoc_su_co_url(self, obj):
         return self._build_file_url(obj.hinh_anh_truoc_su_co)
 
+    def get_hinh_anh_truoc_su_co_urls(self, obj):
+        urls = []
+        legacy_url = self._build_file_url(obj.hinh_anh_truoc_su_co)
+        if legacy_url:
+            urls.append(legacy_url)
+        urls.extend(
+            url for url in (self._build_file_url(image.hinh_anh) for image in obj.anh_truoc_su_cos.all()) if url
+        )
+        return urls
+
     def get_hinh_anh_sau_xu_ly_url(self, obj):
         return self._build_file_url(obj.hinh_anh_sau_xu_ly)
+
+    def get_hinh_anh_sau_xu_ly_urls(self, obj):
+        urls = []
+        for remediation in obj.khac_phuc_su_kiens.all():
+            legacy_url = self._build_file_url(remediation.hinh_anh_sau_xu_ly)
+            if legacy_url:
+                urls.append(legacy_url)
+            urls.extend(
+                url for url in (
+                    self._build_file_url(image.hinh_anh)
+                    for image in remediation.anh_sau_xu_lys.all()
+                ) if url
+            )
+        return urls
 
     def get_chu_ky_ben_ghi_nhan_su_kien_url(self, obj):
         return self._build_file_url(obj.chu_ky_ben_ghi_nhan_su_kien)
