@@ -135,6 +135,25 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "updated_at",
         ]
 
+    def validate(self, attrs):
+        start = attrs.get(
+            "thoi_gian_bat_dau_ca",
+            getattr(self.instance, "thoi_gian_bat_dau_ca", None),
+        )
+        end = attrs.get(
+            "thoi_gian_giao_ca",
+            getattr(self.instance, "thoi_gian_giao_ca", None),
+        )
+        if start and end and end <= start:
+            raise serializers.ValidationError(
+                {
+                    "thoi_gian_giao_ca": (
+                        "Thời gian giao ca phải sau thời gian bắt đầu ca."
+                    )
+                }
+            )
+        return attrs
+
     def get_nha_may_code(self, obj):
         return obj.nha_may.ma_nha_may if obj.nha_may else None
 
