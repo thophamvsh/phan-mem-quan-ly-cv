@@ -27,6 +27,7 @@ from .models import (
     MauChuyenDoiThietBi,
     MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
+    NhanSuSoGiaoNhanCaVH,
     SoBCHCSongHinh,
     SoChuyenDoiTBThang,
     SoChuyenDoiThietBiTuan,
@@ -233,6 +234,12 @@ class LuuYChiDaoSoGiaoNhanCaVHInline(admin.TabularInline):
     extra = 0
 
 
+class NhanSuSoGiaoNhanCaVHInline(admin.TabularInline):
+    model = NhanSuSoGiaoNhanCaVH
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+    extra = 0
+
+
 class ChiTietSoGiaoNhanCaHCInline(admin.TabularInline):
     model = ChiTietSoGiaoNhanCaHC
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
@@ -391,6 +398,7 @@ class SogiaonhancaVHAdmin(admin.ModelAdmin):
         "dia_diem",
         "truc_chinh",
         "truc_phu",
+        "nhan_su_ca__ten_nhan_su",
         "noi_dung_chi_tiets__tieu_de",
         "noi_dung_chi_tiets__noi_dung",
         "user_giao_ca__email",
@@ -398,7 +406,11 @@ class SogiaonhancaVHAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("nguoi_tao", "chu_ky_user_giao_ca", "chu_ky_user_nhan_ca", "created_at", "updated_at")
     exclude = ("chu_ky_user_giao_ca", "chu_ky_user_nhan_ca")
-    inlines = [ChiTietSoGiaoNhanCaVHInline, LuuYChiDaoSoGiaoNhanCaVHInline]
+    inlines = [
+        NhanSuSoGiaoNhanCaVHInline,
+        ChiTietSoGiaoNhanCaVHInline,
+        LuuYChiDaoSoGiaoNhanCaVHInline,
+    ]
 
     def co_chu_ky(self, obj):
         return bool(obj.chu_ky_user_giao_ca or obj.chu_ky_user_nhan_ca)

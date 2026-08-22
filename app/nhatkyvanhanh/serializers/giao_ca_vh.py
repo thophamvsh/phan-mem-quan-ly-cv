@@ -1,5 +1,10 @@
 from rest_framework import serializers
-from nhatkyvanhanh.models import SogiaonhancaVH, ChiTietSoGiaoNhanCaVH, LuuYChiDaoSoGiaoNhanCaVH
+from nhatkyvanhanh.models import (
+    SogiaonhancaVH,
+    ChiTietSoGiaoNhanCaVH,
+    NhanSuSoGiaoNhanCaVH,
+    LuuYChiDaoSoGiaoNhanCaVH,
+)
 from .mixins import UserSummaryMixin
 
 class ChiTietSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
@@ -58,6 +63,66 @@ class LuuYChiDaoSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummar
         return self._get_user_display(obj.nguoi_tao)
 
 
+class NhanSuSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
+    nguoi_tao_display = serializers.SerializerMethodField()
+    vai_tro_display = serializers.CharField(source="get_vai_tro_display", read_only=True)
+
+    class Meta:
+        model = NhanSuSoGiaoNhanCaVH
+        fields = [
+            "id",
+            "so_giao_nhan_ca",
+            "vai_tro",
+            "vai_tro_display",
+            "ten_nhan_su",
+            "thu_tu",
+            "nguoi_tao",
+            "nguoi_tao_display",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "so_giao_nhan_ca",
+            "vai_tro_display",
+            "nguoi_tao",
+            "nguoi_tao_display",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_ten_nhan_su(self, value):
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Yêu cầu nhập tên nhân sự.")
+        return value
+
+    def validate(self, attrs):
+        shift_log = self.context.get("shift_log")
+        if not shift_log:
+            return attrs
+
+        role = attrs.get("vai_tro", getattr(self.instance, "vai_tro", None))
+        name = attrs.get("ten_nhan_su", getattr(self.instance, "ten_nhan_su", ""))
+        queryset = shift_log.nhan_su_ca.all()
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if role == NhanSuSoGiaoNhanCaVH.VaiTro.TRUC_CHINH and queryset.filter(
+            vai_tro=NhanSuSoGiaoNhanCaVH.VaiTro.TRUC_CHINH
+        ).exists():
+            raise serializers.ValidationError(
+                {"vai_tro": "Mỗi ca chỉ được có tối đa một trực chính."}
+            )
+        if any(person.ten_nhan_su.casefold() == name.casefold() for person in queryset):
+            raise serializers.ValidationError(
+                {"ten_nhan_su": "Nhân sự không được trùng tên trong cùng một ca."}
+            )
+        return attrs
+
+    def get_nguoi_tao_display(self, obj):
+        return self._get_user_display(obj.nguoi_tao)
+
+
 class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     user_giao_ca_display = serializers.SerializerMethodField()
     user_nhan_ca_display = serializers.SerializerMethodField()
@@ -69,6 +134,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     nha_may_code = serializers.SerializerMethodField()
     nha_may_name = serializers.SerializerMethodField()
     noi_dung_chi_tiets = ChiTietSoGiaoNhanCaVHSerializer(many=True, read_only=True)
+    nhan_su_ca = NhanSuSoGiaoNhanCaVHSerializer(many=True, read_only=True)
     luu_y_chi_daos = serializers.SerializerMethodField()
 
     class Meta:
@@ -84,6 +150,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "truc_chinh",
             "truc_phu",
             "truc_ktvh",
+            "nhan_su_ca",
             "dieu_do_a0",
             "dieu_do_a3",
             "dieu_do_b3",
@@ -118,6 +185,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may_code",
             "nha_may_name",
             "noi_dung_chi_tiets",
+            "nhan_su_ca",
             "luu_y_chi_daos",
             "chu_ky_user_giao_ca",
             "chu_ky_user_giao_ca_url",

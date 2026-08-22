@@ -151,6 +151,43 @@ class ChiTietSoGiaoNhanCaVH(TimestampedUUIDModel):
         return self.tieu_de or f"Noi dung chi tiet {self.thu_tu}"
 
 
+class NhanSuSoGiaoNhanCaVH(TimestampedUUIDModel):
+    class VaiTro(models.TextChoices):
+        TRUC_CHINH = "truc_chinh", "Trực chính"
+        TRUC_PHU = "truc_phu", "Trực phụ"
+
+    so_giao_nhan_ca = models.ForeignKey(
+        SogiaonhancaVH,
+        on_delete=models.CASCADE,
+        related_name="nhan_su_ca",
+    )
+    vai_tro = models.CharField(max_length=20, choices=VaiTro.choices)
+    ten_nhan_su = models.CharField(max_length=255)
+    thu_tu = models.PositiveIntegerField(default=1)
+    nguoi_tao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="nhan_su_so_giao_nhan_ca_vh_da_tao",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["thu_tu", "created_at"]
+        verbose_name = "Nhân sự sổ giao nhận ca vận hành"
+        verbose_name_plural = "Nhân sự sổ giao nhận ca vận hành"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["so_giao_nhan_ca"],
+                condition=models.Q(vai_tro="truc_chinh"),
+                name="uq_sogiaonhancavh_mot_truc_chinh",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.get_vai_tro_display()}: {self.ten_nhan_su}"
+
+
 class LuuYChiDaoSoGiaoNhanCaVH(TimestampedUUIDModel):
     so_giao_nhan_ca = models.ForeignKey(
         SogiaonhancaVH,

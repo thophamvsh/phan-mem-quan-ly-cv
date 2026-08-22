@@ -8,12 +8,42 @@ from rest_framework.response import Response
 from django.core.exceptions import PermissionDenied
 
 from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
-from nhatkyvanhanh.models import SogiaonhancaVH, ChiTietSoGiaoNhanCaVH, LuuYChiDaoSoGiaoNhanCaVH
+from nhatkyvanhanh.models import (
+    SogiaonhancaVH,
+    ChiTietSoGiaoNhanCaVH,
+    NhanSuSoGiaoNhanCaVH,
+    LuuYChiDaoSoGiaoNhanCaVH,
+)
 from nhatkyvanhanh.serializers import (
     SogiaonhancaVHSerializer,
     ChiTietSoGiaoNhanCaVHSerializer,
+    NhanSuSoGiaoNhanCaVHSerializer,
     LuuYChiDaoSoGiaoNhanCaVHSerializer,
 )
+
+
+def _sync_legacy_shift_staff(shift_log):
+    shift_log._prefetched_objects_cache.pop("nhan_su_ca", None)
+    staff = list(shift_log.nhan_su_ca.all())
+    primary = next(
+        (
+            person.ten_nhan_su
+            for person in staff
+            if person.vai_tro == NhanSuSoGiaoNhanCaVH.VaiTro.TRUC_CHINH
+        ),
+        "",
+    )
+    assistants = ", ".join(
+        person.ten_nhan_su
+        for person in staff
+        if person.vai_tro == NhanSuSoGiaoNhanCaVH.VaiTro.TRUC_PHU
+    )
+    SogiaonhancaVH.objects.filter(pk=shift_log.pk).update(
+        truc_chinh=primary,
+        truc_phu=assistants,
+    )
+    shift_log.truc_chinh = primary
+    shift_log.truc_phu = assistants
 from nhatkyvanhanh.permissions import (
     CanViewShiftHandoverLogs,
     CanCreateShiftHandoverLogs,
@@ -65,6 +95,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         "dia_diem",
         "truc_chinh",
         "truc_phu",
+        "nhan_su_ca__ten_nhan_su",
         "truc_ktvh",
         "noi_dung_chi_tiets__tieu_de",
         "noi_dung_chi_tiets__noi_dung",
@@ -91,6 +122,8 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
             permission_classes = [CanEditShiftHandoverLogs]
         elif self.action == "destroy":
             permission_classes = [CanDeleteShiftHandoverLogs]
+        elif self.action in ["tao_nhan_su_ca", "cap_nhat_nhan_su_ca"]:
+            permission_classes = [CanEditShiftHandoverLogs]
         elif self.action == "ky_nhan_ca":
             permission_classes = [CanReceiveShiftHandoverLogs, IsNotShiftLogCreator]
         elif self.action == "ky_giao_ca":
@@ -106,9 +139,18 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
             "nguoi_tao",
         ).prefetch_related(
             "noi_dung_chi_tiets__nguoi_tao",
+            "nhan_su_ca__nguoi_tao",
             "luu_y_chi_daos__nguoi_tao",
         ).all()
         return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def _ensure_staff_editable(self, request, shift_log):
+        if _shift_log_locked(shift_log):
+            raise PermissionDenied(
+                "Sổ giao nhận ca đã có đủ hai chữ ký, không được sửa nhân sự."
+            )
+        if not _can_edit_shift_log(request.user, shift_log):
+            raise PermissionDenied("User không có quyền cập nhật nhân sự ca.")
 
     def perform_create(self, serializer):
         so = serializer.save(
@@ -217,6 +259,52 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         serializer.save()
         response_serializer = self.get_serializer(so)
         return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="nhan-su-ca")
+    def tao_nhan_su_ca(self, request, pk=None):
+        shift_log = self.get_object()
+        self._ensure_staff_editable(request, shift_log)
+        context = {**self.get_serializer_context(), "shift_log": shift_log}
+        serializer = NhanSuSoGiaoNhanCaVHSerializer(
+            data=request.data,
+            context=context,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(so_giao_nhan_ca=shift_log, nguoi_tao=request.user)
+        _sync_legacy_shift_staff(shift_log)
+        return Response(self.get_serializer(shift_log).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["patch", "delete"],
+        url_path=r"nhan-su-ca/(?P<nhan_su_id>[^/.]+)",
+    )
+    def cap_nhat_nhan_su_ca(self, request, pk=None, nhan_su_id=None):
+        shift_log = self.get_object()
+        self._ensure_staff_editable(request, shift_log)
+        try:
+            staff_member = shift_log.nhan_su_ca.get(pk=nhan_su_id)
+        except NhanSuSoGiaoNhanCaVH.DoesNotExist:
+            return Response(
+                {"detail": "Không tìm thấy nhân sự ca."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if request.method == "DELETE":
+            staff_member.delete()
+        else:
+            context = {**self.get_serializer_context(), "shift_log": shift_log}
+            serializer = NhanSuSoGiaoNhanCaVHSerializer(
+                staff_member,
+                data=request.data,
+                partial=True,
+                context=context,
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+        _sync_legacy_shift_staff(shift_log)
+        return Response(self.get_serializer(shift_log).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="luu-y-chi-dao")
     def tao_luu_y_chi_dao(self, request, pk=None):

@@ -267,3 +267,64 @@ class NhatKyVanHanhAPITests(APITestCase):
 
         self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_sogiaonhancavh_allows_two_assistants_without_primary(self):
+        shift_log = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        create_staff_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-tao-nhan-su-ca",
+            kwargs={"pk": shift_log.id},
+        )
+        self.client.force_authenticate(user=self.creator)
+
+        first_response = self.client.post(
+            create_staff_url,
+            {"vai_tro": "truc_phu", "ten_nhan_su": "Nguyễn Văn A", "thu_tu": 1},
+            format="json",
+        )
+        second_response = self.client.post(
+            create_staff_url,
+            {"vai_tro": "truc_phu", "ten_nhan_su": "Trần Văn B", "thu_tu": 2},
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(second_response.data["nhan_su_ca"]), 2)
+        shift_log.refresh_from_db()
+        self.assertEqual(shift_log.truc_chinh, "")
+        self.assertEqual(shift_log.truc_phu, "Nguyễn Văn A, Trần Văn B")
+
+    def test_sogiaonhancavh_rejects_duplicate_staff_name(self):
+        shift_log = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        create_staff_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-tao-nhan-su-ca",
+            kwargs={"pk": shift_log.id},
+        )
+        self.client.force_authenticate(user=self.creator)
+        self.client.post(
+            create_staff_url,
+            {"vai_tro": "truc_phu", "ten_nhan_su": "Nguyễn Văn A"},
+            format="json",
+        )
+        duplicate_response = self.client.post(
+            create_staff_url,
+            {"vai_tro": "truc_phu", "ten_nhan_su": "nguyễn văn a"},
+            format="json",
+        )
+
+        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ten_nhan_su", duplicate_response.data)

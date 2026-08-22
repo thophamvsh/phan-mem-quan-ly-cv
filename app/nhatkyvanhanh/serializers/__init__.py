@@ -9,6 +9,7 @@ from .mixins import (
 )
 from .giao_ca_vh import (
     ChiTietSoGiaoNhanCaVHSerializer,
+    NhanSuSoGiaoNhanCaVHSerializer,
     LuuYChiDaoSoGiaoNhanCaVHSerializer,
     SogiaonhancaVHSerializer,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "ChiDaoSuKienSerializer",
     "NhatKySuKienSerializer",
     "ChiTietSoGiaoNhanCaVHSerializer",
+    "NhanSuSoGiaoNhanCaVHSerializer",
     "LuuYChiDaoSoGiaoNhanCaVHSerializer",
     "SogiaonhancaVHSerializer",
     "ChiTietSoGiaoNhanCaHCSerializer",
