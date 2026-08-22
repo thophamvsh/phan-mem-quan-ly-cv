@@ -1,5 +1,6 @@
 from datetime import date
 from io import BytesIO
+import tempfile
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -138,18 +139,19 @@ class NhatKyVanHanhAPITests(APITestCase):
         image_buffer = BytesIO()
         Image.new("RGB", (20, 20), "white").save(image_buffer, format="JPEG")
         self.client.force_authenticate(user=self.creator)
-        response = self.client.post(
-            reverse("nhatkyvanhanh:nhatkysukien-list"),
-            {
-                "thoi_gian_xay_ra": timezone.now().isoformat(),
-                "ten_he_thong_thiet_bi": "H1",
-                "hien_tuong_dien_bien": "Test event",
-                "hinh_anh_truoc_su_co": SimpleUploadedFile(
-                    "event.jpg", image_buffer.getvalue(), content_type="image/jpeg"
-                ),
-            },
-            format="multipart",
-        )
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            response = self.client.post(
+                reverse("nhatkyvanhanh:nhatkysukien-list"),
+                {
+                    "thoi_gian_xay_ra": timezone.now().isoformat(),
+                    "ten_he_thong_thiet_bi": "H1",
+                    "hien_tuong_dien_bien": "Test event",
+                    "hinh_anh_truoc_su_co": SimpleUploadedFile(
+                        "event.jpg", image_buffer.getvalue(), content_type="image/jpeg"
+                    ),
+                },
+                format="multipart",
+            )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_nhatkysukien_accepts_multiple_before_images(self):
@@ -165,16 +167,17 @@ class NhatKyVanHanhAPITests(APITestCase):
                 )
             )
         self.client.force_authenticate(user=self.creator)
-        response = self.client.post(
-            reverse("nhatkyvanhanh:nhatkysukien-list"),
-            {
-                "thoi_gian_xay_ra": timezone.now().isoformat(),
-                "ten_he_thong_thiet_bi": "H1",
-                "hien_tuong_dien_bien": "Multiple images",
-                "hinh_anh_truoc_su_co_moi": uploads,
-            },
-            format="multipart",
-        )
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            response = self.client.post(
+                reverse("nhatkyvanhanh:nhatkysukien-list"),
+                {
+                    "thoi_gian_xay_ra": timezone.now().isoformat(),
+                    "ten_he_thong_thiet_bi": "H1",
+                    "hien_tuong_dien_bien": "Multiple images",
+                    "hinh_anh_truoc_su_co_moi": uploads,
+                },
+                format="multipart",
+            )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(len(response.data["hinh_anh_truoc_su_co_urls"]), 2)
 
