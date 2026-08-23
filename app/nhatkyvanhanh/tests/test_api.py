@@ -15,6 +15,7 @@ from nhatkyvanhanh.models import (
     SoChuyenDoiTBThang,
     SoChuyenDoiThietBiTuan,
     LanChuyenDoiThietBi,
+    KhacPhucSuKien,
     SonhatkyvanhanhDiesel,
     SogiaonhancaHC,
     SogiaonhancaVH,
@@ -67,6 +68,8 @@ class NhatKyVanHanhAPITests(APITestCase):
             nha_may=self.nha_may,
             can_view_shift_handover_logs=True,
             can_create_shift_handover_logs=True,
+            can_edit_own_shift_handover_logs=True,
+            can_delete_own_shift_handover_logs=True,
             can_view_operation_events=True,
             can_create_operation_events=True,
             can_edit_own_operation_events=True,
@@ -108,6 +111,8 @@ class NhatKyVanHanhAPITests(APITestCase):
             can_view_operation_events=True,
             can_edit_all_operation_events=True,
             can_delete_all_operation_events=True,
+            can_view_shift_handover_logs=True,
+            can_manage_all_shift_handover_logs=True,
         )
 
     def test_nhatkysukien_list_permissions(self):
@@ -652,7 +657,7 @@ class NhatKyVanHanhAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_nhatkysukien_other_user_with_edit_all_cannot_update(self):
+    def test_nhatkysukien_other_user_with_edit_all_can_update_open_event(self):
         event = SuKien.objects.create(
             nha_may=self.nha_may,
             thoi_gian_xay_ra=timezone.now(),
@@ -669,7 +674,59 @@ class NhatKyVanHanhAPITests(APITestCase):
             format="json",
         )
 
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["hien_tuong_dien_bien"], "Updated by manager")
+
+    def test_nhatkysukien_edit_all_cannot_update_acknowledged_event(self):
+        event = SuKien.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian_xay_ra=timezone.now(),
+            ten_he_thong_thiet_bi="H1",
+            hien_tuong_dien_bien="Test event",
+            nguoi_tao=self.creator,
+            ben_ghi_nhan_su_kien=self.receiver,
+        )
+        detail_url = reverse(
+            "nhatkyvanhanh:nhatkysukien-detail",
+            kwargs={"pk": event.id},
+        )
+
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(
+            detail_url,
+            {"hien_tuong_dien_bien": "Must remain locked"},
+            format="json",
+        )
+
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_nhatkysukien_delete_all_cannot_delete_fully_signed_event(self):
+        event = SuKien.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian_xay_ra=timezone.now(),
+            ten_he_thong_thiet_bi="H1",
+            hien_tuong_dien_bien="Signed event",
+            nguoi_tao=self.creator,
+            ben_ghi_nhan_su_kien=self.receiver,
+            chu_ky_ben_ghi_nhan_su_kien="signatures/receiver.png",
+            trang_thai=SuKien.TrangThaiXuLy.XU_LY_XONG,
+        )
+        KhacPhucSuKien.objects.create(
+            su_kien=event,
+            nguoi_tao=self.manager,
+            ben_xu_ly_su_kien_thiet_bi=self.manager,
+            chu_ky_ben_xu_ly_su_kien_thiet_bi="signatures/manager.png",
+        )
+        detail_url = reverse(
+            "nhatkyvanhanh:nhatkysukien-detail",
+            kwargs={"pk": event.id},
+        )
+
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.delete(detail_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(SuKien.objects.filter(pk=event.pk).exists())
 
     def test_sogiaonhancavh_shift_handover_flow(self):
         # 1. Create a shift handover log as self.creator
@@ -747,6 +804,62 @@ class NhatKyVanHanhAPITests(APITestCase):
 
         self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_sogiaonhancavh_owner_and_manager_permissions_before_receive(self):
+        so = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        detail_url = reverse("nhatkyvanhanh:sogiaonhancavh-detail", kwargs={"pk": so.id})
+
+        self.client.force_authenticate(user=self.creator)
+        owner_response = self.client.patch(
+            detail_url, {"dia_diem": "Phòng điều khiển"}, format="json"
+        )
+        self.assertEqual(owner_response.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(user=self.manager)
+        manager_response = self.client.patch(
+            detail_url, {"dia_diem": "Trung tâm vận hành"}, format="json"
+        )
+        self.assertEqual(manager_response.status_code, status.HTTP_200_OK)
+
+    def test_sogiaonhancavh_is_locked_immediately_after_receive(self):
+        so = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            user_nhan_ca=self.receiver,
+            nguoi_tao=self.creator,
+            nhan_ca_ky_at=timezone.now(),
+        )
+        detail_url = reverse("nhatkyvanhanh:sogiaonhancavh-detail", kwargs={"pk": so.id})
+        directive_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-tao-luu-y-chi-dao",
+            kwargs={"pk": so.id},
+        )
+
+        self.client.force_authenticate(user=self.manager)
+        patch_response = self.client.patch(
+            detail_url, {"dia_diem": "Không được thay đổi"}, format="json"
+        )
+        delete_response = self.client.delete(detail_url)
+        directive_response = self.client.post(
+            directive_url,
+            {"thoi_gian": timezone.now().isoformat(), "noi_dung": "Chỉ đạo mới"},
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(directive_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(SogiaonhancaVH.objects.filter(pk=so.pk).exists())
 
     def test_sogiaonhancavh_allows_two_assistants_without_primary(self):
         shift_log = SogiaonhancaVH.objects.create(

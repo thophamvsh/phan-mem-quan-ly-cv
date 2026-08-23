@@ -102,6 +102,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_confirm_operation_events', 'can_add_event_developments',
                  'can_edit_own_event_developments', 'can_edit_all_event_developments',
                  'can_edit_own_remediations', 'can_edit_all_remediations',
+                 'can_edit_own_shift_handover_logs', 'can_delete_own_shift_handover_logs',
+                 'can_manage_all_shift_handover_logs',
                  'can_view_weekly_equipment_switch_logs',
                  'can_create_weekly_equipment_switch_logs',
                  'can_edit_weekly_equipment_switch_logs',

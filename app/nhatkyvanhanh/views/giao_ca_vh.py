@@ -147,7 +147,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
     def _ensure_staff_editable(self, request, shift_log):
         if _shift_log_locked(shift_log):
             raise PermissionDenied(
-                "Sổ giao nhận ca đã có đủ hai chữ ký, không được sửa nhân sự."
+                "Sổ giao nhận ca đã được nhận ca, không được sửa nhân sự."
             )
         if not _can_edit_shift_log(request.user, shift_log):
             raise PermissionDenied("User không có quyền cập nhật nhân sự ca.")
@@ -164,7 +164,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         if _shift_log_locked(serializer.instance):
-            raise PermissionDenied("So giao nhan ca da co du 2 chu ky, khong duoc chinh sua.")
+            raise PermissionDenied("Sổ giao nhận ca đã được nhận ca, không được chỉnh sửa.")
         if not _can_edit_shift_log(self.request.user, serializer.instance):
             raise PermissionDenied("User khong co quyen cap nhat so giao nhan ca.")
         so = serializer.save(
@@ -176,7 +176,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         if _shift_log_locked(instance):
-            raise PermissionDenied("So giao nhan ca da co du 2 chu ky, khong duoc xoa.")
+            raise PermissionDenied("Sổ giao nhận ca đã được nhận ca, không được xóa.")
         if not _can_delete_shift_log(self.request.user, instance):
             raise PermissionDenied("User khong co quyen xoa so giao nhan ca.")
         return super().perform_destroy(instance)
@@ -201,7 +201,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         so = self.get_object()
         if _shift_log_locked(so):
             return Response(
-                {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc them noi dung."},
+                {"detail": "Sổ giao nhận ca đã được nhận ca, không được thêm nội dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not _can_create_shift_detail(request.user, so):
@@ -228,7 +228,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         so = self.get_object()
         if _shift_log_locked(so):
             return Response(
-                {"detail": "So giao nhan ca da co du 2 chu ky, khong duoc cap nhat noi dung."},
+                {"detail": "Sổ giao nhận ca đã được nhận ca, không được cập nhật nội dung."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
@@ -309,6 +309,8 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="luu-y-chi-dao")
     def tao_luu_y_chi_dao(self, request, pk=None):
         so = self.get_object()
+        if _shift_log_locked(so):
+            raise PermissionDenied("Sổ đã được nhận ca, không được thêm lưu ý chỉ đạo.")
         if not _can_create_shift_directive(request.user, so):
             return Response(
                 {"detail": "User khong co quyen tao luu y chi dao."},
@@ -331,6 +333,8 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
     )
     def cap_nhat_luu_y_chi_dao(self, request, pk=None, directive_id=None):
         so = self.get_object()
+        if _shift_log_locked(so):
+            raise PermissionDenied("Sổ đã được nhận ca, không được sửa hoặc xóa lưu ý chỉ đạo.")
         if not _can_view_shift_directives(request.user):
             return Response(
                 {"detail": "User khong co quyen xem luu y chi dao."},

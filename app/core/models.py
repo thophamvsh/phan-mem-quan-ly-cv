@@ -306,63 +306,63 @@ class UserProfile(models.Model):
     # Phan quyen nhat ky van hanh - su kien
     can_view_operation_events = models.BooleanField(
         default=True,
-        help_text="Co quyen xem nhat ky su kien van hanh"
+        help_text="Có quyền xem nhật ký sự kiện vận hành"
     )
     can_create_operation_events = models.BooleanField(
         default=False,
-        help_text="Co quyen tao moi su kien van hanh"
+        help_text="Có quyền tạo mới sự kiện vận hành"
     )
     can_edit_own_operation_events = models.BooleanField(
         default=True,
-        help_text="Co quyen sua su kien van hanh do minh tao khi chua ghi nhan"
+        help_text="Có quyền sửa sự kiện vận hành do mình tạo khi chưa ghi nhận"
     )
     can_edit_all_operation_events = models.BooleanField(
         default=False,
-        help_text="Co quyen sua tat ca su kien van hanh"
+        help_text="Có quyền sửa tất cả sự kiện vận hành chưa ghi nhận"
     )
     can_delete_own_operation_events = models.BooleanField(
         default=True,
-        help_text="Co quyen xoa su kien van hanh do minh tao khi chua khoa"
+        help_text="Có quyền xóa sự kiện vận hành do mình tạo khi chưa khóa"
     )
     can_delete_all_operation_events = models.BooleanField(
         default=False,
-        help_text="Co quyen xoa tat ca su kien van hanh"
+        help_text="Có quyền xóa tất cả sự kiện vận hành chưa khóa"
     )
     can_acknowledge_operation_events = models.BooleanField(
         default=False,
-        help_text="Co quyen ghi nhan su kien van hanh"
+        help_text="Có quyền ghi nhận sự kiện vận hành"
     )
     can_process_operation_events = models.BooleanField(
         default=False,
-        help_text="Co quyen xu ly/khac phuc su kien van hanh"
+        help_text="Có quyền xử lý/khắc phục sự kiện vận hành"
     )
     can_confirm_operation_events = models.BooleanField(
         default=False,
-        help_text="Co quyen xac nhan xu ly su kien van hanh"
+        help_text="Có quyền xác nhận xử lý sự kiện vận hành"
     )
     can_add_event_developments = models.BooleanField(
         default=False,
-        help_text="Co quyen them dien bien su kien van hanh"
+        help_text="Có quyền thêm diễn biến sự kiện vận hành"
     )
     can_edit_own_event_developments = models.BooleanField(
         default=True,
-        help_text="Co quyen sua dien bien su kien do minh tao"
+        help_text="Có quyền sửa diễn biến sự kiện do mình tạo"
     )
     can_edit_all_event_developments = models.BooleanField(
         default=False,
-        help_text="Co quyen sua tat ca dien bien su kien"
+        help_text="Có quyền sửa tất cả diễn biến sự kiện"
     )
     can_edit_own_remediations = models.BooleanField(
         default=True,
-        help_text="Co quyen sua noi dung khac phuc do minh tao khi chua xac nhan"
+        help_text="Có quyền sửa nội dung khắc phục do mình tạo khi chưa xác nhận"
     )
     can_edit_all_remediations = models.BooleanField(
         default=False,
-        help_text="Co quyen sua tat ca noi dung khac phuc khi chua xac nhan"
+        help_text="Có quyền sửa tất cả nội dung khắc phục khi chưa xác nhận"
     )
     can_edit_leadership_directives = models.BooleanField(
         default=False,
-        help_text="Co quyen nhap chi dao su kien van hanh"
+        help_text="Có quyền nhập chỉ đạo sự kiện vận hành"
     )
 
 
@@ -370,31 +370,43 @@ class UserProfile(models.Model):
     # Phan quyen nhat ky van hanh - so giao nhan ca
     can_view_shift_handover_logs = models.BooleanField(
         default=True,
-        help_text="Co quyen xem so giao nhan ca van hanh"
+        help_text="Có quyền xem sổ giao nhận ca vận hành"
     )
     can_create_shift_handover_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen tao so giao nhan ca van hanh"
+        help_text="Có quyền tạo sổ giao nhận ca vận hành"
     )
     can_receive_shift_handover_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen ky nhan ca trong so giao nhan ca van hanh"
+        help_text="Có quyền ký nhận ca trong sổ giao nhận ca vận hành"
     )
     can_edit_shift_handover_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua so giao nhan ca van hanh"
+        help_text="Quyền cũ: sửa sổ giao nhận ca vận hành"
     )
     can_delete_shift_handover_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen xoa so giao nhan ca van hanh"
+        help_text="Quyền cũ: xóa sổ giao nhận ca vận hành"
+    )
+    can_edit_own_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Có quyền sửa sổ giao nhận ca vận hành do mình tạo khi chưa nhận ca"
+    )
+    can_delete_own_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Có quyền xóa sổ giao nhận ca vận hành do mình tạo khi chưa nhận ca"
+    )
+    can_manage_all_shift_handover_logs = models.BooleanField(
+        default=False,
+        help_text="Có quyền sửa và xóa tất cả sổ giao nhận ca vận hành khi chưa nhận ca"
     )
     can_view_shift_handover_directives = models.BooleanField(
         default=False,
-        help_text="Co quyen xem luu y chi dao so giao nhan ca van hanh"
+        help_text="Có quyền xem lưu ý chỉ đạo sổ giao nhận ca vận hành"
     )
     can_create_shift_handover_directives = models.BooleanField(
         default=False,
-        help_text="Co quyen tao luu y chi dao so giao nhan ca van hanh"
+        help_text="Có quyền tạo lưu ý chỉ đạo sổ giao nhận ca vận hành khi chưa nhận ca"
     )
     can_view_admin_shift_handover_logs = models.BooleanField(
         default=True,

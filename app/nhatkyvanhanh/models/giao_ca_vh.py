@@ -204,8 +204,8 @@ class LuuYChiDaoSoGiaoNhanCaVH(TimestampedUUIDModel):
 
     class Meta:
         ordering = ["thoi_gian", "created_at"]
-        verbose_name = "Luu y chi dao so giao nhan ca van hanh"
-        verbose_name_plural = "Luu y chi dao so giao nhan ca van hanh"
+        verbose_name = "Lưu ý chỉ đạo sổ giao nhận ca vận hành"
+        verbose_name_plural = "Lưu ý chỉ đạo sổ giao nhận ca vận hành"
 
     def __str__(self):
-        return f"Luu y chi dao {self.so_giao_nhan_ca_id} - {self.thoi_gian:%Y-%m-%d %H:%M}"
+        return f"Lưu ý chỉ đạo {self.so_giao_nhan_ca_id} - {self.thoi_gian:%Y-%m-%d %H:%M}"

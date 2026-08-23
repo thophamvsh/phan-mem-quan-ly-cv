@@ -388,17 +388,25 @@ def _can_edit_event(user, su_kien):
         or not user.is_authenticated
         or su_kien.trang_thai == SuKien.TrangThaiXuLy.XU_LY_XONG
         or su_kien.ben_ghi_nhan_su_kien_id
-        or su_kien.nguoi_tao_id != user.id
     ):
         return False
 
+    if has_profile_permission(user, "can_edit_all_operation_events"):
+        return True
     return (
         has_profile_permission(user, "can_edit_own_operation_events")
-        or has_profile_permission(user, "can_edit_all_operation_events")
+        and su_kien.nguoi_tao_id == user.id
     )
 
 
 def _can_delete_event(user, su_kien):
+    is_locked = (
+        su_kien.trang_thai == SuKien.TrangThaiXuLy.XU_LY_XONG
+        and bool(su_kien.chu_ky_ben_ghi_nhan_su_kien)
+        and bool(su_kien.chu_ky_ben_xu_ly_su_kien_thiet_bi)
+    )
+    if is_locked:
+        return False
     if has_profile_permission(user, "can_delete_all_operation_events"):
         return True
     return (
@@ -481,7 +489,7 @@ def _sync_truc_ktvh_from_admin_shift_log(so_vh):
 
 
 def _shift_log_locked(so):
-    return bool(so.giao_ca_ky_at and so.nhan_ca_ky_at)
+    return _shift_log_received(so)
 
 
 def _shift_log_received(so):
@@ -508,11 +516,23 @@ def _can_update_shift_detail(user, so, chi_tiet):
 
 
 def _can_edit_shift_log(user, so):
-    return has_profile_permission(user, "can_edit_shift_handover_logs") or _is_creator_of_shift_log(user, so)
+    return (
+        has_profile_permission(user, "can_manage_all_shift_handover_logs")
+        or (
+            _is_creator_of_shift_log(user, so)
+            and has_profile_permission(user, "can_edit_own_shift_handover_logs")
+        )
+    )
 
 
 def _can_delete_shift_log(user, so):
-    return has_profile_permission(user, "can_delete_shift_handover_logs") or _is_creator_of_shift_log(user, so)
+    return (
+        has_profile_permission(user, "can_manage_all_shift_handover_logs")
+        or (
+            _is_creator_of_shift_log(user, so)
+            and has_profile_permission(user, "can_delete_own_shift_handover_logs")
+        )
+    )
 
 
 def _can_view_shift_directives(user):
@@ -525,7 +545,7 @@ def _can_view_shift_directives(user):
 def _can_create_shift_directive(user, so=None):
     if has_profile_permission(user, "can_create_shift_handover_directives"):
         return True
-    if has_profile_permission(user, "can_edit_shift_handover_logs"):
+    if has_profile_permission(user, "can_manage_all_shift_handover_logs"):
         return True
     if so and (user.is_superuser or so.user_giao_ca_id == user.id):
         return True
@@ -536,7 +556,11 @@ def _can_update_shift_directive(user, directive):
     return bool(
         user
         and user.is_authenticated
-        and (user.is_superuser or directive.nguoi_tao_id == user.id)
+        and (
+            user.is_superuser
+            or has_profile_permission(user, "can_manage_all_shift_handover_logs")
+            or directive.nguoi_tao_id == user.id
+        )
     )
 
 

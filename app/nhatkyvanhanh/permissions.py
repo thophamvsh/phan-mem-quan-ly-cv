@@ -85,15 +85,15 @@ class CanReceiveShiftHandoverLogs(UserProfilePermission):
 
 class CanEditShiftHandoverLogs(AnyUserProfilePermission):
     permission_names = (
-        "can_edit_shift_handover_logs",
-        "can_create_shift_handover_logs",
+        "can_edit_own_shift_handover_logs",
+        "can_manage_all_shift_handover_logs",
     )
 
 
 class CanDeleteShiftHandoverLogs(AnyUserProfilePermission):
     permission_names = (
-        "can_delete_shift_handover_logs",
-        "can_create_shift_handover_logs",
+        "can_delete_own_shift_handover_logs",
+        "can_manage_all_shift_handover_logs",
     )
 
 
