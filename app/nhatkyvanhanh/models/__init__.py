@@ -12,6 +12,7 @@ from .giao_ca_vh import (
     ChiTietSoGiaoNhanCaVH,
     NhanSuSoGiaoNhanCaVH,
     LuuYChiDaoSoGiaoNhanCaVH,
+    AnhSoGiaoNhanCaVH,
 )
 from .giao_ca_hc import SogiaonhancaHC, NguoiTrucSoGiaoNhanCaHC, ChiTietSoGiaoNhanCaHC
 from .nhat_ky_vh import Sonhatkyvanhanh, SonhatkyvanhanhDiesel

@@ -4,6 +4,7 @@ from nhatkyvanhanh.models import (
     ChiTietSoGiaoNhanCaVH,
     NhanSuSoGiaoNhanCaVH,
     LuuYChiDaoSoGiaoNhanCaVH,
+    AnhSoGiaoNhanCaVH,
 )
 from .mixins import UserSummaryMixin
 
@@ -34,6 +35,21 @@ class ChiTietSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMi
 
     def get_nguoi_tao_display(self, obj):
         return self._get_user_display(obj.nguoi_tao)
+
+
+class AnhSoGiaoNhanCaVHSerializer(serializers.ModelSerializer):
+    hinh_anh_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AnhSoGiaoNhanCaVH
+        fields = ["id", "hinh_anh", "hinh_anh_url", "chu_thich", "thu_tu", "created_at"]
+        read_only_fields = ["id", "hinh_anh_url", "created_at"]
+
+    def get_hinh_anh_url(self, obj):
+        request = self.context.get("request")
+        if not obj.hinh_anh:
+            return None
+        return request.build_absolute_uri(obj.hinh_anh.url) if request else obj.hinh_anh.url
 
 
 class LuuYChiDaoSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
@@ -136,6 +152,8 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     noi_dung_chi_tiets = ChiTietSoGiaoNhanCaVHSerializer(many=True, read_only=True)
     nhan_su_ca = NhanSuSoGiaoNhanCaVHSerializer(many=True, read_only=True)
     luu_y_chi_daos = serializers.SerializerMethodField()
+    hinh_anh_bo_sung = AnhSoGiaoNhanCaVHSerializer(many=True, read_only=True)
+    trang_thai_quy_trinh = serializers.CharField(read_only=True)
 
     class Meta:
         model = SogiaonhancaVH
@@ -146,6 +164,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may_name",
             "ngay_truc",
             "ca_truc",
+            "loai_thoi_gian_truc",
             "dia_diem",
             "truc_chinh",
             "truc_phu",
@@ -159,11 +178,13 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "noi_dung_chi_tiets",
             "luu_y_chi_daos",
             "tinh_trang_van_hanh_trong_ca",
+            "trang_thai_thiet_bi",
             "cac_phuong_tien_trang_bi_ca",
             "luu_y",
             "tong_muc_luc",
             "hinh_anh",
             "hinh_anh_url",
+            "hinh_anh_bo_sung",
             "chu_ky_user_giao_ca",
             "chu_ky_user_giao_ca_url",
             "chu_ky_user_nhan_ca",
@@ -178,6 +199,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nhan_ca_ky_at",
             "trang_thai",
             "da_hoan_thanh",
+            "trang_thai_quy_trinh",
             "created_at",
             "updated_at",
         ]
@@ -199,6 +221,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nguoi_tao_display",
             "trang_thai",
             "da_hoan_thanh",
+            "trang_thai_quy_trinh",
             "created_at",
             "updated_at",
         ]
@@ -220,6 +243,33 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
                     )
                 }
             )
+        device_states = attrs.get(
+            "trang_thai_thiet_bi",
+            getattr(self.instance, "trang_thai_thiet_bi", []),
+        )
+        if not isinstance(device_states, list):
+            raise serializers.ValidationError(
+                {"trang_thai_thiet_bi": "Danh sách trạng thái thiết bị không hợp lệ."}
+            )
+        allowed = {"dong", "cat", "cat_vtcl", "khac"}
+        seen = set()
+        for row in device_states:
+            if not isinstance(row, dict):
+                raise serializers.ValidationError(
+                    {"trang_thai_thiet_bi": "Mỗi trạng thái thiết bị phải là một đối tượng."}
+                )
+            code = str(row.get("ma_thiet_bi", "")).strip()
+            state = str(row.get("trang_thai", "")).strip()
+            if not code or state not in allowed:
+                raise serializers.ValidationError(
+                    {"trang_thai_thiet_bi": "Yêu cầu nhập thiết bị và trạng thái hợp lệ."}
+                )
+            normalized = code.casefold()
+            if normalized in seen:
+                raise serializers.ValidationError(
+                    {"trang_thai_thiet_bi": f"Thiết bị {code} bị trùng."}
+                )
+            seen.add(normalized)
         return attrs
 
     def get_nha_may_code(self, obj):

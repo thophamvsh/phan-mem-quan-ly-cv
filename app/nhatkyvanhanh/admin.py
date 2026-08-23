@@ -24,6 +24,7 @@ from .models import (
     KhacPhucSuKien,
     LanChuyenDoiThietBi,
     LuuYChiDaoSoGiaoNhanCaVH,
+    AnhSoGiaoNhanCaVH,
     MauChuyenDoiThietBi,
     MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
@@ -240,6 +241,12 @@ class NhanSuSoGiaoNhanCaVHInline(admin.TabularInline):
     extra = 0
 
 
+class AnhSoGiaoNhanCaVHInline(admin.TabularInline):
+    model = AnhSoGiaoNhanCaVH
+    extra = 0
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+
+
 class ChiTietSoGiaoNhanCaHCInline(admin.TabularInline):
     model = ChiTietSoGiaoNhanCaHC
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
@@ -410,6 +417,7 @@ class SogiaonhancaVHAdmin(admin.ModelAdmin):
         NhanSuSoGiaoNhanCaVHInline,
         ChiTietSoGiaoNhanCaVHInline,
         LuuYChiDaoSoGiaoNhanCaVHInline,
+        AnhSoGiaoNhanCaVHInline,
     ]
 
     def co_chu_ky(self, obj):

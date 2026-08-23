@@ -11,6 +11,7 @@ from .giao_ca_vh import (
     ChiTietSoGiaoNhanCaVHSerializer,
     NhanSuSoGiaoNhanCaVHSerializer,
     LuuYChiDaoSoGiaoNhanCaVHSerializer,
+    AnhSoGiaoNhanCaVHSerializer,
     SogiaonhancaVHSerializer,
 )
 from .giao_ca_hc import (
@@ -49,6 +50,7 @@ __all__ = [
     "ChiTietSoGiaoNhanCaVHSerializer",
     "NhanSuSoGiaoNhanCaVHSerializer",
     "LuuYChiDaoSoGiaoNhanCaVHSerializer",
+    "AnhSoGiaoNhanCaVHSerializer",
     "SogiaonhancaVHSerializer",
     "ChiTietSoGiaoNhanCaHCSerializer",
     "NguoiTrucSoGiaoNhanCaHCSerializer",

@@ -25,7 +25,19 @@ class SogiaonhancaVH(TimestampedUUIDModel):
         blank=True,
         verbose_name="Nhà máy",
     )
+    class LoaiThoiGianTruc(models.TextChoices):
+        NGAY = "ngay", "Ca ngày (08:00–20:00)"
+        DEM = "dem", "Ca đêm (20:00–08:00 hôm sau)"
+        SANG = "sang", "Ca sáng (08:00–12:00)"
+        CHIEU = "chieu", "Ca chiều (12:00–20:00)"
+
     ca_truc = models.CharField(max_length=1, choices=CaTruc.choices)
+    loai_thoi_gian_truc = models.CharField(
+        max_length=16,
+        choices=LoaiThoiGianTruc.choices,
+        default=LoaiThoiGianTruc.NGAY,
+        verbose_name="Loại thời gian trực",
+    )
     dia_diem = models.CharField(max_length=255, blank=True)
     truc_chinh = models.CharField(max_length=255, blank=True)
     truc_phu = models.CharField(max_length=255, blank=True)
@@ -37,6 +49,11 @@ class SogiaonhancaVH(TimestampedUUIDModel):
     thoi_gian_giao_ca = models.DateTimeField()
     noi_dung_chi_tiet = models.TextField(blank=True)
     tinh_trang_van_hanh_trong_ca = models.TextField(blank=True)
+    trang_thai_thiet_bi = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Danh sách trạng thái thiết bị tại thời điểm giao nhận ca",
+    )
     cac_phuong_tien_trang_bi_ca = models.TextField(blank=True)
     luu_y = models.TextField(blank=True)
     tong_muc_luc = models.TextField(blank=True)
@@ -92,6 +109,14 @@ class SogiaonhancaVH(TimestampedUUIDModel):
     @property
     def da_hoan_thanh(self):
         return bool(self.giao_ca_ky_at and self.nhan_ca_ky_at)
+
+    @property
+    def trang_thai_quy_trinh(self):
+        if self.da_hoan_thanh:
+            return "hoan_thanh"
+        if self.nhan_ca_ky_at:
+            return "da_nhan_cho_ky_giao"
+        return "cho_nhan_ca"
 
     def clean(self):
         if self.user_giao_ca_id and self.user_giao_ca_id == self.user_nhan_ca_id:
@@ -209,3 +234,24 @@ class LuuYChiDaoSoGiaoNhanCaVH(TimestampedUUIDModel):
 
     def __str__(self):
         return f"Lưu ý chỉ đạo {self.so_giao_nhan_ca_id} - {self.thoi_gian:%Y-%m-%d %H:%M}"
+
+
+class AnhSoGiaoNhanCaVH(TimestampedUUIDModel):
+    so_giao_nhan_ca = models.ForeignKey(
+        SogiaonhancaVH,
+        on_delete=models.CASCADE,
+        related_name="hinh_anh_bo_sung",
+    )
+    hinh_anh = models.ImageField(upload_to="operations/so_giao_nhan_ca_vh/bo_sung/")
+    chu_thich = models.CharField(max_length=255, blank=True)
+    thu_tu = models.PositiveIntegerField(default=1)
+    nguoi_tao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="anh_so_giao_nhan_ca_vh_da_tao",
+    )
+
+    class Meta:
+        ordering = ["thu_tu", "created_at"]
+        verbose_name = "Ảnh sổ giao nhận ca vận hành"
+        verbose_name_plural = "Ảnh sổ giao nhận ca vận hành"

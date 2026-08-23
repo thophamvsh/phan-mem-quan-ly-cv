@@ -13,12 +13,14 @@ from nhatkyvanhanh.models import (
     ChiTietSoGiaoNhanCaVH,
     NhanSuSoGiaoNhanCaVH,
     LuuYChiDaoSoGiaoNhanCaVH,
+    AnhSoGiaoNhanCaVH,
 )
 from nhatkyvanhanh.serializers import (
     SogiaonhancaVHSerializer,
     ChiTietSoGiaoNhanCaVHSerializer,
     NhanSuSoGiaoNhanCaVHSerializer,
     LuuYChiDaoSoGiaoNhanCaVHSerializer,
+    AnhSoGiaoNhanCaVHSerializer,
 )
 
 
@@ -368,6 +370,54 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
         serializer.save()
         response_serializer = self.get_serializer(so)
         return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="ca-truoc")
+    def ca_truoc(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        factory_id = request.query_params.get("nha_may")
+        current_date = request.query_params.get("ngay_truc")
+        if factory_id:
+            queryset = queryset.filter(nha_may_id=factory_id)
+        if current_date:
+            queryset = queryset.filter(ngay_truc__lt=current_date)
+        previous = queryset.order_by("-ngay_truc", "-thoi_gian_giao_ca").first()
+        if not previous:
+            return Response({"detail": "Chưa có ca trước."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.get_serializer(previous).data)
+
+    @action(detail=True, methods=["post"], url_path="hinh-anh")
+    def them_hinh_anh(self, request, pk=None):
+        so = self.get_object()
+        if _shift_log_locked(so) or not _can_edit_shift_log(request.user, so):
+            raise PermissionDenied("Sổ đã được nhận ca hoặc bạn không có quyền thêm ảnh.")
+        files = request.FILES.getlist("hinh_anh")
+        if not files:
+            return Response({"hinh_anh": ["Yêu cầu chọn ít nhất một ảnh."]}, status=400)
+        if so.hinh_anh_bo_sung.count() + len(files) > 10:
+            return Response({"hinh_anh": ["Mỗi sổ được tải tối đa 10 ảnh."]}, status=400)
+        allowed = {"image/jpeg", "image/png", "image/webp"}
+        for image in files:
+            if image.content_type not in allowed or image.size > 25 * 1024 * 1024:
+                return Response(
+                    {"hinh_anh": ["Ảnh phải là JPG, PNG hoặc WebP và không vượt quá 25 MB."]},
+                    status=400,
+                )
+        created = []
+        for index, image in enumerate(files, start=so.hinh_anh_bo_sung.count() + 1):
+            created.append(
+                AnhSoGiaoNhanCaVH.objects.create(
+                    so_giao_nhan_ca=so,
+                    hinh_anh=image,
+                    thu_tu=index,
+                    nguoi_tao=request.user,
+                )
+            )
+        return Response(
+            AnhSoGiaoNhanCaVHSerializer(
+                created, many=True, context=self.get_serializer_context()
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["post"])
     def ky_nhan_ca(self, request, pk=None):
