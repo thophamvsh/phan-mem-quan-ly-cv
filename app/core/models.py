@@ -504,6 +504,10 @@ class UserProfile(models.Model):
         default=True,
         help_text="Co quyen xem so an toan dau gio"
     )
+    can_create_so_an_toan_dau_gio = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao so an toan dau gio"
+    )
     can_edit_so_an_toan_dau_gio = models.BooleanField(
         default=False,
         help_text="Co quyen sua so an toan dau gio"
@@ -511,6 +515,18 @@ class UserProfile(models.Model):
     can_delete_so_an_toan_dau_gio = models.BooleanField(
         default=False,
         help_text="Co quyen xoa so an toan dau gio"
+    )
+    can_edit_own_so_an_toan_dau_gio = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so an toan dau gio do minh tao"
+    )
+    can_delete_own_so_an_toan_dau_gio = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so an toan dau gio do minh tao"
+    )
+    can_manage_all_so_an_toan_dau_gio = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua va xoa tat ca so an toan dau gio"
     )
 
     # Phan quyen quan ly van hanh - quan ly thiet bi/thong so

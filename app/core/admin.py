@@ -159,10 +159,12 @@ class UserProfileInline(admin.StackedInline):
         ('Quyền Sổ An Toàn Đầu Giờ', {
             'fields': (
                 'can_view_so_an_toan_dau_gio',
-                'can_edit_so_an_toan_dau_gio',
-                'can_delete_so_an_toan_dau_gio',
+                'can_create_so_an_toan_dau_gio',
+                'can_edit_own_so_an_toan_dau_gio',
+                'can_delete_own_so_an_toan_dau_gio',
+                'can_manage_all_so_an_toan_dau_gio',
             ),
-            'description': 'Quyền xem, sửa và xóa Sổ An Toàn Đầu Giờ.'
+            'description': 'Quyền xem, tạo, sửa/xóa sổ của mình và quản lý tất cả Sổ An Toàn Đầu Giờ.'
         }),
         ('Quyền quản lý thiết bị vận hành', {
             'fields': (
@@ -477,10 +479,12 @@ class UserProfileAdmin(admin.ModelAdmin):
         ('Quyền Sổ An Toàn Đầu Giờ', {
             'fields': (
                 'can_view_so_an_toan_dau_gio',
-                'can_edit_so_an_toan_dau_gio',
-                'can_delete_so_an_toan_dau_gio',
+                'can_create_so_an_toan_dau_gio',
+                'can_edit_own_so_an_toan_dau_gio',
+                'can_delete_own_so_an_toan_dau_gio',
+                'can_manage_all_so_an_toan_dau_gio',
             ),
-            'description': 'Quyền xem, sửa và xóa Sổ An Toàn Đầu Giờ.'
+            'description': 'Quyền xem, tạo, sửa/xóa sổ của mình và quản lý tất cả Sổ An Toàn Đầu Giờ.'
         }),
         ('Quyền quản lý thiết bị vận hành', {
             'fields': (
@@ -584,4 +588,3 @@ class UserActivityLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-

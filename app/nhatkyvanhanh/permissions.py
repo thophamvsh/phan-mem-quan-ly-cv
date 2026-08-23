@@ -231,6 +231,10 @@ class CanViewSoAnToanDauGio(UserProfilePermission):
     permission_name = "can_view_so_an_toan_dau_gio"
 
 
+class CanCreateSoAnToanDauGio(UserProfilePermission):
+    permission_name = "can_create_so_an_toan_dau_gio"
+
+
 class IsShiftLogCreator(permissions.BasePermission):
     message = "Chi user tao so giao nhan ca moi duoc ky giao ca."
 

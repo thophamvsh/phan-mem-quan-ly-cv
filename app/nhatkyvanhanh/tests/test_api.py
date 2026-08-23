@@ -10,7 +10,12 @@ from rest_framework.test import APITestCase
 from PIL import Image
 from core.models import UserProfile
 from khovattu.models import Bang_nha_may
-from nhatkyvanhanh.models import SogiaonhancaHC, SogiaonhancaVH, SuKien
+from nhatkyvanhanh.models import (
+    SoAnToanDauGio,
+    SogiaonhancaHC,
+    SogiaonhancaVH,
+    SuKien,
+)
 
 User = get_user_model()
 
@@ -117,6 +122,101 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.client.force_authenticate(user=self.creator)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_so_an_toan_create_requires_dedicated_create_permission(self):
+        url = reverse("nhatkyvanhanh:soantoadaugio-list")
+        payload = {
+            "ngay_dong_bo": "2026-08-23",
+            "ca_truc": "ca_ngay",
+            "tinh_trang_an_toan": "An toan",
+        }
+
+        self.viewer_profile.can_view_so_an_toan_dau_gio = True
+        self.viewer_profile.can_create_so_an_toan_dau_gio = False
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.viewer_profile.can_create_so_an_toan_dau_gio = True
+        self.viewer_profile.save()
+        response = self.client.post(url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["nguoi_dong_bo"], self.viewer.id)
+        self.assertEqual(response.data["nha_may"], self.nha_may.id)
+
+    def test_so_an_toan_edit_requires_owner_permission_or_manage_all(self):
+        item = SoAnToanDauGio.objects.create(
+            nha_may=self.nha_may,
+            ngay_dong_bo=date(2026, 8, 23),
+            ca_truc="ca_ngay",
+            tinh_trang_an_toan="Ban dau",
+            nguoi_dong_bo=self.creator,
+        )
+        url = reverse("nhatkyvanhanh:soantoadaugio-detail", args=[item.id])
+
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.patch(url, {"tinh_trang_an_toan": "Lan 1"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_edit_own_so_an_toan_dau_gio = True
+        self.creator_profile.save()
+        response = self.client.patch(url, {"tinh_trang_an_toan": "Chu so sua"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.viewer_profile.can_edit_own_so_an_toan_dau_gio = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.patch(url, {"tinh_trang_an_toan": "Nguoi khac sua"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.manager_profile.can_manage_all_so_an_toan_dau_gio = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(url, {"tinh_trang_an_toan": "Quan ly sua"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_so_an_toan_delete_requires_owner_permission_or_manage_all(self):
+        owner_item = SoAnToanDauGio.objects.create(
+            nha_may=self.nha_may,
+            ngay_dong_bo=date(2026, 8, 23),
+            ca_truc="ca_dem",
+            nguoi_dong_bo=self.creator,
+        )
+        owner_url = reverse(
+            "nhatkyvanhanh:soantoadaugio-detail",
+            args=[owner_item.id],
+        )
+
+        self.viewer_profile.can_delete_own_so_an_toan_dau_gio = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_delete_own_so_an_toan_dau_gio = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        managed_item = SoAnToanDauGio.objects.create(
+            nha_may=self.nha_may,
+            ngay_dong_bo=date(2026, 8, 24),
+            ca_truc="ca_ngay",
+            nguoi_dong_bo=self.creator,
+        )
+        managed_url = reverse(
+            "nhatkyvanhanh:soantoadaugio-detail",
+            args=[managed_item.id],
+        )
+        self.manager_profile.can_manage_all_so_an_toan_dau_gio = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.delete(managed_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_nhatkysukien_rejects_unsupported_image_format(self):
         self.client.force_authenticate(user=self.creator)

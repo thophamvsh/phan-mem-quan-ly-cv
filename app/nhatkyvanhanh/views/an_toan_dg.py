@@ -7,7 +7,7 @@ from django.core.exceptions import PermissionDenied
 from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
 from nhatkyvanhanh.models import SoAnToanDauGio
 from nhatkyvanhanh.serializers import SoAnToanSerializer
-from nhatkyvanhanh.permissions import CanCreateOperationLogbooks, CanViewSoAnToanDauGio, has_profile_permission
+from nhatkyvanhanh.permissions import CanCreateSoAnToanDauGio, CanViewSoAnToanDauGio, has_profile_permission
 
 
 class SoAntoanFilterSet(django_filters.FilterSet):
@@ -37,7 +37,7 @@ class SoAnToanViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         permission_classes = [CanViewSoAnToanDauGio]
         if self.action == "create":
-            permission_classes = [CanViewSoAnToanDauGio, CanCreateOperationLogbooks]
+            permission_classes = [CanViewSoAnToanDauGio, CanCreateSoAnToanDauGio]
 
         return [permission() for permission in permission_classes]
 
@@ -58,18 +58,27 @@ class SoAnToanViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user
         instance = serializer.instance
-        if not (
-            has_profile_permission(user, "can_edit_so_an_toan_dau_gio")
-            or instance.nguoi_dong_bo_id == user.id
-        ):
+        can_manage_all = has_profile_permission(
+            user, "can_manage_all_so_an_toan_dau_gio"
+        )
+        can_edit_own = (
+            instance.nguoi_dong_bo_id == user.id
+            and has_profile_permission(user, "can_edit_own_so_an_toan_dau_gio")
+        )
+        if not (can_manage_all or can_edit_own):
             raise PermissionDenied("Ban khong co quyen chinh sua so an toan dau gio nay.")
         item = serializer.save()
         item.save()
 
     def perform_destroy(self, instance):
-        if not (
-            has_profile_permission(self.request.user, "can_delete_so_an_toan_dau_gio")
-            or instance.nguoi_dong_bo_id == self.request.user.id
-        ):
+        user = self.request.user
+        can_manage_all = has_profile_permission(
+            user, "can_manage_all_so_an_toan_dau_gio"
+        )
+        can_delete_own = (
+            instance.nguoi_dong_bo_id == user.id
+            and has_profile_permission(user, "can_delete_own_so_an_toan_dau_gio")
+        )
+        if not (can_manage_all or can_delete_own):
             raise PermissionDenied("Ban khong co quyen xoa so an toan dau gio nay.")
         return super().perform_destroy(instance)

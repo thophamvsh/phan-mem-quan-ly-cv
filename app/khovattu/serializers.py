@@ -106,8 +106,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_create_weekly_equipment_switch_logs',
                  'can_edit_weekly_equipment_switch_logs',
                  'can_delete_weekly_equipment_switch_logs',
-                 'can_view_so_an_toan_dau_gio', 'can_edit_so_an_toan_dau_gio',
-                 'can_delete_so_an_toan_dau_gio',
+                 'can_view_so_an_toan_dau_gio', 'can_create_so_an_toan_dau_gio', 'can_edit_so_an_toan_dau_gio',
+                 'can_delete_so_an_toan_dau_gio', 'can_edit_own_so_an_toan_dau_gio',
+                 'can_delete_own_so_an_toan_dau_gio', 'can_manage_all_so_an_toan_dau_gio',
                  'can_view_hydrology_data', 'can_create_hydrology_data',
                  'can_edit_hydrology_data', 'can_delete_hydrology_data')
         read_only_fields = ('id', 'username', 'email', 'full_name',
