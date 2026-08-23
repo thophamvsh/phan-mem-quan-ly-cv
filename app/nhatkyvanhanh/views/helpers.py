@@ -567,55 +567,82 @@ def _is_creator_of_diesel_operation_logbook(user, item):
 
 
 def _can_edit_diesel_operation_logbook(user, item):
-    return _is_creator_of_diesel_operation_logbook(user, item)
+    return (
+        has_profile_permission(user, "can_manage_all_diesel_operation_logbooks")
+        or (
+            _is_creator_of_diesel_operation_logbook(user, item)
+            and has_profile_permission(user, "can_edit_own_diesel_operation_logbooks")
+        )
+    )
 
 
 def _can_delete_diesel_operation_logbook(user, item):
     return (
-        has_profile_permission(user, "can_delete_diesel_operation_logbooks")
-        or _is_creator_of_diesel_operation_logbook(user, item)
+        has_profile_permission(user, "can_manage_all_diesel_operation_logbooks")
+        or (
+            _is_creator_of_diesel_operation_logbook(user, item)
+            and has_profile_permission(user, "can_delete_own_diesel_operation_logbooks")
+        )
     )
 
 
 def _can_edit_weekly_equipment_switch_log(user, item):
     return (
-        has_profile_permission(user, "can_edit_weekly_equipment_switch_logs")
-        or bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+        has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+        or (
+            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            and has_profile_permission(user, "can_edit_own_weekly_equipment_switch_logs")
+        )
     )
 
 
 def _can_delete_weekly_equipment_switch_log(user, item):
     return (
-        has_profile_permission(user, "can_delete_weekly_equipment_switch_logs")
-        or bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+        has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+        or (
+            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            and has_profile_permission(user, "can_delete_own_weekly_equipment_switch_logs")
+        )
     )
 
 
 def _can_edit_weekly_equipment_switch_entry(user, lan):
     return (
-        has_profile_permission(user, "can_edit_weekly_equipment_switch_logs")
-        or bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+        has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+        or (
+            bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+            and has_profile_permission(user, "can_edit_own_weekly_equipment_switch_logs")
+        )
     )
 
 
 def _can_delete_weekly_equipment_switch_entry(user, lan):
     return (
-        has_profile_permission(user, "can_delete_weekly_equipment_switch_logs")
-        or bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+        has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+        or (
+            bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+            and has_profile_permission(user, "can_delete_own_weekly_equipment_switch_logs")
+        )
     )
 
 
 def _can_edit_monthly_equipment_switch_log(user, item):
     return (
-        has_profile_permission(user, "can_edit_monthly_equipment_switch_logs")
-        or bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+        has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+        or (
+            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            and has_profile_permission(user, "can_edit_own_monthly_equipment_switch_logs")
+        )
     )
 
 
 def _can_delete_monthly_equipment_switch_log(user, item):
     return (
-        has_profile_permission(user, "can_delete_monthly_equipment_switch_logs")
-        or bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+        has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+        or (
+            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            and has_profile_permission(user, "can_delete_own_monthly_equipment_switch_logs")
+        )
     )
 
 

@@ -452,6 +452,18 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so chuyen doi thiet bi tuan"
     )
+    can_edit_own_weekly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so va lan chuyen doi thiet bi tuan do minh tao"
+    )
+    can_delete_own_weekly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so va lan chuyen doi thiet bi tuan do minh tao"
+    )
+    can_manage_all_weekly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua va xoa tat ca so chuyen doi thiet bi tuan"
+    )
     can_view_monthly_equipment_switch_logs = models.BooleanField(
         default=True,
         help_text="Co quyen xem so chuyen doi TB thang"
@@ -468,6 +480,18 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so chuyen doi TB thang"
     )
+    can_edit_own_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so chuyen doi TB thang do minh tao"
+    )
+    can_delete_own_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so chuyen doi TB thang do minh tao"
+    )
+    can_manage_all_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua va xoa tat ca so chuyen doi TB thang"
+    )
     can_view_diesel_operation_logbooks = models.BooleanField(
         default=True,
         help_text="Co quyen xem so nhat ky van hanh Diesel"
@@ -483,6 +507,18 @@ class UserProfile(models.Model):
     can_delete_diesel_operation_logbooks = models.BooleanField(
         default=False,
         help_text="Co quyen xoa so nhat ky van hanh Diesel"
+    )
+    can_edit_own_diesel_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua so nhat ky van hanh Diesel do minh tao"
+    )
+    can_delete_own_diesel_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa so nhat ky van hanh Diesel do minh tao"
+    )
+    can_manage_all_diesel_operation_logbooks = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua va xoa tat ca so nhat ky van hanh Diesel"
     )
 
     # Phan quyen so BCHC Song Hinh

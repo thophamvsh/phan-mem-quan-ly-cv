@@ -159,15 +159,15 @@ class CanCreateWeeklyEquipmentSwitchLogs(UserProfilePermission):
 
 class CanEditWeeklyEquipmentSwitchLogs(AnyUserProfilePermission):
     permission_names = (
-        "can_edit_weekly_equipment_switch_logs",
-        "can_create_weekly_equipment_switch_logs",
+        "can_edit_own_weekly_equipment_switch_logs",
+        "can_manage_all_weekly_equipment_switch_logs",
     )
 
 
 class CanDeleteWeeklyEquipmentSwitchLogs(AnyUserProfilePermission):
     permission_names = (
-        "can_delete_weekly_equipment_switch_logs",
-        "can_create_weekly_equipment_switch_logs",
+        "can_delete_own_weekly_equipment_switch_logs",
+        "can_manage_all_weekly_equipment_switch_logs",
     )
 
 
@@ -181,15 +181,15 @@ class CanCreateMonthlyEquipmentSwitchLogs(UserProfilePermission):
 
 class CanEditMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
     permission_names = (
-        "can_edit_monthly_equipment_switch_logs",
-        "can_create_monthly_equipment_switch_logs",
+        "can_edit_own_monthly_equipment_switch_logs",
+        "can_manage_all_monthly_equipment_switch_logs",
     )
 
 
 class CanDeleteMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
     permission_names = (
-        "can_delete_monthly_equipment_switch_logs",
-        "can_create_monthly_equipment_switch_logs",
+        "can_delete_own_monthly_equipment_switch_logs",
+        "can_manage_all_monthly_equipment_switch_logs",
     )
 
 
@@ -203,15 +203,15 @@ class CanCreateDieselOperationLogbooks(UserProfilePermission):
 
 class CanEditDieselOperationLogbooks(AnyUserProfilePermission):
     permission_names = (
-        "can_edit_diesel_operation_logbooks",
-        "can_create_diesel_operation_logbooks",
+        "can_edit_own_diesel_operation_logbooks",
+        "can_manage_all_diesel_operation_logbooks",
     )
 
 
 class CanDeleteDieselOperationLogbooks(AnyUserProfilePermission):
     permission_names = (
-        "can_delete_diesel_operation_logbooks",
-        "can_create_diesel_operation_logbooks",
+        "can_delete_own_diesel_operation_logbooks",
+        "can_manage_all_diesel_operation_logbooks",
     )
 
 

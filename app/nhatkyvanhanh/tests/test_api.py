@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 import tempfile
 from django.contrib.auth import get_user_model
@@ -12,6 +12,10 @@ from core.models import UserProfile
 from khovattu.models import Bang_nha_may
 from nhatkyvanhanh.models import (
     SoAnToanDauGio,
+    SoChuyenDoiTBThang,
+    SoChuyenDoiThietBiTuan,
+    LanChuyenDoiThietBi,
+    SonhatkyvanhanhDiesel,
     SogiaonhancaHC,
     SogiaonhancaVH,
     SuKien,
@@ -216,6 +220,291 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.manager_profile.save()
         self.client.force_authenticate(user=self.manager)
         response = self.client.delete(managed_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_diesel_edit_requires_owner_permission_or_manage_all(self):
+        item = SonhatkyvanhanhDiesel.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian=timezone.now(),
+            noi_dung="Ban dau",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sonhatkyvanhanhdiesel-detail",
+            args=[item.id],
+        )
+
+        self.creator_profile.can_edit_own_diesel_operation_logbooks = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.patch(url, {"noi_dung": "Chu so sua"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.viewer_profile.can_edit_own_diesel_operation_logbooks = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.patch(url, {"noi_dung": "Nguoi khac sua"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.manager_profile.can_manage_all_diesel_operation_logbooks = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(url, {"noi_dung": "Quan ly sua"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_diesel_delete_requires_owner_permission_or_manage_all(self):
+        owner_item = SonhatkyvanhanhDiesel.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian=timezone.now(),
+            nguoi_tao=self.creator,
+        )
+        owner_url = reverse(
+            "nhatkyvanhanh:sonhatkyvanhanhdiesel-detail",
+            args=[owner_item.id],
+        )
+
+        self.viewer_profile.can_delete_own_diesel_operation_logbooks = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_delete_own_diesel_operation_logbooks = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        managed_item = SonhatkyvanhanhDiesel.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian=timezone.now(),
+            nguoi_tao=self.creator,
+        )
+        managed_url = reverse(
+            "nhatkyvanhanh:sonhatkyvanhanhdiesel-detail",
+            args=[managed_item.id],
+        )
+        self.manager_profile.can_manage_all_diesel_operation_logbooks = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.delete(managed_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        superuser = User.objects.create_superuser(
+            email="super@example.com",
+            password="testpassword123!",
+            username="superuser",
+        )
+        super_item = SonhatkyvanhanhDiesel.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian=timezone.now(),
+            nguoi_tao=self.creator,
+        )
+        super_url = reverse(
+            "nhatkyvanhanh:sonhatkyvanhanhdiesel-detail",
+            args=[super_item.id],
+        )
+        self.client.force_authenticate(user=superuser)
+        response = self.client.delete(super_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_weekly_switch_edit_requires_owner_permission_or_manage_all(self):
+        item = SoChuyenDoiThietBiTuan.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            tuan=35,
+            ca_truc="A",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sochuyendoithietbituan-detail",
+            args=[item.id],
+        )
+
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.patch(url, {"ca_truc": "B"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_edit_own_weekly_equipment_switch_logs = True
+        self.creator_profile.save()
+        response = self.client.patch(url, {"ca_truc": "B"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.viewer_profile.can_edit_own_weekly_equipment_switch_logs = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.patch(url, {"ca_truc": "C"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.manager_profile.can_manage_all_weekly_equipment_switch_logs = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(url, {"ca_truc": "C"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_weekly_switch_delete_requires_owner_permission_or_manage_all(self):
+        owner_item = SoChuyenDoiThietBiTuan.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            tuan=36,
+            ca_truc="A",
+            nguoi_tao=self.creator,
+        )
+        owner_url = reverse(
+            "nhatkyvanhanh:sochuyendoithietbituan-detail",
+            args=[owner_item.id],
+        )
+
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.viewer_profile.can_delete_own_weekly_equipment_switch_logs = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_delete_own_weekly_equipment_switch_logs = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.delete(owner_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        managed_item = SoChuyenDoiThietBiTuan.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            tuan=37,
+            ca_truc="A",
+            nguoi_tao=self.creator,
+        )
+        managed_url = reverse(
+            "nhatkyvanhanh:sochuyendoithietbituan-detail",
+            args=[managed_item.id],
+        )
+        self.manager_profile.can_manage_all_weekly_equipment_switch_logs = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.delete(managed_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_weekly_switch_entry_requires_executor_permission_or_manage_all(self):
+        item = SoChuyenDoiThietBiTuan.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            tuan=35,
+            ca_truc="D",
+            nguoi_tao=self.creator,
+        )
+        entry = LanChuyenDoiThietBi.objects.create(
+            so=item,
+            thoi_gian=timezone.make_aware(datetime(2026, 8, 24, 8, 0)),
+            nguoi_thuc_hien=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sochuyendoithietbituan-cap-nhat-lan-chuyen-doi",
+            args=[item.id, entry.id],
+        )
+
+        self.creator_profile.can_edit_own_weekly_equipment_switch_logs = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.patch(
+            url,
+            {"ghi_chu_chung": "Nguoi thuc hien sua"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.viewer_profile.can_edit_own_weekly_equipment_switch_logs = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.patch(
+            url,
+            {"ghi_chu_chung": "Nguoi khac sua"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.manager_profile.can_manage_all_weekly_equipment_switch_logs = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(
+            url,
+            {"ghi_chu_chung": "Quan ly sua"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.viewer_profile.can_delete_own_weekly_equipment_switch_logs = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_delete_own_weekly_equipment_switch_logs = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_monthly_switch_edit_requires_owner_permission_or_manage_all(self):
+        item = SoChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            thang=9,
+            ca_truc="A",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sochuyendoitbthang-detail",
+            args=[item.id],
+        )
+
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.patch(url, {"ca_truc": "B"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_edit_own_monthly_equipment_switch_logs = True
+        self.creator_profile.save()
+        response = self.client.patch(url, {"ca_truc": "B"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.viewer_profile.can_edit_own_monthly_equipment_switch_logs = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.patch(url, {"ca_truc": "C"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.manager_profile.can_manage_all_monthly_equipment_switch_logs = True
+        self.manager_profile.save()
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(url, {"ca_truc": "C"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_monthly_switch_delete_requires_owner_permission_or_manage_all(self):
+        item = SoChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            thang=10,
+            ca_truc="A",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sochuyendoitbthang-detail",
+            args=[item.id],
+        )
+
+        self.viewer_profile.can_delete_own_monthly_equipment_switch_logs = True
+        self.viewer_profile.save()
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.creator_profile.can_delete_own_monthly_equipment_switch_logs = True
+        self.creator_profile.save()
+        self.client.force_authenticate(user=self.creator)
+        response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_nhatkysukien_rejects_unsupported_image_format(self):

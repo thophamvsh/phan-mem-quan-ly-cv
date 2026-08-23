@@ -125,26 +125,29 @@ class UserProfileInline(admin.StackedInline):
             'fields': (
                 'can_view_weekly_equipment_switch_logs',
                 'can_create_weekly_equipment_switch_logs',
-                'can_edit_weekly_equipment_switch_logs',
-                'can_delete_weekly_equipment_switch_logs',
+                'can_edit_own_weekly_equipment_switch_logs',
+                'can_delete_own_weekly_equipment_switch_logs',
+                'can_manage_all_weekly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tuần.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tuần.'
         }),
         ('Quyền sổ chuyển đổi thiết bị tháng', {
             'fields': (
                 'can_view_monthly_equipment_switch_logs',
                 'can_create_monthly_equipment_switch_logs',
-                'can_edit_monthly_equipment_switch_logs',
-                'can_delete_monthly_equipment_switch_logs',
+                'can_edit_own_monthly_equipment_switch_logs',
+                'can_delete_own_monthly_equipment_switch_logs',
+                'can_manage_all_monthly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tháng.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
                 'can_view_diesel_operation_logbooks',
                 'can_create_diesel_operation_logbooks',
-                'can_edit_diesel_operation_logbooks',
-                'can_delete_diesel_operation_logbooks',
+                'can_edit_own_diesel_operation_logbooks',
+                'can_delete_own_diesel_operation_logbooks',
+                'can_manage_all_diesel_operation_logbooks',
             ),
             'description': 'Quyền xem, tạo, sửa và xóa Sổ nhật ký vận hành Diesel.'
         }),
@@ -445,26 +448,29 @@ class UserProfileAdmin(admin.ModelAdmin):
             'fields': (
                 'can_view_weekly_equipment_switch_logs',
                 'can_create_weekly_equipment_switch_logs',
-                'can_edit_weekly_equipment_switch_logs',
-                'can_delete_weekly_equipment_switch_logs',
+                'can_edit_own_weekly_equipment_switch_logs',
+                'can_delete_own_weekly_equipment_switch_logs',
+                'can_manage_all_weekly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tuần.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tuần.'
         }),
         ('Quyền sổ chuyển đổi thiết bị tháng', {
             'fields': (
                 'can_view_monthly_equipment_switch_logs',
                 'can_create_monthly_equipment_switch_logs',
-                'can_edit_monthly_equipment_switch_logs',
-                'can_delete_monthly_equipment_switch_logs',
+                'can_edit_own_monthly_equipment_switch_logs',
+                'can_delete_own_monthly_equipment_switch_logs',
+                'can_manage_all_monthly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, sửa và xóa Sổ chuyển đổi thiết bị tháng.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
                 'can_view_diesel_operation_logbooks',
                 'can_create_diesel_operation_logbooks',
-                'can_edit_diesel_operation_logbooks',
-                'can_delete_diesel_operation_logbooks',
+                'can_edit_own_diesel_operation_logbooks',
+                'can_delete_own_diesel_operation_logbooks',
+                'can_manage_all_diesel_operation_logbooks',
             ),
             'description': 'Quyền xem, tạo, sửa và xóa Sổ nhật ký vận hành Diesel.'
         }),
