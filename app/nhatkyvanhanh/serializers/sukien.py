@@ -201,6 +201,7 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
         child=serializers.ImageField(), required=False, write_only=True, max_length=5
     )
     hinh_anh_truoc_su_co_urls = serializers.SerializerMethodField()
+    hinh_anh_truoc_su_co_items = serializers.SerializerMethodField()
     hinh_anh_sau_xu_ly_urls = serializers.SerializerMethodField()
     ten_he_thong_thiet_bi = serializers.CharField(required=False, allow_blank=True)
     thiet_bi = serializers.PrimaryKeyRelatedField(
@@ -280,6 +281,7 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "hinh_anh_truoc_su_co_url",
             "hinh_anh_truoc_su_co_moi",
             "hinh_anh_truoc_su_co_urls",
+            "hinh_anh_truoc_su_co_items",
             "hinh_anh_sau_xu_ly",
             "hinh_anh_sau_xu_ly_url",
             "hinh_anh_sau_xu_ly_urls",
@@ -439,7 +441,10 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
 
     def update(self, instance, validated_data):
         images = validated_data.pop("hinh_anh_truoc_su_co_moi", [])
-        if instance.anh_truoc_su_cos.count() + len(images) > 5:
+        existing_image_count = instance.anh_truoc_su_cos.count()
+        if instance.hinh_anh_truoc_su_co:
+            existing_image_count += 1
+        if existing_image_count + len(images) > 5:
             raise serializers.ValidationError({"hinh_anh_truoc_su_co_moi": "Tối đa 5 ảnh trước sự cố."})
         if "chi_dao" in validated_data and validated_data.get("chi_dao", "") != instance.chi_dao:
             self._apply_chi_dao_signature(validated_data)
@@ -564,6 +569,22 @@ class NhatKySuKienSerializer(serializers.ModelSerializer, UserSummaryMixin):
             url for url in (self._build_file_url(image.hinh_anh) for image in obj.anh_truoc_su_cos.all()) if url
         )
         return urls
+
+    def get_hinh_anh_truoc_su_co_items(self, obj):
+        items = []
+        legacy_url = self._build_file_url(obj.hinh_anh_truoc_su_co)
+        if legacy_url:
+            items.append({"id": "legacy", "url": legacy_url, "is_legacy": True})
+        items.extend(
+            {
+                "id": str(image.id),
+                "url": url,
+                "is_legacy": False,
+            }
+            for image in obj.anh_truoc_su_cos.all()
+            if (url := self._build_file_url(image.hinh_anh))
+        )
+        return items
 
     def get_hinh_anh_sau_xu_ly_url(self, obj):
         return self._build_file_url(obj.hinh_anh_sau_xu_ly)

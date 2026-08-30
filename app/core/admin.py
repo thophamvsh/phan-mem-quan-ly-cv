@@ -58,9 +58,69 @@ class CustomUserChangeForm(UserChangeForm):
         fields = '__all__'
 
 
+class UserProfilePermissionForm(forms.ModelForm):
+    """Treat can_* checkboxes as individual grants when a role is assigned."""
+
+    class Meta:
+        model = UserProfile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance or not self.instance.pk or not self.instance.role_id:
+            return
+
+        individual_permissions = self.instance.individual_permissions or {}
+        role_permissions = self.instance.role.permissions or {}
+        for field_name in self._permission_field_names():
+            if field_name not in self.fields:
+                continue
+            self.fields[field_name].initial = bool(
+                individual_permissions.get(field_name, False)
+            )
+            inherited_text = (
+                " Vai trò hiện đã cấp quyền này."
+                if role_permissions.get(field_name, False)
+                else ""
+            )
+            self.fields[field_name].help_text = (
+                f"{self.fields[field_name].help_text or ''}"
+                f"{inherited_text} Tích chọn để cấp thêm riêng cho cá nhân."
+            ).strip()
+
+    @staticmethod
+    def _permission_field_names():
+        return [
+            field.name
+            for field in UserProfile._meta.fields
+            if isinstance(field, models.BooleanField)
+            and field.name.startswith("can_")
+        ]
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data.get("role"):
+            grants = dict(instance.individual_permissions or {})
+            for field_name in self._permission_field_names():
+                if field_name not in self.fields:
+                    continue
+                if self.cleaned_data.get(field_name, False):
+                    grants[field_name] = True
+                else:
+                    grants.pop(field_name, None)
+            instance.individual_permissions = grants
+        else:
+            instance.individual_permissions = {}
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+
 class UserProfileInline(admin.StackedInline):
     """Show profile media and extra fields directly inside User admin."""
     model = UserProfile
+    form = UserProfilePermissionForm
     can_delete = False
     fk_name = 'user'
     extra = 0
@@ -393,6 +453,7 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin configuration for UserProfile model"""
+    form = UserProfilePermissionForm
     list_display = ('user', 'role', 'full_name', 'phone', 'chuc_danh', 'nha_may', 'is_all_factories', 'is_mobile_user', 'created_at')
     list_filter = ('role', 'is_mobile_user', 'is_all_factories', 'nha_may', 'created_at')
     search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 'phone', 'chuc_danh', 'nha_may__ma_nha_may', 'nha_may__ten_nha_may')

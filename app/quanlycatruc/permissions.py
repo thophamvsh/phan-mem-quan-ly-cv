@@ -6,7 +6,10 @@ def has_profile_permission(user, permission):
         return False
     if user.is_superuser:
         return True
-    return bool(getattr(getattr(user, "profile", None), permission, False))
+    profile = getattr(user, "profile", None)
+    if not profile:
+        return False
+    return profile.has_effective_permission(permission)
 
 
 def can_access_plant(user, plant_id):

@@ -187,6 +187,15 @@ class UserProfile(models.Model):
         verbose_name="Vai trò",
         help_text="Chọn vai trò để tự động đồng bộ quyền. Để trống nếu muốn tự tích chọn quyền thủ công (Tùy chỉnh)."
     )
+    individual_permissions = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Quyền cấp thêm cho cá nhân",
+        help_text=(
+            "Các quyền ngoại lệ được cộng thêm vào quyền của vai trò. "
+            "Không dùng trường này để thu hồi quyền đã có từ vai trò."
+        ),
+    )
     ho_ten = models.CharField(
         max_length=255,
         blank=True,
@@ -810,9 +819,9 @@ class UserProfile(models.Model):
         return None
 
     def apply_role_permissions(self):
-        """Tự động đồng bộ các quyền từ UserRole liên kết (nếu có)."""
+        """Materialize role + individual grants into the legacy can_* fields."""
         if not self.role:
-            # Tương đương với CUSTOM / Tùy chỉnh (giữ nguyên không làm gì)
+            # Hồ sơ tùy chỉnh tiếp tục dùng trực tiếp các trường can_* hiện có.
             return
 
         # Lấy tất cả các trường BooleanField bắt đầu bằng 'can_'
@@ -822,12 +831,28 @@ class UserProfile(models.Model):
         ]
 
         role_permissions = self.role.permissions or {}
+        individual_permissions = self.individual_permissions or {}
         for field in can_fields:
-            # Vai trò chỉ ghi đè những quyền đã khai báo. Quyền mới chưa có
-            # trong JSON của vai trò phải giữ giá trị đang được cấp trực tiếp,
-            # tránh việc lưu hồ sơ làm mất quyền sau khi nâng cấp hệ thống.
             if field in role_permissions:
-                setattr(self, field, bool(role_permissions[field]))
+                setattr(
+                    self,
+                    field,
+                    bool(role_permissions[field])
+                    or bool(individual_permissions.get(field, False)),
+                )
+            elif field in individual_permissions:
+                setattr(self, field, bool(individual_permissions[field]))
+
+    def has_effective_permission(self, permission):
+        """Return the effective custom permission for this profile."""
+        if not permission.startswith("can_"):
+            return False
+        role_permissions = self.role.permissions if self.role else {}
+        return bool(
+            (role_permissions or {}).get(permission, False)
+            or (self.individual_permissions or {}).get(permission, False)
+            or (not self.role and getattr(self, permission, False))
+        )
 
     def save(self, *args, **kwargs):
         """Override save to sync name with User model"""

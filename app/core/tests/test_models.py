@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 import unittest
 from django.db import models
+from django.forms.models import model_to_dict
 
 from core.models import UserProfile, UserRole
 
@@ -204,3 +205,97 @@ class ModelTests(TestCase):
         
         self.assertFalse(profile.can_view_materials)
         self.assertTrue(profile.can_delete_materials)
+
+    def test_individual_permission_is_added_to_role_permissions(self):
+        role = UserRole.objects.create(
+            name="Trưởng ca",
+            permissions={
+                "can_view_shift_schedule": True,
+                "can_approve_shift_schedule": False,
+            },
+        )
+        user = get_user_model().objects.create_user(
+            email="shift-extra@example.com", password="testpass123"
+        )
+        profile = UserProfile.objects.create(
+            user=user,
+            role=role,
+            individual_permissions={"can_approve_shift_schedule": True},
+        )
+        profile.refresh_from_db()
+
+        self.assertTrue(profile.can_view_shift_schedule)
+        self.assertTrue(profile.can_approve_shift_schedule)
+        self.assertTrue(
+            profile.has_effective_permission("can_approve_shift_schedule")
+        )
+
+    def test_role_update_does_not_remove_individual_permission(self):
+        role = UserRole.objects.create(
+            name="Trưởng ca có ngoại lệ",
+            permissions={"can_approve_shift_schedule": False},
+        )
+        user = get_user_model().objects.create_user(
+            email="shift-persist@example.com", password="testpass123"
+        )
+        profile = UserProfile.objects.create(
+            user=user,
+            role=role,
+            individual_permissions={"can_approve_shift_schedule": True},
+        )
+
+        role.permissions = {
+            "can_view_shift_schedule": True,
+            "can_approve_shift_schedule": False,
+        }
+        role.save()
+        profile.refresh_from_db()
+
+        self.assertTrue(profile.can_view_shift_schedule)
+        self.assertTrue(profile.can_approve_shift_schedule)
+        self.assertEqual(
+            profile.individual_permissions,
+            {"can_approve_shift_schedule": True},
+        )
+
+    def test_profile_admin_form_persists_individual_permission(self):
+        from core.admin import UserProfilePermissionForm
+
+        role = UserRole.objects.create(
+            name="Trưởng ca qua Admin",
+            permissions={
+                "can_view_shift_schedule": True,
+                "can_manage_shift_roster": False,
+            },
+        )
+        user = get_user_model().objects.create_user(
+            email="shift-admin@example.com", password="testpass123"
+        )
+        profile = UserProfile.objects.create(user=user, role=role)
+        data = model_to_dict(profile)
+        data = {
+            key: value
+            for key, value in data.items()
+            if not key.startswith("can_")
+        }
+        data.update(
+            {
+                "user": str(user.pk),
+                "role": str(role.pk),
+                "can_manage_shift_roster": True,
+            }
+        )
+
+        form = UserProfilePermissionForm(data=data, instance=profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        profile.refresh_from_db()
+
+        self.assertEqual(
+            profile.individual_permissions.get("can_manage_shift_roster"), True
+        )
+        self.assertTrue(profile.can_manage_shift_roster)
+
+        reopened_form = UserProfilePermissionForm(instance=profile)
+        self.assertTrue(reopened_form.fields["can_manage_shift_roster"].initial)
+        self.assertFalse(reopened_form.fields["can_view_shift_schedule"].initial)

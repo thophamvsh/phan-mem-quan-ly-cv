@@ -16,7 +16,14 @@ from core.factory_scope import (
     get_user_factory,
     has_all_factory_access,
 )
-from nhatkyvanhanh.models import SuKien, ChiDaoSuKien, DienBienSuKien, KhacPhucSuKien, Sonhatkyvanhanh
+from nhatkyvanhanh.models import (
+    AnhTruocSuCo,
+    SuKien,
+    ChiDaoSuKien,
+    DienBienSuKien,
+    KhacPhucSuKien,
+    Sonhatkyvanhanh,
+)
 from nhatkyvanhanh.serializers import (
     NhatKySuKienSerializer,
     ChiDaoSuKienSerializer,
@@ -115,7 +122,7 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         permission_classes = [CanViewOperationEvents]
         if self.action == "create":
             permission_classes = [CanCreateOperationEvents]
-        elif self.action in ["update", "partial_update"]:
+        elif self.action in ["update", "partial_update", "xoa_anh_truoc_su_co"]:
             permission_classes = [CanEditOperationEvents]
         elif self.action == "destroy":
             permission_classes = [CanDeleteOperationEvents]
@@ -193,6 +200,39 @@ class NhatKySuKienViewSet(viewsets.ModelViewSet):
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk"),
         )
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"hinh-anh-truoc-su-co/(?P<image_id>[^/.]+)",
+    )
+    def xoa_anh_truoc_su_co(self, request, pk=None, image_id=None):
+        su_kien = self.get_object()
+        if not _can_edit_event(request.user, su_kien):
+            raise PermissionDenied("Ban khong co quyen xoa anh cua su kien nay.")
+
+        if image_id == "legacy":
+            if not su_kien.hinh_anh_truoc_su_co:
+                return Response(
+                    {"detail": "Anh khong ton tai."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            su_kien.hinh_anh_truoc_su_co.delete(save=False)
+            su_kien.hinh_anh_truoc_su_co = None
+            su_kien.save(update_fields=["hinh_anh_truoc_su_co", "updated_at"])
+        else:
+            try:
+                image = AnhTruocSuCo.objects.get(pk=image_id, su_kien=su_kien)
+            except (AnhTruocSuCo.DoesNotExist, ValueError):
+                return Response(
+                    {"detail": "Anh khong ton tai."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            image.hinh_anh.delete(save=False)
+            image.delete()
+
+        refreshed_event = self.get_queryset().get(pk=su_kien.pk)
+        return Response(self.get_serializer(refreshed_event).data)
 
     @action(detail=True, methods=["post"], url_path="chi-dao")
     def tao_chi_dao(self, request, pk=None):

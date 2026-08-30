@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.test import APITestCase
 
-from core.models import User, UserProfile
+from core.models import User, UserProfile, UserRole
 from tochuc.models import NhaMay
 from nhatkyvanhanh.models import SogiaonhancaHC, SogiaonhancaVH
 from quanlycatruc.models import BoPhan, ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, DonViToChuc, KipTruc, LichTrucCa, MauChuKyCaTruc, NhanSu, NhomLichTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
@@ -214,6 +214,22 @@ class ScheduleApiTests(ScheduleFixtureMixin, APITestCase):
             ma_nhom=code, ten_nhom="Lịch vận hành nhà máy",
         )
         return group, unit, department
+
+    def test_individual_grant_allows_access_when_role_denies_permission(self):
+        role = UserRole.objects.create(
+            name="Nhân viên không có quyền lịch trực",
+            permissions={"can_view_shift_schedule": False},
+        )
+        profile = self.user.profile
+        profile.role = role
+        profile.individual_permissions = {"can_view_shift_schedule": True}
+        profile.save()
+
+        response = self.client.get(
+            f"/api/v1/quanlycatruc/lich-truc/?nha_may={self.plant.id}"
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
 
     def test_can_update_and_delete_unused_shift_group(self):
         group, _, _ = self._create_group("EDIT")

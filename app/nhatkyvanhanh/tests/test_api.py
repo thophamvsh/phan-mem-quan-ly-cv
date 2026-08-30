@@ -20,6 +20,7 @@ from nhatkyvanhanh.models import (
     SogiaonhancaHC,
     SogiaonhancaVH,
     LuuYChiDaoSoGiaoNhanCaVH,
+    AnhTruocSuCo,
     SuKien,
 )
 
@@ -575,6 +576,58 @@ class NhatKyVanHanhAPITests(APITestCase):
             )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(len(response.data["hinh_anh_truoc_su_co_urls"]), 2)
+        self.assertEqual(len(response.data["hinh_anh_truoc_su_co_items"]), 2)
+        self.assertTrue(all(item["id"] for item in response.data["hinh_anh_truoc_su_co_items"]))
+
+    def test_nhatkysukien_creator_can_delete_before_image(self):
+        event = SuKien.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian_xay_ra=timezone.now(),
+            ten_he_thong_thiet_bi="H1",
+            hien_tuong_dien_bien="Test event",
+            nguoi_tao=self.creator,
+        )
+        image_buffer = BytesIO()
+        Image.new("RGB", (20, 20), "white").save(image_buffer, format="JPEG")
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            image = AnhTruocSuCo.objects.create(
+                su_kien=event,
+                hinh_anh=SimpleUploadedFile(
+                    "event.jpg", image_buffer.getvalue(), content_type="image/jpeg"
+                ),
+            )
+            url = reverse(
+                "nhatkyvanhanh:nhatkysukien-xoa-anh-truoc-su-co",
+                kwargs={"pk": event.id, "image_id": image.id},
+            )
+            self.client.force_authenticate(user=self.creator)
+            response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(AnhTruocSuCo.objects.filter(pk=image.id).exists())
+        self.assertEqual(response.data["hinh_anh_truoc_su_co_items"], [])
+
+    def test_nhatkysukien_other_user_cannot_delete_before_image(self):
+        event = SuKien.objects.create(
+            nha_may=self.nha_may,
+            thoi_gian_xay_ra=timezone.now(),
+            ten_he_thong_thiet_bi="H1",
+            hien_tuong_dien_bien="Test event",
+            nguoi_tao=self.creator,
+        )
+        image = AnhTruocSuCo.objects.create(
+            su_kien=event,
+            hinh_anh=SimpleUploadedFile("event.jpg", b"test", content_type="image/jpeg"),
+        )
+        url = reverse(
+            "nhatkyvanhanh:nhatkysukien-xoa-anh-truoc-su-co",
+            kwargs={"pk": event.id, "image_id": image.id},
+        )
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(AnhTruocSuCo.objects.filter(pk=image.id).exists())
 
     def test_nhatkysukien_viewer_cannot_update_or_delete(self):
         event = SuKien.objects.create(
