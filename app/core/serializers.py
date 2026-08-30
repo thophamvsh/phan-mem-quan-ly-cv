@@ -180,6 +180,23 @@ class UserSerializer(serializers.ModelSerializer):
             return False
 
 
+class UserOptionSerializer(serializers.ModelSerializer):
+    """Minimal user representation for operational assignee selectors."""
+
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "full_name")
+        read_only_fields = fields
+
+    def get_full_name(self, obj):
+        try:
+            return obj.profile.full_name
+        except UserProfile.DoesNotExist:
+            return obj.get_full_name() or obj.username
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """Serializer cho thông tin user profile giống kho vật tư"""
     user_id = serializers.IntegerField(source='user.id', read_only=True)

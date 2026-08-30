@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import User, UserProfile
 from core.throttles import LoginRateThrottle
+from tochuc.models import NhaMay
 
 class CoreAPITests(APITestCase):
     def setUp(self):
@@ -61,6 +62,102 @@ class CoreAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
         self.assertTrue('count' in response.data)
+
+
+class UserOptionAPITests(APITestCase):
+    def setUp(self):
+        self.url = reverse("user-options")
+        self.sh = NhaMay.objects.create(
+            ma_nha_may="SH-OPT",
+            ten_nha_may="Sông Hinh",
+        )
+        self.vs = NhaMay.objects.create(
+            ma_nha_may="VS-OPT",
+            ten_nha_may="Vĩnh Sơn",
+        )
+        self.user = User.objects.create_user(
+            username="shift-user",
+            email="shift-user@example.com",
+            password="testpassword123",
+        )
+        self.same_factory_user = User.objects.create_user(
+            username="same-factory-user",
+            email="same-factory-user@example.com",
+            password="testpassword123",
+        )
+        self.other_factory_user = User.objects.create_user(
+            username="other-factory-user",
+            email="other-factory-user@example.com",
+            password="testpassword123",
+        )
+        self.inactive_user = User.objects.create_user(
+            username="inactive-shift-user",
+            email="inactive-shift-user@example.com",
+            password="testpassword123",
+            is_active=False,
+        )
+        for user, factory in (
+            (self.user, self.sh),
+            (self.same_factory_user, self.sh),
+            (self.other_factory_user, self.vs),
+            (self.inactive_user, self.sh),
+        ):
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.nha_may = factory
+            profile.save(update_fields=["nha_may"])
+
+    def test_requires_authentication(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_rejects_user_without_shift_log_permissions(self):
+        profile = self.user.profile
+        for field in UserOptionListPermissionFields:
+            setattr(profile, field, False)
+        profile.save(update_fields=UserOptionListPermissionFields)
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_returns_only_active_users_in_same_factory(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        usernames = {item["username"] for item in response.data}
+        self.assertIn(self.user.username, usernames)
+        self.assertIn(self.same_factory_user.username, usernames)
+        self.assertNotIn(self.other_factory_user.username, usernames)
+        self.assertNotIn(self.inactive_user.username, usernames)
+        self.assertEqual(
+            set(response.data[0]),
+            {"id", "username", "full_name"},
+        )
+
+    def test_all_factories_user_can_see_other_factory(self):
+        profile = self.user.profile
+        profile.is_all_factories = True
+        profile.save(update_fields=["is_all_factories"])
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(self.url)
+
+        usernames = {item["username"] for item in response.data}
+        self.assertIn(self.other_factory_user.username, usernames)
+
+
+UserOptionListPermissionFields = [
+    "can_view_shift_handover_logs",
+    "can_create_shift_handover_logs",
+    "can_receive_shift_handover_logs",
+    "can_view_admin_shift_handover_logs",
+    "can_create_admin_shift_handover_logs",
+    "can_receive_admin_shift_handover_logs",
+]
 
 
 @override_settings(

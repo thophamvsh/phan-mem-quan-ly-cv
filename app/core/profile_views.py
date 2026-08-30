@@ -2,10 +2,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Q
 import time
 
 from .models import User, UserProfile
-from .serializers import UserSerializer, UserProfileSerializer
+from .serializers import UserOptionSerializer, UserSerializer, UserProfileSerializer
 
 class UserProfileAPIView(APIView):
     """API để lấy và cập nhật thông tin profile của user hiện tại"""
@@ -102,3 +104,45 @@ class UserListAPIView(generics.ListAPIView):
             'next': response.data.get('next'),
             'previous': response.data.get('previous')
         }, status=status.HTTP_200_OK)
+
+
+class UserOptionListAPIView(generics.ListAPIView):
+    """Factory-scoped, minimal user list for operational forms."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserOptionSerializer
+    pagination_class = None
+
+    permission_fields = (
+        "can_view_shift_handover_logs",
+        "can_create_shift_handover_logs",
+        "can_receive_shift_handover_logs",
+        "can_view_admin_shift_handover_logs",
+        "can_create_admin_shift_handover_logs",
+        "can_receive_admin_shift_handover_logs",
+    )
+
+    def get_queryset(self):
+        user = self.request.user
+        profile = getattr(user, "profile", None)
+        if not user.is_superuser and not (
+            profile
+            and any(getattr(profile, field, False) for field in self.permission_fields)
+        ):
+            raise PermissionDenied(
+                "Bạn không có quyền lấy danh sách người dùng cho sổ giao ca."
+            )
+
+        queryset = User.objects.filter(is_active=True).select_related(
+            "profile__nha_may"
+        )
+        if user.is_superuser or getattr(profile, "is_all_factories", False):
+            return queryset.order_by("first_name", "last_name", "username")
+
+        factory_id = getattr(profile, "nha_may_id", None)
+        if not factory_id:
+            return queryset.filter(pk=user.pk)
+
+        return queryset.filter(
+            Q(profile__nha_may_id=factory_id) | Q(pk=user.pk)
+        ).distinct().order_by("first_name", "last_name", "username")

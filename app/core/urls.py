@@ -37,6 +37,7 @@ urlpatterns = [
     # ===== Private endpoints (require authentication in view permissions) =====
     path('profile/', profile_views.UserProfileAPIView.as_view(), name='user-profile'),
     path('users/', profile_views.UserListAPIView.as_view(), name='user-list'),
+    path('user-options/', profile_views.UserOptionListAPIView.as_view(), name='user-options'),
     
     path('auth/profile/', profile_views.UserProfileAPIView.as_view(), name='get_user_profile'),
     path('auth/profile/update/', profile_views.UserProfileAPIView.as_view(), name='update_user_profile'),
