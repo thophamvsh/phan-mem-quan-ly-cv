@@ -487,15 +487,15 @@ class LeadershipEventReportTests(TestCase):
     databases = {"default"}
 
     def setUp(self):
-        from khovattu.models import Bang_nha_may
+        from tochuc.models import NhaMay
         from django.contrib.auth import get_user_model
         # Tạo mock user
         User = get_user_model()
         self.user = User.objects.create_user(username="testuser", email="test@example.com", password="SecurePassword123!")
         # Tạo mock các nhà máy
-        self.sh = Bang_nha_may.objects.create(id=1, ma_nha_may="SH", ten_nha_may="Sông Hinh")
-        self.vs = Bang_nha_may.objects.create(id=2, ma_nha_may="VS", ten_nha_may="Vĩnh Sơn")
-        self.tkt = Bang_nha_may.objects.create(id=3, ma_nha_may="TKT", ten_nha_may="Thượng Kon Tum")
+        self.sh = NhaMay.objects.create(id=1, ma_nha_may="SH", ten_nha_may="Sông Hinh")
+        self.vs = NhaMay.objects.create(id=2, ma_nha_may="VS", ten_nha_may="Vĩnh Sơn")
+        self.tkt = NhaMay.objects.create(id=3, ma_nha_may="TKT", ten_nha_may="Thượng Kon Tum")
 
     def test_build_leadership_event_report_statistics_and_pending_list(self):
         from nhatkyvanhanh.models import SuKien

@@ -40,7 +40,7 @@ from django.db.models.deletion import ProtectedError
 
 from .models import (
     Bang_vat_tu, Bang_vi_tri, Bang_kiem_ke,
-    Bang_de_nghi_nhap, Bang_de_nghi_xuat, Bang_nha_may, Bang_xuat_xu
+    Bang_de_nghi_nhap, Bang_de_nghi_xuat, NhaMay, Bang_xuat_xu
 )
 from core.factory_scope import ensure_factory_allowed, filter_queryset_by_factory
 from core.models import UserProfile
@@ -151,16 +151,16 @@ def _get_vi_tri_from_excel(row):
 
     return None
 
-def _get_nha_may_from_row(row) -> Bang_nha_may:
+def _get_nha_may_from_row(row) -> NhaMay:
     code = str(row.get("ma_nha_may") or row.get("nha_may") or "").strip()
     name = str(row.get("ten_nha_may") or "").strip()
     if code:
-        nm = Bang_nha_may.objects.filter(ma_nha_may=code).first()
+        nm = NhaMay.objects.filter(ma_nha_may=code).first()
         if not nm:
             raise ValueError(f"Không tồn tại nhà máy với ma_nha_may='{code}'")
         return nm
     if name:
-        nm = Bang_nha_may.objects.filter(ten_nha_may__iexact=name).first()
+        nm = NhaMay.objects.filter(ten_nha_may__iexact=name).first()
         if not nm:
             raise ValueError(f"Không tồn tại nhà máy với ten_nha_may='{name}'")
         return nm

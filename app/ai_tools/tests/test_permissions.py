@@ -21,7 +21,7 @@ from ai_tools.permissions import (
 )
 from ai_tools.services import _get_tools_and_handlers, _time_of_day_greeting, run_ai_chat
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat, TramDoMuaVrain
 
 
@@ -31,15 +31,15 @@ def _tool(name):
 
 class AiToolFactoryScopeTests(TestCase):
     def setUp(self):
-        self.songhinh = Bang_nha_may.objects.create(
+        self.songhinh = NhaMay.objects.create(
             ma_nha_may="SH",
             ten_nha_may="Song Hinh",
         )
-        self.vinhson = Bang_nha_may.objects.create(
+        self.vinhson = NhaMay.objects.create(
             ma_nha_may="VS",
             ten_nha_may="Vinh Son",
         )
-        self.tkt = Bang_nha_may.objects.create(
+        self.tkt = NhaMay.objects.create(
             ma_nha_may="TKT",
             ten_nha_may="Thuong Kon Tum",
         )

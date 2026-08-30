@@ -11,7 +11,7 @@ class StripForeignKeyWidget(ForeignKeyWidget):
             value = str(value).strip()
         return super().clean(value, row, *args, **kwargs)
 
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
 
 from .models import (
@@ -38,6 +38,8 @@ from .models import (
     SogiaonhancaHC,
     SogiaonhancaVH,
     SoAnToanDauGio,
+    BangPhanCongNhiemVuHC,
+    ChiTietNhiemVuThuTrongTuan,
 )
 
 
@@ -93,7 +95,7 @@ class MauChuyenDoiThietBiResource(resources.ModelResource):
     nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="nha_may",
-        widget=StripForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=StripForeignKeyWidget(NhaMay, "ma_nha_may"),
     )
     thiet_bi = fields.Field(
         column_name="thiet_bi_ma_day_du",
@@ -121,7 +123,7 @@ class MauChuyenDoiTBThangResource(resources.ModelResource):
     nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="nha_may",
-        widget=StripForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=StripForeignKeyWidget(NhaMay, "ma_nha_may"),
     )
     thiet_bi = fields.Field(
         column_name="thiet_bi_ma_day_du",
@@ -152,7 +154,7 @@ class SoChuyenDoiTBThangResource(resources.ModelResource):
     nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="nha_may",
-        widget=StripForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=StripForeignKeyWidget(NhaMay, "ma_nha_may"),
     )
     nguoi_tao = fields.Field(
         column_name="nguoi_tao_email",
@@ -391,6 +393,7 @@ class KhacPhucSuKienAdmin(admin.ModelAdmin):
 class SogiaonhancaVHAdmin(admin.ModelAdmin):
     list_display = (
         "ngay_truc",
+        "nha_may",
         "ca_truc",
         "dia_diem",
         "nguoi_tao",
@@ -400,7 +403,7 @@ class SogiaonhancaVHAdmin(admin.ModelAdmin):
         "co_chu_ky",
         "created_at",
     )
-    list_filter = ("ca_truc", "trang_thai", "ngay_truc", "created_at")
+    list_filter = ("nha_may", "ca_truc", "trang_thai", "ngay_truc", "created_at")
     search_fields = (
         "dia_diem",
         "truc_chinh",
@@ -410,7 +413,10 @@ class SogiaonhancaVHAdmin(admin.ModelAdmin):
         "noi_dung_chi_tiets__noi_dung",
         "user_giao_ca__email",
         "user_nhan_ca__email",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
     )
+    list_select_related = ("nha_may", "nguoi_tao", "user_giao_ca", "user_nhan_ca")
     readonly_fields = ("nguoi_tao", "chu_ky_user_giao_ca", "chu_ky_user_nhan_ca", "created_at", "updated_at")
     exclude = ("chu_ky_user_giao_ca", "chu_ky_user_nhan_ca")
     inlines = [
@@ -444,6 +450,7 @@ class LuuYChiDaoSoGiaoNhanCaVHAdmin(admin.ModelAdmin):
 class SogiaonhancaHCAdmin(admin.ModelAdmin):
     list_display = (
         "ngay_truc",
+        "nha_may",
         "dia_diem",
         "nguoi_tao",
         "user_giao_ca",
@@ -452,7 +459,7 @@ class SogiaonhancaHCAdmin(admin.ModelAdmin):
         "co_chu_ky",
         "created_at",
     )
-    list_filter = ("trang_thai", "ngay_truc", "created_at")
+    list_filter = ("nha_may", "trang_thai", "ngay_truc", "created_at")
     search_fields = (
         "dia_diem",
         "nguoi_truc",
@@ -462,7 +469,10 @@ class SogiaonhancaHCAdmin(admin.ModelAdmin):
         "noi_dung_chi_tiets__noi_dung",
         "user_giao_ca__email",
         "user_nhan_ca__email",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
     )
+    list_select_related = ("nha_may", "nguoi_tao", "user_giao_ca", "user_nhan_ca")
     readonly_fields = ("nguoi_tao", "chu_ky_user_giao_ca", "chu_ky_user_nhan_ca", "created_at", "updated_at")
     exclude = ("chu_ky_user_giao_ca", "chu_ky_user_nhan_ca")
     inlines = [NguoiTrucSoGiaoNhanCaHCInline, ChiTietSoGiaoNhanCaHCInline]
@@ -754,3 +764,24 @@ class SoChuyenDoiTBThangAdmin(
     )
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
     inlines = [ChiTietChuyenDoiTBThangInline]
+
+
+class ChiTietNhiemVuThuTrongTuanInline(admin.TabularInline):
+    model = ChiTietNhiemVuThuTrongTuan
+    extra = 0
+    fields = ("stt", "thu", "noi_dung_nhiem_vu")
+
+
+@admin.register(BangPhanCongNhiemVuHC)
+class BangPhanCongNhiemVuHCAdmin(admin.ModelAdmin):
+    list_display = ("nam", "thang", "nha_may", "tieu_de", "ngay_lap", "nguoi_tao", "created_at")
+    list_filter = ("nam", "thang", "nha_may", "created_at")
+    search_fields = (
+        "tieu_de",
+        "nha_may__ma_nha_may",
+        "nha_may__ten_nha_may",
+        "nguoi_tao__email",
+        "nguoi_tao__username",
+    )
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+    inlines = [ChiTietNhiemVuThuTrongTuanInline]

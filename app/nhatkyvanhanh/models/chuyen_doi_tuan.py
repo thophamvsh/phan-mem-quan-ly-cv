@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from .base import TimestampedUUIDModel, _current_year
+from .base import TimestampedUUIDModel, _current_year, _lay_chu_ky_profile
 
 class MauChuyenDoiThietBi(TimestampedUUIDModel):
     class ToMay(models.TextChoices):
@@ -12,33 +12,34 @@ class MauChuyenDoiThietBi(TimestampedUUIDModel):
         TU_DUNG = "tu_dung", "Tự dùng"
 
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="mau_chuyen_doi_thiet_bi",
         null=True,
         blank=True,
         verbose_name="Nhà máy",
     )
-    to_may = models.CharField(max_length=20, choices=ToMay.choices)
-    nhom_thiet_bi = models.CharField(max_length=255, blank=True)
+    to_may = models.CharField(max_length=20, choices=ToMay.choices, verbose_name="Tổ máy")
+    nhom_thiet_bi = models.CharField(max_length=255, blank=True, verbose_name="Nhóm thiết bị")
     thiet_bi = models.ForeignKey(
         "quanlyvanhanh.ThietBi",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="mau_chuyen_doi_thiet_bi",
+        verbose_name="Thiết bị liên kết",
     )
-    thu_tu = models.PositiveIntegerField(default=1)
-    dang_su_dung = models.BooleanField(default=True)
+    thu_tu = models.PositiveIntegerField(default=0, verbose_name="Thứ tự hiển thị")
+    dang_su_dung = models.BooleanField(default=True, verbose_name="Đang sử dụng")
 
     class Meta:
-        ordering = ["nha_may", "to_may", "thu_tu", "created_at"]
+        ordering = ["to_may", "thu_tu", "created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["nha_may", "thiet_bi"],
-                name="uq_mau_chuyen_doi_thiet_bi_nha_may_thiet_bi",
+                fields=["nha_may", "to_may", "thiet_bi"],
+                name="uq_mau_chuyen_doi_thiet_bi_nha_may_to_may_tb",
             )
         ]
-        verbose_name = "Mẫu chuyển đổi thiết bị"
-        verbose_name_plural = "Mẫu chuyển đổi thiết bị"
+        verbose_name = "Mẫu chuyển đổi thiết bị tuần"
+        verbose_name_plural = "Mẫu chuyển đổi thiết bị tuần"
 
     def __str__(self):
         return f"{self.get_to_may_display()} - {self.thiet_bi}"
@@ -51,13 +52,17 @@ class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
         C = "C", "Ca C"
         D = "D", "Ca D"
 
-    nam = models.PositiveSmallIntegerField(default=_current_year)
-    tuan = models.PositiveSmallIntegerField(default=1)
-    ca_truc = models.CharField(max_length=1, choices=CaTruc.choices, default=CaTruc.A)
-    tuan_bat_dau = models.DateField()
-    tuan_ket_thuc = models.DateField()
+    class TrangThai(models.TextChoices):
+        CHO_DUYET = "cho_duyet", "Chờ duyệt"
+        DA_DUYET = "da_duyet", "Đã duyệt"
+
+    nam = models.PositiveSmallIntegerField(default=_current_year, verbose_name="Năm")
+    tuan = models.PositiveSmallIntegerField(default=1, verbose_name="Tuần")
+    ca_truc = models.CharField(max_length=1, choices=CaTruc.choices, default=CaTruc.A, verbose_name="Ca trực")
+    tuan_bat_dau = models.DateField(verbose_name="Ngày bắt đầu tuần")
+    tuan_ket_thuc = models.DateField(verbose_name="Ngày kết thúc tuần")
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_chuyen_doi_thiet_bi_tuan",
         null=True,
@@ -70,6 +75,42 @@ class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
         related_name="so_chuyen_doi_thiet_bi_tuan_da_tao",
         null=True,
         blank=True,
+        verbose_name="Người tạo sổ",
+    )
+    trang_thai = models.CharField(
+        max_length=20,
+        choices=TrangThai.choices,
+        default=TrangThai.CHO_DUYET,
+        verbose_name="Trạng thái",
+    )
+    nguoi_duyet = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="so_chuyen_doi_tuan_da_duyet",
+        null=True,
+        blank=True,
+        verbose_name="Người duyệt / Trưởng ca / Quản đốc",
+    )
+    duyet_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Thời điểm duyệt",
+    )
+    ghi_chu_duyet = models.TextField(
+        blank=True,
+        verbose_name="Ý kiến phê duyệt",
+    )
+    chu_ky_nguoi_tao = models.ImageField(
+        upload_to="operations/so_chuyen_doi_tuan/chu_ky/nguoi_tao/",
+        null=True,
+        blank=True,
+        verbose_name="Chữ ký người lập sổ",
+    )
+    chu_ky_nguoi_duyet = models.ImageField(
+        upload_to="operations/so_chuyen_doi_tuan/chu_ky/nguoi_duyet/",
+        null=True,
+        blank=True,
+        verbose_name="Chữ ký người duyệt",
     )
 
     class Meta:
@@ -80,29 +121,49 @@ class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
                 name="uq_so_chuyen_doi_thiet_bi_tuan_nha_may_nam_tuan_ca",
             )
         ]
-        verbose_name = "Sổ chuyển đổi thiết bị tuần"
-        verbose_name_plural = "Sổ chuyển đổi thiết bị tuần"
+        verbose_name = "Sổ theo dõi chuyển đổi thiết bị tuần"
+        verbose_name_plural = "Sổ theo dõi chuyển đổi thiết bị tuần"
+
+    @property
+    def da_khoa(self):
+        return bool(self.nguoi_duyet_id and self.duyet_at) or self.trang_thai == self.TrangThai.DA_DUYET
+
+    def dong_bo_chu_ky_tu_user(self):
+        if self.nguoi_tao_id and not self.chu_ky_nguoi_tao:
+            chu_ky = _lay_chu_ky_profile(self.nguoi_tao)
+            self.chu_ky_nguoi_tao = chu_ky.name if chu_ky else None
+
+        if self.duyet_at and self.nguoi_duyet_id and not self.chu_ky_nguoi_duyet:
+            chu_ky = _lay_chu_ky_profile(self.nguoi_duyet)
+            self.chu_ky_nguoi_duyet = chu_ky.name if chu_ky else None
+        elif not self.duyet_at:
+            self.chu_ky_nguoi_duyet = None
 
     def _cap_nhat_khoang_thoi_gian_tuan(self):
         if self.nam < 2000 or self.nam > 2100:
-            raise ValidationError({"nam": "Nam khong hop le."})
+            raise ValidationError({"nam": "Năm không hợp lệ."})
         if self.tuan < 1 or self.tuan > 53:
-            raise ValidationError({"tuan": "Tuan phai nam trong khoang 1-53."})
+            raise ValidationError({"tuan": "Tuần phải nằm trong khoảng 1-53."})
         try:
             week_start = date.fromisocalendar(self.nam, self.tuan, 1)
         except ValueError:
-            raise ValidationError({"tuan": "Tuan khong hop le voi nam da chon."})
+            raise ValidationError({"tuan": "Tuần không hợp lệ với năm đã chọn."})
         self.tuan_bat_dau = week_start
         self.tuan_ket_thuc = date.fromisocalendar(self.nam, self.tuan, 7)
 
     def clean(self):
         self._cap_nhat_khoang_thoi_gian_tuan()
         if self.tuan_bat_dau and self.tuan_ket_thuc and self.tuan_ket_thuc < self.tuan_bat_dau:
-            raise ValidationError({"tuan_ket_thuc": "Tuan ket thuc phai lon hon hoac bang tuan bat dau."})
+            raise ValidationError({"tuan_ket_thuc": "Ngày kết thúc tuần phải lớn hơn hoặc bằng ngày bắt đầu."})
 
     def save(self, *args, **kwargs):
         self._cap_nhat_khoang_thoi_gian_tuan()
+        self.dong_bo_chu_ky_tu_user()
         self.full_clean()
+        if self.duyet_at and self.nguoi_duyet_id:
+            self.trang_thai = self.TrangThai.DA_DUYET
+        elif not self.duyet_at and not self.nguoi_duyet_id and self.trang_thai == self.TrangThai.DA_DUYET:
+            self.trang_thai = self.TrangThai.CHO_DUYET
         return super().save(*args, **kwargs)
 
     def __str__(self):
@@ -114,34 +175,36 @@ class LanChuyenDoiThietBi(TimestampedUUIDModel):
         SoChuyenDoiThietBiTuan,
         on_delete=models.CASCADE,
         related_name="lan_chuyen_dois",
+        verbose_name="Sổ chuyển đổi tuần",
     )
-    thoi_gian = models.DateTimeField(default=timezone.now)
+    thoi_gian = models.DateTimeField(default=timezone.now, verbose_name="Thời gian chuyển đổi")
     nguoi_thuc_hien = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="lan_chuyen_doi_thiet_bi_da_thuc_hien",
         null=True,
         blank=True,
+        verbose_name="Người thực hiện",
     )
-    ghi_chu_chung = models.TextField(blank=True)
+    ghi_chu_chung = models.TextField(blank=True, verbose_name="Ghi chú chung")
 
     class Meta:
         ordering = ["thoi_gian", "created_at"]
-        verbose_name = "Lần chuyển đổi thiết bị"
-        verbose_name_plural = "Lần chuyển đổi thiết bị"
+        verbose_name = "Lần chuyển đổi thiết bị tuần"
+        verbose_name_plural = "Lần chuyển đổi thiết bị tuần"
 
     def clean(self):
         if self.so_id and self.thoi_gian:
             thoi_gian_date = timezone.localtime(self.thoi_gian).date() if timezone.is_aware(self.thoi_gian) else self.thoi_gian.date()
             if thoi_gian_date < self.so.tuan_bat_dau or thoi_gian_date > self.so.tuan_ket_thuc:
-                raise ValidationError({"thoi_gian": "Thoi gian chuyen doi phai nam trong tuan cua so."})
+                raise ValidationError({"thoi_gian": "Thời gian chuyển đổi phải nằm trong tuần của sổ."})
 
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Lan chuyen doi {self.thoi_gian:%Y-%m-%d %H:%M}"
+        return f"Lần chuyển đổi {self.thoi_gian:%Y-%m-%d %H:%M}"
 
 
 class ChiTietChuyenDoiThietBi(TimestampedUUIDModel):
@@ -153,21 +216,24 @@ class ChiTietChuyenDoiThietBi(TimestampedUUIDModel):
         LanChuyenDoiThietBi,
         on_delete=models.CASCADE,
         related_name="chi_tiets",
+        verbose_name="Lần chuyển đổi",
     )
     thiet_bi = models.ForeignKey(
         "quanlyvanhanh.ThietBi",
         on_delete=models.PROTECT,
         related_name="chi_tiet_chuyen_doi_thiet_bi",
+        verbose_name="Thiết bị",
     )
-    to_may = models.CharField(max_length=20, choices=MauChuyenDoiThietBi.ToMay.choices)
-    nhom_thiet_bi = models.CharField(max_length=255, blank=True)
+    to_may = models.CharField(max_length=20, choices=MauChuyenDoiThietBi.ToMay.choices, verbose_name="Tổ máy")
+    nhom_thiet_bi = models.CharField(max_length=255, blank=True, verbose_name="Nhóm thiết bị")
     trang_thai = models.CharField(
         max_length=20,
         choices=TrangThai.choices,
         blank=True,
+        verbose_name="Trạng thái chuyển đổi",
     )
-    ghi_chu = models.TextField(blank=True)
-    thu_tu = models.PositiveIntegerField(default=1)
+    ghi_chu = models.TextField(blank=True, verbose_name="Ghi chú")
+    thu_tu = models.PositiveIntegerField(default=1, verbose_name="Thứ tự")
 
     class Meta:
         ordering = ["to_may", "thu_tu", "created_at"]
@@ -177,8 +243,8 @@ class ChiTietChuyenDoiThietBi(TimestampedUUIDModel):
                 name="uq_chi_tiet_chuyen_doi_lan_thiet_bi",
             )
         ]
-        verbose_name = "Chi tiết chuyển đổi thiết bị"
-        verbose_name_plural = "Chi tiết chuyển đổi thiết bị"
+        verbose_name = "Chi tiết chuyển đổi thiết bị tuần"
+        verbose_name_plural = "Chi tiết chuyển đổi thiết bị tuần"
 
     def __str__(self):
-        return f"{self.thiet_bi} - {self.get_trang_thai_display() or 'Chua chon'}"
+        return f"{self.thiet_bi} - {self.get_trang_thai_display() or 'Chưa chọn'}"

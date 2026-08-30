@@ -112,6 +112,15 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca HC.'
         }),
+        ('Quyền bảng phân công nhiệm vụ ca KT-HC', {
+            'fields': (
+                'can_view_admin_shift_duty_rosters',
+                'can_create_admin_shift_duty_rosters',
+                'can_edit_admin_shift_duty_rosters',
+                'can_delete_admin_shift_duty_rosters',
+            ),
+            'description': 'Quyền xem, tạo, sửa và xóa Bảng phân công nhiệm vụ ca trực KT-HC theo tháng.'
+        }),
         ('Quyền sổ nhật ký vận hành', {
             'fields': (
                 'can_view_operation_logbooks',
@@ -122,15 +131,34 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
+        ('Quyền mẫu chuyển đổi thiết bị tuần', {
+            'fields': (
+                'can_view_weekly_equipment_switch_templates',
+                'can_create_weekly_equipment_switch_templates',
+                'can_edit_weekly_equipment_switch_templates',
+                'can_delete_weekly_equipment_switch_templates',
+            ),
+            'description': 'Quyền xem cấu hình mẫu, thêm thiết bị vào mẫu, sửa và xóa thiết bị khỏi mẫu chuyển đổi thiết bị tuần.'
+        }),
         ('Quyền sổ chuyển đổi thiết bị tuần', {
             'fields': (
                 'can_view_weekly_equipment_switch_logs',
                 'can_create_weekly_equipment_switch_logs',
                 'can_edit_own_weekly_equipment_switch_logs',
                 'can_delete_own_weekly_equipment_switch_logs',
+                'can_confirm_weekly_equipment_switch_logs',
                 'can_manage_all_weekly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tuần.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình, duyệt khóa sổ hoặc quản lý tất cả Sổ chuyển đổi thiết bị tuần.'
+        }),
+        ('Quyền mẫu chuyển đổi thiết bị tháng', {
+            'fields': (
+                'can_view_monthly_equipment_switch_templates',
+                'can_create_monthly_equipment_switch_templates',
+                'can_edit_monthly_equipment_switch_templates',
+                'can_delete_monthly_equipment_switch_templates',
+            ),
+            'description': 'Quyền xem cấu hình mẫu, thêm thiết bị vào mẫu, sửa và xóa thiết bị khỏi mẫu chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ chuyển đổi thiết bị tháng', {
             'fields': (
@@ -138,9 +166,10 @@ class UserProfileInline(admin.StackedInline):
                 'can_create_monthly_equipment_switch_logs',
                 'can_edit_own_monthly_equipment_switch_logs',
                 'can_delete_own_monthly_equipment_switch_logs',
+                'can_confirm_monthly_equipment_switch_logs',
                 'can_manage_all_monthly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tháng.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình, duyệt khóa sổ hoặc quản lý tất cả Sổ chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
@@ -236,6 +265,14 @@ class UserProfileInline(admin.StackedInline):
                 'can_use_ai_documents',
             ),
             'description': 'Quyền sử dụng kho tài liệu AI, tìm kiếm RAG và xem tài liệu.'
+        }),
+        ('Quyền quản lý lịch trực ca', {
+            'fields': (
+                'can_view_shift_schedule', 'can_create_shift_schedule',
+                'can_edit_shift_schedule', 'can_delete_shift_schedule',
+                'can_submit_shift_schedule', 'can_approve_shift_schedule',
+                'can_manage_shift_roster', 'can_export_shift_schedule',
+            ),
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
@@ -436,6 +473,15 @@ class UserProfileAdmin(admin.ModelAdmin):
             ),
             'description': 'Quyền xem, tạo, nhận ca, sửa và xóa Sổ giao nhận ca HC.'
         }),
+        ('Quyền bảng phân công nhiệm vụ ca KT-HC', {
+            'fields': (
+                'can_view_admin_shift_duty_rosters',
+                'can_create_admin_shift_duty_rosters',
+                'can_edit_admin_shift_duty_rosters',
+                'can_delete_admin_shift_duty_rosters',
+            ),
+            'description': 'Quyền xem, tạo, sửa và xóa Bảng phân công nhiệm vụ ca trực KT-HC theo tháng.'
+        }),
         ('Quyền sổ nhật ký vận hành', {
             'fields': (
                 'can_view_operation_logbooks',
@@ -446,15 +492,34 @@ class UserProfileAdmin(admin.ModelAdmin):
             ),
             'description': 'Quyền xem, tạo, xác nhận, sửa và xóa Sổ nhật ký vận hành.'
         }),
+        ('Quyền mẫu chuyển đổi thiết bị tuần', {
+            'fields': (
+                'can_view_weekly_equipment_switch_templates',
+                'can_create_weekly_equipment_switch_templates',
+                'can_edit_weekly_equipment_switch_templates',
+                'can_delete_weekly_equipment_switch_templates',
+            ),
+            'description': 'Quyền xem cấu hình mẫu, thêm thiết bị vào mẫu, sửa và xóa thiết bị khỏi mẫu chuyển đổi thiết bị tuần.'
+        }),
         ('Quyền sổ chuyển đổi thiết bị tuần', {
             'fields': (
                 'can_view_weekly_equipment_switch_logs',
                 'can_create_weekly_equipment_switch_logs',
                 'can_edit_own_weekly_equipment_switch_logs',
                 'can_delete_own_weekly_equipment_switch_logs',
+                'can_confirm_weekly_equipment_switch_logs',
                 'can_manage_all_weekly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tuần.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình, duyệt khóa sổ hoặc quản lý tất cả Sổ chuyển đổi thiết bị tuần.'
+        }),
+        ('Quyền mẫu chuyển đổi thiết bị tháng', {
+            'fields': (
+                'can_view_monthly_equipment_switch_templates',
+                'can_create_monthly_equipment_switch_templates',
+                'can_edit_monthly_equipment_switch_templates',
+                'can_delete_monthly_equipment_switch_templates',
+            ),
+            'description': 'Quyền xem cấu hình mẫu, thêm thiết bị vào mẫu, sửa và xóa thiết bị khỏi mẫu chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ chuyển đổi thiết bị tháng', {
             'fields': (
@@ -462,9 +527,10 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_create_monthly_equipment_switch_logs',
                 'can_edit_own_monthly_equipment_switch_logs',
                 'can_delete_own_monthly_equipment_switch_logs',
+                'can_confirm_monthly_equipment_switch_logs',
                 'can_manage_all_monthly_equipment_switch_logs',
             ),
-            'description': 'Quyền xem, tạo, thao tác sổ của mình hoặc quản lý tất cả Sổ chuyển đổi thiết bị tháng.'
+            'description': 'Quyền xem, tạo, thao tác sổ của mình, duyệt khóa sổ hoặc quản lý tất cả Sổ chuyển đổi thiết bị tháng.'
         }),
         ('Quyền sổ nhật ký vận hành Diesel', {
             'fields': (
@@ -556,6 +622,15 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_use_ai_documents',
             ),
             'description': 'Quyền sử dụng kho tài liệu AI, tìm kiếm RAG và xem tài liệu.'
+        }),
+        ('Quyền quản lý lịch trực ca', {
+            'fields': (
+                'can_view_shift_schedule', 'can_create_shift_schedule',
+                'can_edit_shift_schedule', 'can_delete_shift_schedule',
+                'can_submit_shift_schedule', 'can_approve_shift_schedule',
+                'can_manage_shift_roster', 'can_export_shift_schedule',
+            ),
+            'description': 'Quyền xem, lập, quản lý kíp, phê duyệt và xuất lịch trực ca.'
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

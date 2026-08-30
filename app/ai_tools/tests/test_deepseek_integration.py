@@ -49,14 +49,14 @@ class AiChatAPIVerificationTests(APITestCase):
 
     def setUp(self):
         from core.models import UserProfile
-        from khovattu.models import Bang_nha_may
+        from tochuc.models import NhaMay
 
         self.user = User.objects.create_user(
             username="testuser",
             email="testuser@example.com",
             password="ComplexSecurePassword999!"
         )
-        self.nha_may = Bang_nha_may.objects.create(
+        self.nha_may = NhaMay.objects.create(
             ma_nha_may="SH",
             ten_nha_may="Song Hinh",
         )

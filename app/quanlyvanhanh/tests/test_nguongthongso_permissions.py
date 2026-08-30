@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import NguongThongSo
 
 
@@ -122,8 +122,8 @@ class NguongThongSoPermissionTests(APITestCase):
 
 class NguongThongSoFactoryScopeTests(APITestCase):
     def setUp(self):
-        self.vs_factory = Bang_nha_may.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
-        self.sh_factory = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.vs_factory = NhaMay.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
+        self.sh_factory = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
 
         User = get_user_model()
         self.vs_user = User.objects.create_user(

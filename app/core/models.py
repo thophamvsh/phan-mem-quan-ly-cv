@@ -230,7 +230,7 @@ class UserProfile(models.Model):
     )
     # Phân quyền nhà máy
     nha_may = models.ForeignKey(
-        'khovattu.Bang_nha_may',
+        'tochuc.NhaMay',
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
@@ -367,6 +367,16 @@ class UserProfile(models.Model):
 
 
 
+    # Phân quyền quản lý lịch trực ca
+    can_view_shift_schedule = models.BooleanField(default=False, help_text="Có quyền xem lịch trực ca")
+    can_create_shift_schedule = models.BooleanField(default=False, help_text="Có quyền tạo và sinh lịch trực ca")
+    can_edit_shift_schedule = models.BooleanField(default=False, help_text="Có quyền sửa lịch trực ca dự thảo")
+    can_delete_shift_schedule = models.BooleanField(default=False, help_text="Có quyền xóa lịch trực ca dự thảo")
+    can_submit_shift_schedule = models.BooleanField(default=False, help_text="Có quyền gửi duyệt lịch trực ca")
+    can_approve_shift_schedule = models.BooleanField(default=False, help_text="Có quyền duyệt, áp dụng và khóa lịch trực ca")
+    can_manage_shift_roster = models.BooleanField(default=False, help_text="Có quyền quản lý kíp và thành viên")
+    can_export_shift_schedule = models.BooleanField(default=False, help_text="Có quyền xuất lịch trực ca")
+
     # Phan quyen nhat ky van hanh - so giao nhan ca
     can_view_shift_handover_logs = models.BooleanField(
         default=True,
@@ -428,6 +438,22 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so giao nhan ca hanh chinh"
     )
+    can_view_admin_shift_duty_rosters = models.BooleanField(
+        default=True,
+        help_text="Co quyen xem bang phan cong nhiem vu ca hanh chinh"
+    )
+    can_create_admin_shift_duty_rosters = models.BooleanField(
+        default=False,
+        help_text="Co quyen tao bang phan cong nhiem vu ca hanh chinh"
+    )
+    can_edit_admin_shift_duty_rosters = models.BooleanField(
+        default=False,
+        help_text="Co quyen sua bang phan cong nhiem vu ca hanh chinh"
+    )
+    can_delete_admin_shift_duty_rosters = models.BooleanField(
+        default=False,
+        help_text="Co quyen xoa bang phan cong nhiem vu ca hanh chinh"
+    )
     can_view_operation_logbooks = models.BooleanField(
         default=True,
         help_text="Co quyen xem so nhat ky van hanh"
@@ -448,61 +474,131 @@ class UserProfile(models.Model):
         default=False,
         help_text="Co quyen xoa so nhat ky van hanh"
     )
+    # Phân quyền mẫu chuyển đổi thiết bị tuần
+    can_view_weekly_equipment_switch_templates = models.BooleanField(
+        default=True,
+        verbose_name="Xem mẫu chuyển đổi thiết bị tuần",
+        help_text="Có quyền xem cấu hình danh mục mẫu chuyển đổi thiết bị tuần"
+    )
+    can_create_weekly_equipment_switch_templates = models.BooleanField(
+        default=False,
+        verbose_name="Thêm thiết bị vào mẫu tuần",
+        help_text="Có quyền thêm thiết bị mới vào mẫu chuyển đổi thiết bị tuần"
+    )
+    can_edit_weekly_equipment_switch_templates = models.BooleanField(
+        default=False,
+        verbose_name="Sửa mẫu chuyển đổi thiết bị tuần",
+        help_text="Có quyền chỉnh sửa thông tin thiết bị trong mẫu chuyển đổi thiết bị tuần"
+    )
+    can_delete_weekly_equipment_switch_templates = models.BooleanField(
+        default=False,
+        verbose_name="Xóa thiết bị khỏi mẫu tuần",
+        help_text="Có quyền xóa thiết bị khỏi mẫu chuyển đổi thiết bị tuần"
+    )
+
+    # Phân quyền sổ chuyển đổi thiết bị tuần
     can_view_weekly_equipment_switch_logs = models.BooleanField(
         default=True,
-        help_text="Co quyen xem so chuyen doi thiet bi tuan"
+        verbose_name="Xem sổ chuyển đổi thiết bị tuần",
+        help_text="Có quyền xem sổ chuyển đổi thiết bị tuần"
     )
     can_create_weekly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen tao so chuyen doi thiet bi tuan"
+        verbose_name="Tạo sổ chuyển đổi thiết bị tuần",
+        help_text="Có quyền tạo sổ chuyển đổi thiết bị tuần"
     )
     can_edit_weekly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua so chuyen doi thiet bi tuan"
+        verbose_name="Sửa sổ chuyển đổi thiết bị tuần",
+        help_text="Có quyền sửa sổ chuyển đổi thiết bị tuần"
     )
     can_delete_weekly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen xoa so chuyen doi thiet bi tuan"
+        verbose_name="Xóa sổ chuyển đổi thiết bị tuần",
+        help_text="Có quyền xóa sổ chuyển đổi thiết bị tuần"
     )
     can_edit_own_weekly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua so va lan chuyen doi thiet bi tuan do minh tao"
+        verbose_name="Sửa sổ tuần do mình tạo",
+        help_text="Có quyền sửa sổ và lần chuyển đổi thiết bị tuần do mình tạo"
     )
     can_delete_own_weekly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen xoa so va lan chuyen doi thiet bi tuan do minh tao"
+        verbose_name="Xóa sổ tuần do mình tạo",
+        help_text="Có quyền xóa sổ và lần chuyển đổi thiết bị tuần do mình tạo"
+    )
+    can_confirm_weekly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        verbose_name="Duyệt / Xác nhận sổ chuyển đổi thiết bị tuần",
+        help_text="Có quyền ký duyệt xác nhận và khóa sổ chuyển đổi thiết bị tuần"
     )
     can_manage_all_weekly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua va xoa tat ca so chuyen doi thiet bi tuan"
+        verbose_name="Quản lý tất cả sổ chuyển đổi thiết bị tuần",
+        help_text="Có quyền sửa và xóa tất cả sổ chuyển đổi thiết bị tuần"
     )
+    # Phân quyền mẫu chuyển đổi thiết bị tháng
+    can_view_monthly_equipment_switch_templates = models.BooleanField(
+        default=True,
+        verbose_name="Xem mẫu chuyển đổi TB tháng",
+        help_text="Có quyền xem cấu hình danh mục mẫu chuyển đổi thiết bị tháng"
+    )
+    can_create_monthly_equipment_switch_templates = models.BooleanField(
+        default=False,
+        verbose_name="Thêm thiết bị vào mẫu tháng",
+        help_text="Có quyền thêm thiết bị mới vào mẫu chuyển đổi thiết bị tháng"
+    )
+    can_edit_monthly_equipment_switch_templates = models.BooleanField(
+        default=False,
+        verbose_name="Sửa mẫu chuyển đổi TB tháng",
+        help_text="Có quyền chỉnh sửa thông tin thiết bị trong mẫu chuyển đổi thiết bị tháng"
+    )
+    can_delete_monthly_equipment_switch_templates = models.BooleanField(
+        default=False,
+        verbose_name="Xóa thiết bị khỏi mẫu tháng",
+        help_text="Có quyền xóa thiết bị khỏi mẫu chuyển đổi thiết bị tháng"
+    )
+
+    # Phân quyền sổ chuyển đổi thiết bị tháng
     can_view_monthly_equipment_switch_logs = models.BooleanField(
         default=True,
-        help_text="Co quyen xem so chuyen doi TB thang"
+        verbose_name="Xem sổ chuyển đổi TB tháng",
+        help_text="Có quyền xem sổ chuyển đổi TB tháng"
     )
     can_create_monthly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen tao so chuyen doi TB thang"
+        verbose_name="Tạo sổ chuyển đổi TB tháng",
+        help_text="Có quyền tạo sổ chuyển đổi TB tháng"
     )
     can_edit_monthly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua so chuyen doi TB thang"
+        verbose_name="Sửa sổ chuyển đổi TB tháng",
+        help_text="Có quyền sửa sổ chuyển đổi TB tháng"
     )
     can_delete_monthly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen xoa so chuyen doi TB thang"
+        verbose_name="Xóa sổ chuyển đổi TB tháng",
+        help_text="Có quyền xóa sổ chuyển đổi TB tháng"
     )
     can_edit_own_monthly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua so chuyen doi TB thang do minh tao"
+        verbose_name="Sửa sổ tháng do mình tạo",
+        help_text="Có quyền sửa sổ chuyển đổi TB tháng do mình tạo"
     )
     can_delete_own_monthly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen xoa so chuyen doi TB thang do minh tao"
+        verbose_name="Xóa sổ tháng do mình tạo",
+        help_text="Có quyền xóa sổ chuyển đổi TB tháng do mình tạo"
+    )
+    can_confirm_monthly_equipment_switch_logs = models.BooleanField(
+        default=False,
+        verbose_name="Duyệt / Xác nhận sổ chuyển đổi TB tháng",
+        help_text="Có quyền ký duyệt xác nhận và khóa sổ chuyển đổi thiết bị tháng"
     )
     can_manage_all_monthly_equipment_switch_logs = models.BooleanField(
         default=False,
-        help_text="Co quyen sua va xoa tat ca so chuyen doi TB thang"
+        verbose_name="Quản lý tất cả sổ chuyển đổi TB tháng",
+        help_text="Có quyền sửa và xóa tất cả sổ chuyển đổi TB tháng"
     )
     can_view_diesel_operation_logbooks = models.BooleanField(
         default=True,
@@ -727,8 +823,11 @@ class UserProfile(models.Model):
 
         role_permissions = self.role.permissions or {}
         for field in can_fields:
-            # Gán giá trị từ JSON permissions, nếu không có mặc định là False
-            setattr(self, field, role_permissions.get(field, False))
+            # Vai trò chỉ ghi đè những quyền đã khai báo. Quyền mới chưa có
+            # trong JSON của vai trò phải giữ giá trị đang được cấp trực tiếp,
+            # tránh việc lưu hồ sơ làm mất quyền sau khi nâng cấp hệ thống.
+            if field in role_permissions:
+                setattr(self, field, bool(role_permissions[field]))
 
     def save(self, *args, **kwargs):
         """Override save to sync name with User model"""

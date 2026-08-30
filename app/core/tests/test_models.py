@@ -142,6 +142,25 @@ class ModelTests(TestCase):
         self.assertFalse(profile.can_delete_materials)
         self.assertTrue(profile.can_approve_export_request)
 
+    def test_role_does_not_clear_new_permission_missing_from_role_config(self):
+        role = UserRole.objects.create(
+            name='Vai trò cấu hình cũ',
+            permissions={'can_view_materials': True},
+        )
+        user = get_user_model().objects.create_user(email='legacy-role@example.com', password='testpass123')
+        profile = UserProfile(
+            user=user,
+            role=role,
+            can_view_shift_schedule=True,
+            can_create_shift_schedule=True,
+        )
+        profile.save()
+        profile.refresh_from_db()
+
+        self.assertTrue(profile.can_view_shift_schedule)
+        self.assertTrue(profile.can_create_shift_schedule)
+        self.assertTrue(profile.can_view_materials)
+
     def test_role_permissions_sync_on_role_update(self):
         """Test that updating a UserRole automatically propagates changes to all assigned profiles."""
         role = UserRole.objects.create(

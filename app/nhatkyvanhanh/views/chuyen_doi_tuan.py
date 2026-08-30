@@ -3,11 +3,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
-from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
+from django.utils import timezone
+
+from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory, get_user_factory
 from nhatkyvanhanh.models import MauChuyenDoiThietBi, SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi
 from nhatkyvanhanh.serializers import (
     MauChuyenDoiThietBiSerializer,
@@ -21,12 +24,23 @@ from nhatkyvanhanh.permissions import (
     CanCreateWeeklyEquipmentSwitchLogs,
     CanEditWeeklyEquipmentSwitchLogs,
     CanDeleteWeeklyEquipmentSwitchLogs,
+    CanConfirmWeeklyEquipmentSwitchLogs,
+    has_profile_permission,
 )
 from .helpers import (
+    _weekly_switch_log_locked,
+    _can_confirm_weekly_equipment_switch_log,
+    _can_unlock_weekly_equipment_switch_log,
     _can_edit_weekly_equipment_switch_log,
     _can_delete_weekly_equipment_switch_log,
     _get_song_hinh_factory,
+    _is_song_hinh_factory,
     _create_default_switch_templates,
+    _get_previous_weekly_switch_log,
+    _can_view_weekly_equipment_switch_template,
+    _can_create_weekly_equipment_switch_template,
+    _can_edit_weekly_equipment_switch_template,
+    _can_delete_weekly_equipment_switch_template,
     _can_delete_weekly_equipment_switch_entry,
     _can_edit_weekly_equipment_switch_entry,
 )
@@ -40,6 +54,7 @@ class MauChuyenDoiThietBiFilterSet(django_filters.FilterSet):
 
 class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
     serializer_class = MauChuyenDoiThietBiSerializer
+    pagination_class = None
     parser_classes = [JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MauChuyenDoiThietBiFilterSet
@@ -54,12 +69,64 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
     ordering = ["to_may", "thu_tu", "created_at"]
 
     def get_permissions(self):
-        permission_classes = [CanViewOperationLogbooks]
-        if self.action in ["create", "update", "partial_update", "destroy"]:
-            permission_classes = [CanCreateOperationLogbooks]
-        return [permission() for permission in permission_classes]
+        return [IsAuthenticated()]
+
+    def list(self, request, *args, **kwargs):
+        if not _can_view_weekly_equipment_switch_template(request.user):
+            return Response(
+                {"detail": "Bạn không có quyền xem mẫu chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        if not _can_view_weekly_equipment_switch_template(request.user):
+            return Response(
+                {"detail": "Bạn không có quyền xem mẫu chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().retrieve(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        if not _can_create_weekly_equipment_switch_template(request.user):
+            return Response(
+                {"detail": "Bạn không có quyền thêm thiết bị vào mẫu chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not _can_edit_weekly_equipment_switch_template(request.user):
+            return Response(
+                {"detail": "Bạn không có quyền sửa mẫu chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if not _can_edit_weekly_equipment_switch_template(request.user):
+            return Response(
+                {"detail": "Bạn không có quyền sửa mẫu chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not _can_delete_weekly_equipment_switch_template(request.user):
+            return Response(
+                {"detail": "Bạn không có quyền xóa thiết bị khỏi mẫu chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
+        from tochuc.models import NhaMay
+
+        for factory in NhaMay.objects.all():
+            if _is_song_hinh_factory(factory) or (factory.ma_nha_may and factory.ma_nha_may.upper() == "SH"):
+                if MauChuyenDoiThietBi.objects.filter(nha_may=factory).count() < 22:
+                    _create_default_switch_templates(factory)
+
         queryset = MauChuyenDoiThietBi.objects.select_related(
             "nha_may",
             "thiet_bi",
@@ -113,6 +180,8 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
             permission_classes = [CanEditWeeklyEquipmentSwitchLogs]
         elif self.action == "destroy":
             permission_classes = [CanDeleteWeeklyEquipmentSwitchLogs]
+        elif self.action in ["xac_nhan", "duyet"]:
+            permission_classes = [CanConfirmWeeklyEquipmentSwitchLogs]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
@@ -120,6 +189,7 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
             SoChuyenDoiThietBiTuan.objects.select_related(
                 "nha_may",
                 "nguoi_tao",
+                "nguoi_duyet",
             )
             .prefetch_related(
                 "lan_chuyen_dois",
@@ -132,6 +202,23 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
         )
         return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
 
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        if not data.get("nha_may"):
+            user_factory = get_user_factory(request.user)
+            if user_factory:
+                data["nha_may"] = user_factory.id
+            else:
+                sh = _get_song_hinh_factory()
+                if sh:
+                    data["nha_may"] = sh.id
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         factory_data = apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
         if not factory_data.get("nha_may") and not serializer.validated_data.get("nha_may"):
@@ -142,29 +229,77 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
+        if _weekly_switch_log_locked(serializer.instance) and not (self.request.user.is_superuser or has_profile_permission(self.request.user, "can_manage_all_weekly_equipment_switch_logs")):
+            raise PermissionDenied("Sổ chuyển đổi thiết bị tuần đã được duyệt và khóa sổ, không thể chỉnh sửa.")
         if not _can_edit_weekly_equipment_switch_log(self.request.user, serializer.instance):
-            raise PermissionDenied("Ban khong co quyen cap nhat so chuyen doi thiet bi tuan nay.")
+            raise PermissionDenied("Bạn không có quyền cập nhật sổ chuyển đổi thiết bị tuần này.")
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
         )
 
     def perform_destroy(self, instance):
+        if _weekly_switch_log_locked(instance) and not (self.request.user.is_superuser or has_profile_permission(self.request.user, "can_manage_all_weekly_equipment_switch_logs")):
+            raise PermissionDenied("Sổ chuyển đổi thiết bị tuần đã được duyệt và khóa sổ, không thể xóa.")
         if not _can_delete_weekly_equipment_switch_log(self.request.user, instance):
-            raise PermissionDenied("Ban khong co quyen xoa so chuyen doi thiet bi tuan nay.")
+            raise PermissionDenied("Bạn không có quyền xóa sổ chuyển đổi thiết bị tuần này.")
         return super().perform_destroy(instance)
+
+    @action(detail=True, methods=["post"], url_path="xac-nhan")
+    def xac_nhan(self, request, pk=None):
+        so = self.get_object()
+        if not _can_confirm_weekly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Bạn không có quyền duyệt / xác nhận sổ chuyển đổi thiết bị tuần."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if so.nguoi_tao_id == request.user.id and not (request.user.is_superuser or has_profile_permission(request.user, "can_manage_all_weekly_equipment_switch_logs")):
+            return Response(
+                {"detail": "Người tạo sổ không được tự ký duyệt sổ của chính mình."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        so.nguoi_duyet = request.user
+        so.duyet_at = timezone.now()
+        so.trang_thai = SoChuyenDoiThietBiTuan.TrangThai.DA_DUYET
+        if "ghi_chu_duyet" in request.data:
+            so.ghi_chu_duyet = str(request.data.get("ghi_chu_duyet") or "").strip()
+        so.dong_bo_chu_ky_tu_user()
+        so.save()
+        serializer = self.get_serializer(so)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="huy-xac-nhan")
+    def huy_xac_nhan(self, request, pk=None):
+        so = self.get_object()
+        if not _can_unlock_weekly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Bạn không có quyền mở khóa / hủy duyệt sổ chuyển đổi thiết bị tuần này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        so.nguoi_duyet = None
+        so.duyet_at = None
+        so.trang_thai = SoChuyenDoiThietBiTuan.TrangThai.CHO_DUYET
+        so.chu_ky_nguoi_duyet = None
+        so.save()
+        serializer = self.get_serializer(so)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="tao-lan-chuyen-doi")
     def tao_lan_chuyen_doi(self, request, pk=None):
         so = self.get_object()
         target_nha_may = so.nha_may or _get_song_hinh_factory()
+        if _weekly_switch_log_locked(so) and not (request.user.is_superuser or has_profile_permission(request.user, "can_manage_all_weekly_equipment_switch_logs")):
+            return Response(
+                {"detail": "Sổ chuyển đổi thiết bị tuần đã được duyệt và khóa sổ, không thể tạo thêm lần chuyển đổi mới."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if not _can_edit_weekly_equipment_switch_log(request.user, so):
             return Response(
-                {"detail": "Ban khong co quyen them lan chuyen doi thiet bi."},
+                {"detail": "Bạn không có quyền thêm lần chuyển đổi thiết bị."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if so.lan_chuyen_dois.exists():
             return Response(
-                {"detail": "Moi so tuan chi duoc tao mot lan chuyen doi thiet bi."},
+                {"detail": "Mỗi sổ tuần chỉ được tạo một lần chuyển đổi thiết bị."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -194,6 +329,16 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        prev_so = _get_previous_weekly_switch_log(so)
+        prev_status_map = {}
+        if prev_so:
+            prev_lan = prev_so.lan_chuyen_dois.order_by("-thoi_gian", "-created_at").first()
+            if prev_lan:
+                prev_status_map = {
+                    ct.thiet_bi_id: ct.trang_thai
+                    for ct in prev_lan.chi_tiets.all()
+                }
+
         with transaction.atomic():
             lan = serializer.save(so=so, nguoi_thuc_hien=request.user)
             ChiTietChuyenDoiThietBi.objects.bulk_create(
@@ -204,6 +349,15 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                         to_may=template.to_may,
                         nhom_thiet_bi=template.nhom_thiet_bi,
                         thu_tu=template.thu_tu,
+                        trang_thai=(
+                            "du_phong"
+                            if prev_status_map.get(template.thiet_bi_id) == "lam_viec"
+                            else (
+                                "lam_viec"
+                                if prev_status_map.get(template.thiet_bi_id) == "du_phong"
+                                else ""
+                            )
+                        ),
                     )
                     for template in templates
                 ]
@@ -227,10 +381,16 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if _weekly_switch_log_locked(so) and not (request.user.is_superuser or has_profile_permission(request.user, "can_manage_all_weekly_equipment_switch_logs")):
+            return Response(
+                {"detail": "Sổ chuyển đổi thiết bị tuần đã được duyệt và khóa sổ, không thể chỉnh sửa hoặc xóa lần chuyển đổi."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if request.method == "DELETE":
             if not _can_delete_weekly_equipment_switch_entry(request.user, lan):
                 return Response(
-                    {"detail": "Ban khong co quyen xoa lan chuyen doi thiet bi nay."},
+                    {"detail": "Bạn không có quyền xóa lần chuyển đổi thiết bị này."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
             lan.delete()
@@ -239,7 +399,7 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
 
         if not _can_edit_weekly_equipment_switch_entry(request.user, lan):
             return Response(
-                {"detail": "Ban khong co quyen cap nhat lan chuyen doi thiet bi nay."},
+                {"detail": "Bạn không có quyền cập nhật lần chuyển đổi thiết bị này."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

@@ -12,7 +12,7 @@ from ai_tools.leadership_report.services.report_service import (
     _operating_level_by_capacity,
     _weather_forecast_rows,
 )
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from nhatkyvanhanh.models import KhacPhucSuKien, SuKien
 from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
 
@@ -138,7 +138,7 @@ class LeadershipEventEdgeTests(TestCase):
     databases = {"default"}
 
     def setUp(self):
-        self.plant = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.plant = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
         self.user = get_user_model().objects.create_user(
             username="event-user",
             email="event-user@example.com",

@@ -4,12 +4,12 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 
 
 class OperationConfigEndpointTests(APITestCase):
     def setUp(self):
-        self.tkt_factory = Bang_nha_may.objects.create(
+        self.tkt_factory = NhaMay.objects.create(
             ma_nha_may="TKT",
             ten_nha_may="Thuong Kon Tum",
         )
@@ -30,7 +30,7 @@ class OperationConfigEndpointTests(APITestCase):
         self.assertEqual(response.data["layout"][2]["device_code"], "TKT.TB.TPP")
 
     def test_dien_config_endpoint_rejects_other_factory_for_scoped_user(self):
-        Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
 
         self.client.force_authenticate(user=self.user)
         response = self.client.get(

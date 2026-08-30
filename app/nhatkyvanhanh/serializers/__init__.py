@@ -40,6 +40,10 @@ from .chuyen_doi_thang import (
     ChiTietChuyenDoiTBThangSerializer,
     SoChuyenDoiTBThangSerializer,
 )
+from .phan_cong_nhiem_vu_hc import (
+    BangPhanCongNhiemVuHCSerializer,
+    ChiTietNhiemVuThuTrongTuanSerializer,
+)
 
 __all__ = [
     "user_can_edit_chi_dao",
@@ -66,4 +70,6 @@ __all__ = [
     "MauChuyenDoiTBThangSerializer",
     "ChiTietChuyenDoiTBThangSerializer",
     "SoChuyenDoiTBThangSerializer",
+    "BangPhanCongNhiemVuHCSerializer",
+    "ChiTietNhiemVuThuTrongTuanSerializer",
 ]

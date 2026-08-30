@@ -18,13 +18,40 @@ class SogiaonhancaVH(TimestampedUUIDModel):
 
     ngay_truc = models.DateField()
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_giao_nhan_ca_vh",
         null=True,
         blank=True,
         verbose_name="Nhà máy",
     )
+    lich_truc_nguon = models.ForeignKey(
+        "quanlycatruc.LichTrucCa",
+        on_delete=models.SET_NULL,
+        related_name="so_giao_nhan_ca_vh",
+        null=True,
+        blank=True,
+        verbose_name="Lịch trực nguồn",
+    )
+    ngay_truc_ca_nguon = models.ForeignKey(
+        "quanlycatruc.NgayTrucCa",
+        on_delete=models.SET_NULL,
+        related_name="so_giao_nhan_ca_vh",
+        null=True,
+        blank=True,
+        verbose_name="Ngày trực ca nguồn",
+    )
+    phien_ban_lich_nguon = models.PositiveIntegerField(null=True, blank=True)
+    dong_bo_bien_che_at = models.DateTimeField(null=True, blank=True)
+    so_giao_nhan_ca_hc_nguon = models.ForeignKey(
+        "nhatkyvanhanh.SogiaonhancaHC",
+        on_delete=models.SET_NULL,
+        related_name="so_giao_nhan_ca_vh_dong_bo",
+        null=True,
+        blank=True,
+        verbose_name="Sổ giao nhận ca hành chính nguồn",
+    )
+    dong_bo_truc_ktvh_at = models.DateTimeField(null=True, blank=True)
     class LoaiThoiGianTruc(models.TextChoices):
         NGAY = "ngay", "Ca ngày (08:00–20:00)"
         DEM = "dem", "Ca đêm (20:00–08:00 hôm sau)"

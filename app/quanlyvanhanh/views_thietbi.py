@@ -139,17 +139,22 @@ class ThietBiViewSet(viewsets.ModelViewSet):
             )
 
             try:
-                from khovattu.models import Bang_nha_may
+                from tochuc.models import NhaMay
 
-                factory = Bang_nha_may.objects.filter(
+                factory_filter = (
                     Q(ma_nha_may__iexact=factory_value)
                     | Q(ten_nha_may__iexact=factory_value)
-                ).first()
+                )
+                if str(factory_value).isdigit():
+                    factory_filter |= Q(id=int(factory_value))
+
+                factory = NhaMay.objects.filter(factory_filter).first()
                 if factory:
                     factory_query |= Q(nha_may__iexact=factory.ma_nha_may)
                     factory_query |= Q(nha_may__iexact=factory.ten_nha_may)
                     factory_query |= Q(nha_may__icontains=factory.ten_nha_may)
-                    factory_query |= Q(ma_day_du__istartswith=f"{factory.ma_nha_may}.")
+                    if factory.ma_nha_may:
+                        factory_query |= Q(ma_day_du__istartswith=f"{factory.ma_nha_may}.")
             except Exception:
                 pass
 

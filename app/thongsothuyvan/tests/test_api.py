@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from ..models import ThongSoThuyVanCaiDat, ThongSoThuyVanThucTe, ThongsoSanxuat, ThongsoGioPhat
 from ..hydrology_services import (
     get_capacity_points_for_reservoir,
@@ -23,11 +23,11 @@ class ThongSoThuyVanAPITests(APITestCase):
         get_capacity_points_for_reservoir.cache_clear()
         get_capacity_bounds_for_reservoir.cache_clear()
         # 1. Khởi tạo các nhà máy
-        self.nha_may_sh = Bang_nha_may.objects.create(
+        self.nha_may_sh = NhaMay.objects.create(
             ma_nha_may="SH",
             ten_nha_may="Sông Hinh",
         )
-        self.nha_may_vs = Bang_nha_may.objects.create(
+        self.nha_may_vs = NhaMay.objects.create(
             ma_nha_may="VS",
             ten_nha_may="Vĩnh Sơn",
         )

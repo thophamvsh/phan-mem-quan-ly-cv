@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.db.models import Q
 from django.db import transaction
 
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
 from thongsothuyvan.models import MucnuocQuytrinh, ThongsoSanxuat
 from nhatkyvanhanh.models import (
@@ -47,11 +47,11 @@ def _factory_from_dashboard_param(value):
 
     normalized = _normalize_factory_query_value(value)
     factory_code = HYDROLOGY_FACTORY_CODES.get(normalized, str(value).strip())
-    factory = Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
+    factory = NhaMay.objects.filter(ma_nha_may__iexact=factory_code).first()
     if factory:
         return factory
 
-    for item in Bang_nha_may.objects.all():
+    for item in NhaMay.objects.all():
         item_code = _normalize_factory_query_value(item.ma_nha_may)
         item_name = _normalize_factory_query_value(item.ten_nha_may)
         if normalized in {item_code, item_name} or normalized in item_name:
@@ -67,13 +67,13 @@ def _factory_ids_from_dashboard_param(value):
     normalized = _normalize_factory_query_value(value)
     factory_code = HYDROLOGY_FACTORY_CODES.get(normalized, str(value).strip())
     matched_ids = set(
-        Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).values_list(
+        NhaMay.objects.filter(ma_nha_may__iexact=factory_code).values_list(
             "id",
             flat=True,
         )
     )
 
-    for item in Bang_nha_may.objects.all():
+    for item in NhaMay.objects.all():
         item_code = _normalize_factory_query_value(item.ma_nha_may)
         item_name = _normalize_factory_query_value(item.ten_nha_may)
         if normalized in {item_code, item_name} or normalized in item_name:
@@ -120,23 +120,40 @@ def _normalize_event_type(value):
 
 def _get_song_hinh_factory():
     return (
-        Bang_nha_may.objects.filter(ma_nha_may__iexact="SH").first()
-        or Bang_nha_may.objects.filter(ten_nha_may__icontains="Sông Hinh").first()
-        or Bang_nha_may.objects.filter(ten_nha_may__icontains="Song Hinh").first()
+        NhaMay.objects.filter(ma_nha_may__iexact="SH").first()
+        or NhaMay.objects.filter(ten_nha_may__icontains="Sông Hinh").first()
+        or NhaMay.objects.filter(ten_nha_may__icontains="Song Hinh").first()
     )
 
 
-def _find_switch_template_device(factory_code, code_candidates=(), name_terms=()):
-    prefix = f"{factory_code}.TB."
+def _find_switch_template_device(factory_code, code_candidates=(), name_terms=(), unit_prefix="", fallback_name=""):
     for code in code_candidates:
         device = ThietBi.objects.filter(ma_day_du__iexact=code).first()
         if device:
             return device
 
+    prefix = unit_prefix or f"{factory_code}.TB."
     queryset = ThietBi.objects.filter(ma_day_du__istartswith=prefix)
     for term in name_terms:
         queryset = queryset.filter(ten__icontains=term)
-    return queryset.order_by("cap", "thu_tu", "ma_day_du").first()
+    matched = queryset.order_by("cap", "thu_tu", "ma_day_du").first()
+    if matched:
+        return matched
+
+    if code_candidates:
+        first_code = code_candidates[0]
+        device, _ = ThietBi.objects.get_or_create(
+            ma_day_du=first_code,
+            defaults={
+                "ten": fallback_name or (name_terms[0] if name_terms else first_code),
+                "ma": first_code,
+                "nha_may": factory_code,
+                "loai": "Thiết bị phụ",
+                "trang_thai": "Hoạt động",
+            },
+        )
+        return device
+    return None
 
 
 def _create_default_switch_templates(nha_may):
@@ -148,9 +165,16 @@ def _create_default_switch_templates(nha_may):
     rows = []
     order = 1
 
-    def add(to_may, nhom, codes=(), terms=()):
+    def add(to_may, nhom, codes=(), terms=(), fallback_name=""):
         nonlocal order
-        device = _find_switch_template_device(factory_code, codes, terms)
+        unit_p = f"{factory_code}.TB.{to_may}" if to_may in ("H1", "H2") else f"{factory_code}.TB."
+        device = _find_switch_template_device(
+            factory_code,
+            codes,
+            terms,
+            unit_prefix=unit_p,
+            fallback_name=fallback_name,
+        )
         if not device:
             return
         rows.append(
@@ -166,23 +190,23 @@ def _create_default_switch_templates(nha_may):
     for unit in unit_codes:
         to_may = unit
         prefix = f"{factory_code}.TB.{unit}"
-        add(to_may, "Bơm nước làm mát", [f"{prefix}.NLM.MOR1"], ["Bơm nước", "01"])
-        add(to_may, "Bơm nước làm mát", [f"{prefix}.NLM.MOR2"], ["Bơm nước", "02"])
-        add(to_may, "Bơm dầu điều tốc", [f"{prefix}.TL.B1", f"{prefix}.TL.BO1"], ["Bơm dầu", "01"])
-        add(to_may, "Bơm dầu điều tốc", [f"{prefix}.TL.B2", f"{prefix}.TL.BO2"], ["Bơm dầu", "02"])
-        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.A01", f"{prefix}.GOV.TCC2.G11", f"{prefix}.GOV.TB.CPU1"], ["CPU", "01"])
-        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.A02", f"{prefix}.GOV.TCC2.G12", f"{prefix}.GOV.TB.CPU2"], ["CPU", "02"])
-        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.0K17", f"{prefix}.GOV.TCC2.G99"], ["Rail #0"])
-        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.1", f"{prefix}.GOV.TCC2.G100"], ["Rail #1"])
-        add(to_may, "Hệ thống kích từ", [f"{prefix}.EXC.ER.A51", f"{prefix}.EXE.AVR.CPU1"], ["CH1"])
-        add(to_may, "Hệ thống kích từ", [f"{prefix}.EXC.ER.A53", f"{prefix}.EXE.AVR.CPU2"], ["CH2"])
+        add(to_may, "Bơm nước làm mát", [f"{prefix}.NLM.MOR1"], ["Bơm nước", "01"], f"Bơm nước làm mát MOR1 - {unit}")
+        add(to_may, "Bơm nước làm mát", [f"{prefix}.NLM.MOR2"], ["Bơm nước", "02"], f"Bơm nước làm mát MOR2 - {unit}")
+        add(to_may, "Bơm dầu điều tốc", [f"{prefix}.TL.B1", f"{prefix}.TL.BO1"], ["Bơm dầu", "01"], f"Bơm dầu điều tốc B1 - {unit}")
+        add(to_may, "Bơm dầu điều tốc", [f"{prefix}.TL.B2", f"{prefix}.TL.BO2"], ["Bơm dầu", "02"], f"Bơm dầu điều tốc B2 - {unit}")
+        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.A01", f"{prefix}.GOV.TCC2.G11", f"{prefix}.GOV.TB.CPU1"], ["CPU", "01"], f"CPU 01 hệ thống điều tốc - {unit}")
+        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.A02", f"{prefix}.GOV.TCC2.G12", f"{prefix}.GOV.TB.CPU2"], ["CPU", "02"], f"CPU 02 hệ thống điều tốc - {unit}")
+        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.0K17", f"{prefix}.GOV.TCC2.G99"], ["Rail #0"], f"Rail #0 hệ thống điều tốc - {unit}")
+        add(to_may, "Hệ thống điều tốc", [f"{prefix}.GOV.TCC1.1", f"{prefix}.GOV.TCC2.G100"], ["Rail #1"], f"Rail #1 hệ thống điều tốc - {unit}")
+        add(to_may, "Hệ thống kích từ", [f"{prefix}.EXC.ER.A51", f"{prefix}.EXE.AVR.CPU1"], ["CH1"], f"Kênh 1 hệ thống kích từ (CH1) - {unit}")
+        add(to_may, "Hệ thống kích từ", [f"{prefix}.EXC.ER.A53", f"{prefix}.EXE.AVR.CPU2"], ["CH2"], f"Kênh 2 hệ thống kích từ (CH2) - {unit}")
 
-    add("tu_dung", "Tự dùng", [f"{factory_code}.TB.1.CTTD1"], ["TD91"])
-    add("tu_dung", "Tự dùng", [f"{factory_code}.TB.1.CTTD2"], ["TD94"])
+    add("tu_dung", "Tự dùng", [f"{factory_code}.TB.TD.TD91", f"{factory_code}.TB.1.CTTD1"], ["TD91"], "Máy cắt CTTD1 (TD91)")
+    add("tu_dung", "Tự dùng", [f"{factory_code}.TB.TD.TD94", f"{factory_code}.TB.1.CTTD2"], ["TD94"], "Máy cắt CTTD2 (TD94)")
 
     created = 0
     for row in rows:
-        _, was_created = MauChuyenDoiThietBi.objects.get_or_create(
+        obj, was_created = MauChuyenDoiThietBi.objects.get_or_create(
             nha_may=nha_may,
             thiet_bi=row["thiet_bi"],
             defaults={
@@ -192,8 +216,41 @@ def _create_default_switch_templates(nha_may):
                 "dang_su_dung": True,
             },
         )
+        if not was_created and obj.to_may != row["to_may"]:
+            obj.to_may = row["to_may"]
+            obj.nhom_thiet_bi = row["nhom_thiet_bi"]
+            obj.save(update_fields=["to_may", "nhom_thiet_bi"])
         created += int(was_created)
     return created
+
+
+def _get_previous_weekly_switch_log(so):
+    if not so or not getattr(so, "id", None):
+        return None
+    from nhatkyvanhanh.models import SoChuyenDoiThietBiTuan
+
+    factory = getattr(so, "nha_may", None) or _get_song_hinh_factory()
+    qs = SoChuyenDoiThietBiTuan.objects.filter(nha_may=factory).exclude(id=so.id)
+
+    current_nam = getattr(so, "nam", None)
+    current_tuan = getattr(so, "tuan", None)
+    if not current_nam or not current_tuan:
+        return qs.order_by("-nam", "-tuan", "-created_at").first()
+
+    if current_tuan > 1:
+        prev = qs.filter(nam=current_nam, tuan=current_tuan - 1).first()
+        if prev:
+            return prev
+    else:
+        prev = qs.filter(nam=current_nam - 1, tuan__in=[52, 53]).order_by("-tuan").first()
+        if prev:
+            return prev
+
+    return (
+        qs.filter(Q(nam__lt=current_nam) | Q(nam=current_nam, tuan__lt=current_tuan))
+        .order_by("-nam", "-tuan", "-created_at")
+        .first()
+    )
 
 
 MONTHLY_SWITCH_TEMPLATE_ROWS = [
@@ -276,23 +333,39 @@ def _create_default_monthly_switch_templates(nha_may):
     return created
 
 
-def _previous_month_values_by_device(so):
-    previous_year = so.nam
-    previous_month = so.thang - 1
-    if previous_month < 1:
-        previous_year -= 1
-        previous_month = 12
+def _get_previous_monthly_switch_log(so):
+    if not so:
+        return None
+    factory = getattr(so, "nha_may", None) or _get_song_hinh_factory()
+    qs = SoChuyenDoiTBThang.objects.filter(nha_may=factory)
+    if getattr(so, "id", None):
+        qs = qs.exclude(id=so.id)
 
-    previous_so = (
-        SoChuyenDoiTBThang.objects.filter(
-            nha_may=so.nha_may,
-            nam=previous_year,
-            thang=previous_month,
-            ca_truc=so.ca_truc,
-        )
-        .order_by("-created_at")
+    current_nam = getattr(so, "nam", None)
+    current_thang = getattr(so, "thang", None)
+    if not current_nam or not current_thang:
+        return qs.order_by("-nam", "-thang", "-created_at").first()
+
+    # 1. Tìm đúng tháng liền trước
+    if current_thang > 1:
+        prev = qs.filter(nam=current_nam, thang=current_thang - 1).order_by("-created_at").first()
+        if prev:
+            return prev
+    else:
+        prev = qs.filter(nam=current_nam - 1, thang=12).order_by("-created_at").first()
+        if prev:
+            return prev
+
+    # 2. Nếu không có tháng liền trước, tìm tháng gần nhất trước đó
+    return (
+        qs.filter(Q(nam__lt=current_nam) | Q(nam=current_nam, thang__lt=current_thang))
+        .order_by("-nam", "-thang", "-created_at")
         .first()
     )
+
+
+def _previous_month_values_by_device(so):
+    previous_so = _get_previous_monthly_switch_log(so)
     if not previous_so:
         return {}
     return {
@@ -543,13 +616,15 @@ def _can_view_shift_directives(user):
 
 
 def _can_create_shift_directive(user, so=None):
-    if has_profile_permission(user, "can_create_shift_handover_directives"):
-        return True
-    if has_profile_permission(user, "can_manage_all_shift_handover_logs"):
-        return True
-    if so and (user.is_superuser or so.user_giao_ca_id == user.id):
-        return True
-    return False
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            user.is_superuser
+            or has_profile_permission(user, "can_create_shift_handover_directives")
+            or (so is not None and so.nguoi_tao_id == user.id)
+        )
+    )
 
 
 def _can_update_shift_directive(user, directive):
@@ -558,7 +633,6 @@ def _can_update_shift_directive(user, directive):
         and user.is_authenticated
         and (
             user.is_superuser
-            or has_profile_permission(user, "can_manage_all_shift_handover_logs")
             or directive.nguoi_tao_id == user.id
         )
     )
@@ -610,63 +684,220 @@ def _can_delete_diesel_operation_logbook(user, item):
     )
 
 
+def _weekly_switch_log_locked(so):
+    if not so:
+        return False
+    return getattr(so, "da_khoa", False) or bool(getattr(so, "duyet_at", None))
+
+
+def _can_confirm_weekly_equipment_switch_log(user, so):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return (
+        _la_truong_ca(user)
+        or has_profile_permission(user, "can_confirm_weekly_equipment_switch_logs")
+        or has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+    )
+
+
+def _can_unlock_weekly_equipment_switch_log(user, so):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs"):
+        return True
+    return (
+        so.nguoi_duyet_id == user.id
+        and has_profile_permission(user, "can_confirm_weekly_equipment_switch_logs")
+    )
+
+
 def _can_edit_weekly_equipment_switch_log(user, item):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if _weekly_switch_log_locked(item):
+        return has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
     return (
         has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
         or (
-            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            bool(item.nguoi_tao_id == user.id)
             and has_profile_permission(user, "can_edit_own_weekly_equipment_switch_logs")
         )
     )
 
 
 def _can_delete_weekly_equipment_switch_log(user, item):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if _weekly_switch_log_locked(item):
+        return has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
     return (
         has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
         or (
-            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            bool(item.nguoi_tao_id == user.id)
             and has_profile_permission(user, "can_delete_own_weekly_equipment_switch_logs")
         )
     )
 
 
+def _can_view_weekly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_view_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_create_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_edit_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_delete_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+    )
+
+
+def _can_create_weekly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_create_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+    )
+
+
+def _can_edit_weekly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_edit_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+    )
+
+
+def _can_delete_weekly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_delete_weekly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
+    )
+
+
 def _can_edit_weekly_equipment_switch_entry(user, lan):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if _weekly_switch_log_locked(getattr(lan, "so", None)):
+        return has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
     return (
         has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
         or (
-            bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+            bool(lan.nguoi_thuc_hien_id == user.id)
             and has_profile_permission(user, "can_edit_own_weekly_equipment_switch_logs")
         )
     )
 
 
 def _can_delete_weekly_equipment_switch_entry(user, lan):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if _weekly_switch_log_locked(getattr(lan, "so", None)):
+        return has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
     return (
         has_profile_permission(user, "can_manage_all_weekly_equipment_switch_logs")
         or (
-            bool(user and user.is_authenticated and lan.nguoi_thuc_hien_id == user.id)
+            bool(lan.nguoi_thuc_hien_id == user.id)
             and has_profile_permission(user, "can_delete_own_weekly_equipment_switch_logs")
         )
     )
 
 
+def _monthly_switch_log_locked(so):
+    if not so:
+        return False
+    return bool(getattr(so, "da_khoa", False) or (getattr(so, "nguoi_duyet_id", None) and getattr(so, "duyet_at", None)))
+
+
+def _can_confirm_monthly_equipment_switch_log(user, so=None):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return (
+        has_profile_permission(user, "can_confirm_monthly_equipment_switch_logs")
+        or has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+    )
+
+
+def _can_unlock_monthly_equipment_switch_log(user, so=None):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return (
+        has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+        or (bool(so and so.nguoi_duyet_id == user.id) and has_profile_permission(user, "can_confirm_monthly_equipment_switch_logs"))
+    )
+
+
 def _can_edit_monthly_equipment_switch_log(user, item):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if _monthly_switch_log_locked(item):
+        return has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
     return (
         has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
         or (
-            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            bool(item.nguoi_tao_id == user.id)
             and has_profile_permission(user, "can_edit_own_monthly_equipment_switch_logs")
         )
     )
 
 
 def _can_delete_monthly_equipment_switch_log(user, item):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if _monthly_switch_log_locked(item):
+        return has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
     return (
         has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
         or (
-            bool(user and user.is_authenticated and item.nguoi_tao_id == user.id)
+            bool(item.nguoi_tao_id == user.id)
             and has_profile_permission(user, "can_delete_own_monthly_equipment_switch_logs")
         )
+    )
+
+
+def _can_view_monthly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_view_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_create_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_edit_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_delete_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+    )
+
+
+def _can_create_monthly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_create_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+    )
+
+
+def _can_edit_monthly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_edit_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
+    )
+
+
+def _can_delete_monthly_equipment_switch_template(user):
+    return (
+        has_profile_permission(user, "can_delete_monthly_equipment_switch_templates")
+        or has_profile_permission(user, "can_manage_all_monthly_equipment_switch_logs")
     )
 
 

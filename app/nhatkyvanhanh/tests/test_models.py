@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from nhatkyvanhanh.models import (
     SogiaonhancaVH,
     Sonhatkyvanhanh,
@@ -41,7 +41,7 @@ class NhatKyVanHanhModelTests(TestCase):
         )
 
         # Create factory/nha_may
-        self.nha_may = Bang_nha_may.objects.create(
+        self.nha_may = NhaMay.objects.create(
             ma_nha_may="SH",
             ten_nha_may="Sông Hinh",
         )

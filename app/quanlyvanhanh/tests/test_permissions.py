@@ -3,15 +3,15 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi, ThongSoVanHanh
 
 
 class QuanLyVanHanhPermissionsTests(APITestCase):
     def setUp(self):
         # Create factories
-        self.vs_factory = Bang_nha_may.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
-        self.sh_factory = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.vs_factory = NhaMay.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
+        self.sh_factory = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
 
         # Create users
         self.vs_user = get_user_model().objects.create_user(

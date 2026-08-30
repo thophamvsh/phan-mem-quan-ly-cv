@@ -5,7 +5,7 @@ from .base import TimestampedUUIDModel, _lay_chu_ky_profile
 class SoBCHCSongHinh(TimestampedUUIDModel):
     ngay_dong_bo = models.DateField()
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_bchc_song_hinh",
         null=True,

@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from core.factory_scope import (
     apply_request_factory_to_serializer,
     ensure_factory_code_allowed,
@@ -392,7 +392,7 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
             )
         ensure_factory_code_allowed(request.user, factory_code)
         config = get_factory_config(factory_code)
-        factory = Bang_nha_may.objects.filter(ma_nha_may__iexact=factory_code).first()
+        factory = NhaMay.objects.filter(ma_nha_may__iexact=factory_code).first()
         return Response({
             **config,
             "factory_code": factory_code,

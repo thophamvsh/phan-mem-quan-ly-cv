@@ -11,7 +11,7 @@ class Sonhatkyvanhanh(TimestampedUUIDModel):
 
     thoi_gian_tao = models.DateTimeField(default=timezone.now)
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_nhat_ky_van_hanh",
         null=True,
@@ -89,7 +89,7 @@ class Sonhatkyvanhanh(TimestampedUUIDModel):
 class SonhatkyvanhanhDiesel(TimestampedUUIDModel):
     thoi_gian = models.DateTimeField(default=timezone.now)
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_nhat_ky_van_hanh_diesel",
         null=True,

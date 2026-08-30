@@ -4,13 +4,13 @@ from django.test import TestCase
 from core.models import UserProfile
 from documents.models import Document
 from documents.services.retrieval import filter_documents_for_user, get_allowed_factories_for_user
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 
 
 class DocumentRetrievalPermissionTests(TestCase):
     def setUp(self):
-        self.songhinh = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
-        self.vinhson = Bang_nha_may.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
+        self.songhinh = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.vinhson = NhaMay.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
 
         User = get_user_model()
         self.songhinh_user = User.objects.create_user(

@@ -4,14 +4,14 @@ from django.utils import timezone
 
 from core.factory_scope import filter_queryset_by_factory
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi, ThongSoVanHanh
 
 
 class FactoryScopeTests(TestCase):
     def setUp(self):
-        self.vs = Bang_nha_may.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
-        self.sh = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.vs = NhaMay.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
+        self.sh = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
 
         self.user = get_user_model().objects.create_user(
             email="vs@example.com",

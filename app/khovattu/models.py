@@ -6,21 +6,9 @@ from django.core.files.base import ContentFile
 from django.db import models
 from django.db.models import Q  # <-- BỔ SUNG: cần cho CheckConstraint
 from django.contrib.auth.models import AbstractUser
+from tochuc.models import NhaMay
 
 # ===== Danh mục =====
-
-class Bang_nha_may(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    ma_nha_may = models.CharField(max_length=50, unique=True)
-    ten_nha_may = models.CharField(max_length=255)
-
-    class Meta:
-        verbose_name = "Nhà máy"
-        verbose_name_plural = "Nhà máy"
-
-    def __str__(self):
-        return f"{self.ma_nha_may} - {self.ten_nha_may}"
-
 
 class Bang_vi_tri(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -79,7 +67,7 @@ class Bang_vat_tu(models.Model):
         Bang_vi_tri, on_delete=models.PROTECT, related_name="vat_tu", null=True, blank=True
     )
     bang_nha_may = models.ForeignKey(
-        Bang_nha_may, on_delete=models.PROTECT, related_name="vat_tu", null=True, blank=True
+        NhaMay, on_delete=models.PROTECT, related_name="vat_tu", null=True, blank=True
     )
     xuat_xu = models.ForeignKey(
         Bang_xuat_xu, on_delete=models.PROTECT, related_name="vat_tu", null=True, blank=True,
@@ -304,6 +292,4 @@ class Bang_de_nghi_xuat(models.Model):
     class Meta:
         verbose_name = "Đề nghị xuất"
         verbose_name_plural = "Đề nghị xuất"
-
-
 

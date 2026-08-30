@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from PIL import Image
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from nhatkyvanhanh.models import (
     SoAnToanDauGio,
     SoChuyenDoiTBThang,
@@ -19,6 +19,7 @@ from nhatkyvanhanh.models import (
     SonhatkyvanhanhDiesel,
     SogiaonhancaHC,
     SogiaonhancaVH,
+    LuuYChiDaoSoGiaoNhanCaVH,
     SuKien,
 )
 
@@ -28,7 +29,7 @@ User = get_user_model()
 class NhatKyVanHanhAPITests(APITestCase):
     def setUp(self):
         # Create factory/nha_may first
-        self.nha_may = Bang_nha_may.objects.create(
+        self.nha_may = NhaMay.objects.create(
             ma_nha_may="SH",
             ten_nha_may="Sông Hinh",
         )
@@ -783,6 +784,60 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("ngay_truc", response.data)
 
+    def test_sogiaonhancavh_uses_admin_shift_staff_only_when_explicitly_selected(self):
+        shift_start = timezone.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        shift_end = shift_start.replace(hour=17)
+        admin_log = SogiaonhancaHC.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=shift_start.date(),
+            nguoi_truc="Nhân sự hành chính",
+            thoi_gian_bat_dau_ca=shift_start,
+            thoi_gian_giao_ca=shift_end,
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        self.client.force_authenticate(user=self.creator)
+        url = reverse("nhatkyvanhanh:sogiaonhancavh-list")
+
+        response = self.client.post(
+            url,
+            {
+                "nha_may": self.nha_may.id,
+                "ngay_truc": str(shift_start.date()),
+                "ca_truc": "A",
+                "loai_thoi_gian_truc": "ngay",
+                "thoi_gian_bat_dau_ca": shift_start.isoformat(),
+                "thoi_gian_giao_ca": shift_end.isoformat(),
+                "truc_ktvh": "Nhân sự hành chính",
+                "so_giao_nhan_ca_hc_nguon": admin_log.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        shift_log = SogiaonhancaVH.objects.get(pk=response.data["id"])
+        self.assertEqual(shift_log.so_giao_nhan_ca_hc_nguon, admin_log)
+        self.assertEqual(shift_log.truc_ktvh, "Nhân sự hành chính")
+        self.assertIsNotNone(shift_log.dong_bo_truc_ktvh_at)
+
+        without_selection = self.client.post(
+            url,
+            {
+                "nha_may": self.nha_may.id,
+                "ngay_truc": str(shift_start.date()),
+                "ca_truc": "B",
+                "loai_thoi_gian_truc": "ngay",
+                "thoi_gian_bat_dau_ca": shift_start.isoformat(),
+                "thoi_gian_giao_ca": shift_end.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(without_selection.status_code, status.HTTP_201_CREATED)
+        untouched_log = SogiaonhancaVH.objects.get(pk=without_selection.data["id"])
+        self.assertEqual(untouched_log.truc_ktvh, "")
+        self.assertIsNone(untouched_log.so_giao_nhan_ca_hc_nguon)
+        self.assertIsNone(untouched_log.dong_bo_truc_ktvh_at)
+
     def test_sogiaonhancavh_viewer_cannot_update_or_delete(self):
         so = SogiaonhancaVH.objects.create(
             nha_may=self.nha_may,
@@ -860,6 +915,161 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(directive_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(SogiaonhancaVH.objects.filter(pk=so.pk).exists())
+
+    def test_shift_directive_create_allows_log_owner_or_dedicated_permission(self):
+        so = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-tao-luu-y-chi-dao",
+            kwargs={"pk": so.id},
+        )
+        payload = {
+            "thoi_gian": timezone.now().isoformat(),
+            "noi_dung": "Chỉ đạo vận hành an toàn.",
+        }
+
+        self.client.force_authenticate(user=self.creator)
+        owner_response = self.client.post(url, payload, format="json")
+        self.assertEqual(owner_response.status_code, status.HTTP_201_CREATED)
+        owner_directive = LuuYChiDaoSoGiaoNhanCaVH.objects.get(
+            so_giao_nhan_ca=so,
+            nguoi_tao=self.creator,
+        )
+        self.assertEqual(owner_directive.nguoi_tao_id, self.creator.id)
+
+        self.client.force_authenticate(user=self.receiver)
+        other_user_response = self.client.post(url, payload, format="json")
+        self.assertEqual(other_user_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(user=self.manager)
+        manager_response = self.client.post(url, payload, format="json")
+        self.assertEqual(manager_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.viewer_profile.can_create_shift_handover_directives = True
+        self.viewer_profile.save(update_fields=["can_create_shift_handover_directives"])
+        self.client.force_authenticate(user=self.viewer)
+        allowed_response = self.client.post(url, payload, format="json")
+
+        self.assertEqual(allowed_response.status_code, status.HTTP_201_CREATED)
+        directive = LuuYChiDaoSoGiaoNhanCaVH.objects.get(
+            so_giao_nhan_ca=so,
+            nguoi_tao=self.viewer,
+        )
+        self.assertEqual(directive.nguoi_tao_id, self.viewer.id)
+
+    def test_shift_directive_update_and_delete_are_owner_only(self):
+        so = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        directive = LuuYChiDaoSoGiaoNhanCaVH.objects.create(
+            so_giao_nhan_ca=so,
+            thoi_gian=timezone.now(),
+            noi_dung="Nội dung ban đầu",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-cap-nhat-luu-y-chi-dao",
+            kwargs={"pk": so.id, "directive_id": directive.id},
+        )
+
+        self.client.force_authenticate(user=self.manager)
+        manager_patch = self.client.patch(url, {"noi_dung": "Quản lý sửa"}, format="json")
+        manager_delete = self.client.delete(url)
+        self.assertEqual(manager_patch.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(manager_delete.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(user=self.creator)
+        owner_patch = self.client.patch(url, {"noi_dung": "Chủ sở hữu sửa"}, format="json")
+        self.assertEqual(owner_patch.status_code, status.HTTP_200_OK)
+        directive.refresh_from_db()
+        self.assertEqual(directive.noi_dung, "Chủ sở hữu sửa")
+
+        owner_delete = self.client.delete(url)
+        self.assertEqual(owner_delete.status_code, status.HTTP_200_OK)
+        self.assertFalse(LuuYChiDaoSoGiaoNhanCaVH.objects.filter(pk=directive.pk).exists())
+
+    def test_superuser_can_create_and_update_shift_directive_before_lock(self):
+        superuser = User.objects.create_superuser(
+            email="super-directive@example.com",
+            password="testpassword123!",
+            username="super-directive",
+        )
+        so = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        create_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-tao-luu-y-chi-dao",
+            kwargs={"pk": so.id},
+        )
+        self.client.force_authenticate(user=superuser)
+        created = self.client.post(
+            create_url,
+            {"thoi_gian": timezone.now().isoformat(), "noi_dung": "Chỉ đạo quản trị"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        directive = LuuYChiDaoSoGiaoNhanCaVH.objects.get(so_giao_nhan_ca=so)
+        self.assertEqual(directive.nguoi_tao_id, superuser.id)
+
+        other_directive = LuuYChiDaoSoGiaoNhanCaVH.objects.create(
+            so_giao_nhan_ca=so,
+            thoi_gian=timezone.now(),
+            noi_dung="Lưu ý của người khác",
+            nguoi_tao=self.creator,
+        )
+        update_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-cap-nhat-luu-y-chi-dao",
+            kwargs={"pk": so.id, "directive_id": other_directive.id},
+        )
+        updated = self.client.patch(update_url, {"noi_dung": "Superuser hiệu chỉnh"}, format="json")
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+
+    def test_shift_directive_is_immutable_after_shift_is_received(self):
+        so = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date.today(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=timezone.now(),
+            user_giao_ca=self.creator,
+            user_nhan_ca=self.receiver,
+            nguoi_tao=self.creator,
+            nhan_ca_ky_at=timezone.now(),
+        )
+        directive = LuuYChiDaoSoGiaoNhanCaVH.objects.create(
+            so_giao_nhan_ca=so,
+            thoi_gian=timezone.now(),
+            noi_dung="Nội dung đã khóa",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-cap-nhat-luu-y-chi-dao",
+            kwargs={"pk": so.id, "directive_id": directive.id},
+        )
+        self.client.force_authenticate(user=self.creator)
+
+        patch_response = self.client.patch(url, {"noi_dung": "Không được sửa"}, format="json")
+        delete_response = self.client.delete(url)
+
+        self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
+        directive.refresh_from_db()
+        self.assertEqual(directive.noi_dung, "Nội dung đã khóa")
 
     def test_sogiaonhancavh_allows_two_assistants_without_primary(self):
         shift_log = SogiaonhancaVH.objects.create(

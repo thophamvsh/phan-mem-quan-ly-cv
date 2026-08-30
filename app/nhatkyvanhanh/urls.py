@@ -13,6 +13,7 @@ from .views import (
     SogiaonhancaHCViewSet,
     SogiaonhancaVHViewSet,
     SoAnToanViewSet,
+    BangPhanCongNhiemVuHCViewSet,
 )
 
 app_name = "nhatkyvanhanh"
@@ -24,6 +25,7 @@ router.register(r"so-nhat-ky-van-hanh-diesel", SonhatkyvanhanhDieselViewSet, bas
 router.register(r"so-bchc-song-hinh", SoBCHCSongHinhViewSet, basename="sobchcsonghinh")
 router.register(r"so-giao-nhan-ca-vh", SogiaonhancaVHViewSet, basename="sogiaonhancavh")
 router.register(r"so-giao-nhan-ca-hc", SogiaonhancaHCViewSet, basename="sogiaonhancahc")
+router.register(r"phan-cong-nhiem-vu-hc", BangPhanCongNhiemVuHCViewSet, basename="phancongnhiemvuhc")
 router.register(r"so-an-toan-dau-gio", SoAnToanViewSet, basename="soantoadaugio")
 router.register(r"mau-chuyen-doi-thiet-bi", MauChuyenDoiThietBiViewSet, basename="mauchuyendoithietbi")
 router.register(r"so-chuyen-doi-thiet-bi-tuan", SoChuyenDoiThietBiTuanViewSet, basename="sochuyendoithietbituan")

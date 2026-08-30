@@ -11,13 +11,32 @@ class SogiaonhancaHC(TimestampedUUIDModel):
 
     ngay_truc = models.DateField()
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_giao_nhan_ca_hc",
         null=True,
         blank=True,
         verbose_name="Nhà máy",
     )
+    lich_truc_nguon = models.ForeignKey(
+        "quanlycatruc.LichTrucCa",
+        on_delete=models.SET_NULL,
+        related_name="so_giao_nhan_ca_hc",
+        null=True,
+        blank=True,
+        verbose_name="Lịch trực nguồn",
+    )
+    ngay_truc_ca_nguon = models.ForeignKey(
+        "quanlycatruc.NgayTrucCa",
+        on_delete=models.SET_NULL,
+        related_name="so_giao_nhan_ca_hc",
+        null=True,
+        blank=True,
+        verbose_name="Ngày trực ca nguồn",
+    )
+    phien_ban_lich_nguon = models.PositiveIntegerField(null=True, blank=True)
+    dong_bo_bien_che_at = models.DateTimeField(null=True, blank=True)
+    nguoi_tao_thuoc_bien_che = models.BooleanField(null=True, blank=True)
     dia_diem = models.CharField(max_length=255, blank=True)
     nguoi_truc = models.CharField(max_length=255, blank=True)
     nguoi_truc_2 = models.CharField(max_length=255, blank=True)
@@ -115,6 +134,8 @@ class NguoiTrucSoGiaoNhanCaHC(TimestampedUUIDModel):
         related_name="nguoi_truc_chi_tiets",
     )
     thoi_gian = models.DateTimeField(default=timezone.now)
+    thoi_gian_bat_dau = models.DateTimeField(null=True, blank=True)
+    thoi_gian_ket_thuc = models.DateTimeField(null=True, blank=True)
     ten_nguoi_truc = models.CharField(max_length=255)
     thu_tu = models.PositiveIntegerField(default=1)
     nguoi_tao = models.ForeignKey(
@@ -141,6 +162,8 @@ class ChiTietSoGiaoNhanCaHC(TimestampedUUIDModel):
         related_name="noi_dung_chi_tiets",
     )
     thoi_gian = models.DateTimeField(default=timezone.now)
+    thoi_gian_bat_dau = models.DateTimeField(null=True, blank=True)
+    thoi_gian_ket_thuc = models.DateTimeField(null=True, blank=True)
     tieu_de = models.CharField(max_length=255, blank=True)
     noi_dung = models.TextField()
     thu_tu = models.PositiveIntegerField(default=1)

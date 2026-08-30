@@ -8,7 +8,8 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
+from django.utils import timezone
+from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory, get_user_factory
 from nhatkyvanhanh.models import MauChuyenDoiTBThang, SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang
 from nhatkyvanhanh.serializers import (
     MauChuyenDoiTBThangSerializer,
@@ -16,6 +17,10 @@ from nhatkyvanhanh.serializers import (
     ChiTietChuyenDoiTBThangSerializer,
 )
 from nhatkyvanhanh.permissions import (
+    CanViewMonthlyEquipmentSwitchTemplates,
+    CanCreateMonthlyEquipmentSwitchTemplates,
+    CanEditMonthlyEquipmentSwitchTemplates,
+    CanDeleteMonthlyEquipmentSwitchTemplates,
     CanViewMonthlyEquipmentSwitchLogs,
     CanCreateMonthlyEquipmentSwitchLogs,
     CanEditMonthlyEquipmentSwitchLogs,
@@ -25,6 +30,9 @@ from .helpers import (
     _get_song_hinh_factory,
     _create_default_monthly_switch_templates,
     _previous_month_values_by_device,
+    _monthly_switch_log_locked,
+    _can_confirm_monthly_equipment_switch_log,
+    _can_unlock_monthly_equipment_switch_log,
     _can_edit_monthly_equipment_switch_log,
     _can_delete_monthly_equipment_switch_log,
 )
@@ -38,6 +46,7 @@ class MauChuyenDoiTBThangFilterSet(django_filters.FilterSet):
 
 class MauChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
     serializer_class = MauChuyenDoiTBThangSerializer
+    pagination_class = None
     parser_classes = [JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MauChuyenDoiTBThangFilterSet
@@ -53,9 +62,13 @@ class MauChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
     ordering = ["thu_tu_nhom", "thu_tu", "created_at"]
 
     def get_permissions(self):
-        permission_classes = [CanViewMonthlyEquipmentSwitchLogs]
-        if self.action in ["create", "update", "partial_update", "destroy"]:
-            permission_classes = [CanCreateMonthlyEquipmentSwitchLogs]
+        permission_classes = [CanViewMonthlyEquipmentSwitchTemplates]
+        if self.action == "create":
+            permission_classes = [CanCreateMonthlyEquipmentSwitchTemplates]
+        elif self.action in ["update", "partial_update"]:
+            permission_classes = [CanEditMonthlyEquipmentSwitchTemplates]
+        elif self.action == "destroy":
+            permission_classes = [CanDeleteMonthlyEquipmentSwitchTemplates]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
@@ -84,7 +97,7 @@ class SoChuyenDoiTBThangFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = SoChuyenDoiTBThang
-        fields = ["nha_may", "nam", "thang", "ca_truc", "thang_tu", "thang_den", "ngay_tu", "ngay_den", "nguoi_tao"]
+        fields = ["nha_may", "nam", "thang", "ca_truc", "thang_tu", "thang_den", "ngay_tu", "ngay_den", "nguoi_tao", "trang_thai"]
 
 
 class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
@@ -119,6 +132,7 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
             SoChuyenDoiTBThang.objects.select_related(
                 "nha_may",
                 "nguoi_tao",
+                "nguoi_duyet",
             )
             .prefetch_related(
                 "chi_tiets",
@@ -171,7 +185,17 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         return True
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        if not data.get("nha_may"):
+            user_factory = get_user_factory(request.user)
+            if user_factory:
+                data["nha_may"] = user_factory.id
+            else:
+                sh = _get_song_hinh_factory()
+                if sh:
+                    data["nha_may"] = sh.id
+
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         factory_data = apply_request_factory_to_serializer(request.user, serializer, "nha_may", "fk")
         if not factory_data.get("nha_may") and not serializer.validated_data.get("nha_may"):
@@ -189,6 +213,9 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
+        so = serializer.instance
+        if _monthly_switch_log_locked(so) and not self.request.user.is_superuser:
+            raise PermissionDenied("Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể chỉnh sửa.")
         if not _can_edit_monthly_equipment_switch_log(self.request.user, serializer.instance):
             raise PermissionDenied("Ban khong co quyen cap nhat so chuyen doi TB thang nay.")
         serializer.save(
@@ -196,13 +223,60 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
+        if _monthly_switch_log_locked(instance) and not self.request.user.is_superuser:
+            raise PermissionDenied("Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể xóa.")
         if not _can_delete_monthly_equipment_switch_log(self.request.user, instance):
             raise PermissionDenied("Ban khong co quyen xoa so chuyen doi TB thang nay.")
         return super().perform_destroy(instance)
 
+    @action(detail=True, methods=["post"], url_path="xac-nhan")
+    def xac_nhan(self, request, pk=None):
+        so = self.get_object()
+        if not _can_confirm_monthly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Bạn không có quyền ký duyệt sổ chuyển đổi thiết bị tháng này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if so.nguoi_tao_id == request.user.id and not request.user.is_superuser:
+            return Response(
+                {"detail": "Người tạo sổ không được tự ký duyệt sổ của chính mình."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        ghi_chu = request.data.get("ghi_chu_duyet", "")
+        so.trang_thai = SoChuyenDoiTBThang.TrangThai.DA_DUYET
+        so.nguoi_duyet = request.user
+        so.duyet_at = timezone.now()
+        if ghi_chu:
+            so.ghi_chu_duyet = ghi_chu
+        so.dong_bo_chu_ky_tu_user(request.user)
+        so.save()
+        serializer = self.get_serializer(so)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="huy-xac-nhan")
+    def huy_xac_nhan(self, request, pk=None):
+        so = self.get_object()
+        if not _can_unlock_monthly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Bạn không có quyền mở khóa sổ chuyển đổi thiết bị tháng này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        so.trang_thai = SoChuyenDoiTBThang.TrangThai.CHO_DUYET
+        so.nguoi_duyet = None
+        so.duyet_at = None
+        so.chu_ky_nguoi_duyet = None
+        so.save()
+        serializer = self.get_serializer(so)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=["post"], url_path="tao-chi-tiet")
     def tao_chi_tiet(self, request, pk=None):
         so = self.get_object()
+        if _monthly_switch_log_locked(so) and not request.user.is_superuser:
+            return Response(
+                {"detail": "Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể thêm chi tiết."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if not _can_edit_monthly_equipment_switch_log(request.user, so):
             return Response(
                 {"detail": "Ban khong co quyen them chi tiet chuyen doi TB thang."},
@@ -225,6 +299,11 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
     )
     def cap_nhat_chi_tiet(self, request, pk=None, chi_tiet_id=None):
         so = self.get_object()
+        if _monthly_switch_log_locked(so) and not request.user.is_superuser:
+            return Response(
+                {"detail": "Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể cập nhật chi tiết."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if not _can_edit_monthly_equipment_switch_log(request.user, so):
             return Response(
                 {"detail": "Ban khong co quyen cap nhat chi tiet chuyen doi TB thang nay."},
@@ -246,6 +325,38 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        response_serializer = self.get_serializer(self.get_object())
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="dong-bo-dau-thang")
+    def dong_bo_dau_thang(self, request, pk=None):
+        so = self.get_object()
+        if _monthly_switch_log_locked(so) and not request.user.is_superuser:
+            return Response(
+                {"detail": "Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể đồng bộ chỉ số."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not _can_edit_monthly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Bạn không có quyền chỉnh sửa sổ chuyển đổi TB tháng này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        previous_values = _previous_month_values_by_device(so)
+        if not previous_values:
+            return Response(
+                {"detail": "Không tìm thấy dữ liệu sổ chuyển đổi tháng trước để đồng bộ.", "count": 0},
+                status=status.HTTP_200_OK,
+            )
+        with transaction.atomic():
+            for ct in so.chi_tiets.all():
+                if ct.thiet_bi_id in previous_values:
+                    new_dau = previous_values[ct.thiet_bi_id]
+                    ct.dau_thang = new_dau
+                    if ct.cuoi_thang < new_dau:
+                        ct.cuoi_thang = new_dau
+                    ct.thuc_hien = ct.cuoi_thang - ct.dau_thang
+                    ct.save(update_fields=["dau_thang", "cuoi_thang", "thuc_hien"])
 
         response_serializer = self.get_serializer(self.get_object())
         return Response(response_serializer.data, status=status.HTTP_200_OK)

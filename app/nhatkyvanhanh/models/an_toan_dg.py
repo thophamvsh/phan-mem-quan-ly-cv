@@ -14,7 +14,7 @@ class SoAnToanDauGio(TimestampedUUIDModel):
         default=CaTruc.CA_NGAY,
     )
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_an_toan_dau_gio",
         null=True,

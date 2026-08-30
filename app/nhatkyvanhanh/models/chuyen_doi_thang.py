@@ -4,11 +4,11 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from .base import TimestampedUUIDModel, _current_year
+from .base import TimestampedUUIDModel, _current_year, _lay_chu_ky_profile
 
 class MauChuyenDoiTBThang(TimestampedUUIDModel):
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="mau_chuyen_doi_tb_thang",
         null=True,
@@ -50,13 +50,23 @@ class SoChuyenDoiTBThang(TimestampedUUIDModel):
         C = "C", "Ca C"
         D = "D", "Ca D"
 
+    class TrangThai(models.TextChoices):
+        CHO_DUYET = "cho_duyet", "Chờ duyệt"
+        DA_DUYET = "da_duyet", "Đã duyệt"
+
     nam = models.PositiveSmallIntegerField(default=_current_year)
     thang = models.PositiveSmallIntegerField(default=1)
     ca_truc = models.CharField(max_length=1, choices=CaTruc.choices, default=CaTruc.A)
     thang_bat_dau = models.DateField()
     thang_ket_thuc = models.DateField()
+    trang_thai = models.CharField(
+        max_length=20,
+        choices=TrangThai.choices,
+        default=TrangThai.CHO_DUYET,
+        verbose_name="Trạng thái",
+    )
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="so_chuyen_doi_tb_thang",
         null=True,
@@ -69,6 +79,29 @@ class SoChuyenDoiTBThang(TimestampedUUIDModel):
         related_name="so_chuyen_doi_tb_thang_da_tao",
         null=True,
         blank=True,
+        verbose_name="Người tạo",
+    )
+    nguoi_duyet = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="so_chuyen_doi_tb_thang_da_duyet",
+        null=True,
+        blank=True,
+        verbose_name="Người duyệt",
+    )
+    duyet_at = models.DateTimeField(null=True, blank=True, verbose_name="Thời gian duyệt")
+    ghi_chu_duyet = models.TextField(blank=True, verbose_name="Ghi chú duyệt")
+    chu_ky_nguoi_tao = models.ImageField(
+        upload_to="signatures/so_chuyen_doi_thang/nguoi_tao/",
+        null=True,
+        blank=True,
+        verbose_name="Chữ ký người tạo",
+    )
+    chu_ky_nguoi_duyet = models.ImageField(
+        upload_to="signatures/so_chuyen_doi_thang/nguoi_duyet/",
+        null=True,
+        blank=True,
+        verbose_name="Chữ ký người duyệt",
     )
 
     class Meta:
@@ -81,6 +114,27 @@ class SoChuyenDoiTBThang(TimestampedUUIDModel):
         ]
         verbose_name = "Sổ chuyển đổi TB tháng"
         verbose_name_plural = "Sổ chuyển đổi TB tháng"
+
+    @property
+    def da_khoa(self):
+        return bool(
+            (self.nguoi_duyet_id and self.duyet_at)
+            or self.trang_thai == self.TrangThai.DA_DUYET
+        )
+
+    def dong_bo_chu_ky_tu_user(self, user=None):
+        if self.nguoi_tao_id and not self.chu_ky_nguoi_tao:
+            signature = _lay_chu_ky_profile(self.nguoi_tao)
+            if signature:
+                self.chu_ky_nguoi_tao = signature
+        if self.nguoi_duyet_id:
+            signature = _lay_chu_ky_profile(self.nguoi_duyet)
+            if signature:
+                self.chu_ky_nguoi_duyet = signature
+        if user and user.id == self.nguoi_duyet_id:
+            signature = _lay_chu_ky_profile(user)
+            if signature:
+                self.chu_ky_nguoi_duyet = signature
 
     def _cap_nhat_khoang_thoi_gian_thang(self):
         if self.nam < 2000 or self.nam > 2100:
@@ -97,6 +151,14 @@ class SoChuyenDoiTBThang(TimestampedUUIDModel):
 
     def save(self, *args, **kwargs):
         self._cap_nhat_khoang_thoi_gian_thang()
+        if self.nguoi_tao_id and not self.chu_ky_nguoi_tao:
+            signature = _lay_chu_ky_profile(self.nguoi_tao)
+            if signature:
+                self.chu_ky_nguoi_tao = signature
+        if self.nguoi_duyet_id and not self.chu_ky_nguoi_duyet:
+            signature = _lay_chu_ky_profile(self.nguoi_duyet)
+            if signature:
+                self.chu_ky_nguoi_duyet = signature
         self.full_clean()
         return super().save(*args, **kwargs)
 

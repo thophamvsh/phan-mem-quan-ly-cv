@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.admin import ThietBiResource
 from quanlyvanhanh.configs.operation_configs import get_tram_factory_config
 from quanlyvanhanh.models import ThietBi, ThongSoTram110KV, ThongSoVanHanh, ThongSoToMay
@@ -16,7 +16,7 @@ from openpyxl import Workbook
 class ExcelImportTests(APITestCase):
     def setUp(self):
         # Create factories
-        self.sh_factory = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.sh_factory = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
 
         # Create user
         self.user = get_user_model().objects.create_user(

@@ -17,8 +17,9 @@ from import_export.formats import base_formats  # dùng base_formats.XLSX (class
 
 from .models import (
     Bang_vat_tu, Bang_vi_tri, Bang_kiem_ke,
-    Bang_de_nghi_nhap, Bang_de_nghi_xuat, Bang_nha_may, Bang_xuat_xu
+    Bang_de_nghi_nhap, Bang_de_nghi_xuat, Bang_xuat_xu
 )
+from tochuc.models import NhaMay
 from core.models import UserProfile
 from django.contrib.auth.models import User
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
@@ -229,7 +230,7 @@ class BangVatTuResource(resources.ModelResource):
     ma_nha_may = fields.Field(
         column_name="ma_nha_may",
         attribute="bang_nha_may",
-        widget=ForeignKeyWidget(Bang_nha_may, "ma_nha_may"),
+        widget=ForeignKeyWidget(NhaMay, "ma_nha_may"),
     )
     ton_kho = fields.Field(column_name="ton_kho", attribute="ton_kho", widget=SafeIntegerWidget())
     so_luong_kh = fields.Field(column_name="so_luong_kh", attribute="so_luong_kh", widget=SafeIntegerWidget())
@@ -492,7 +493,7 @@ class BangViTriResource(resources.ModelResource):
 
 class BangNhaMayResource(resources.ModelResource):
     class Meta:
-        model = Bang_nha_may
+        model = NhaMay
         import_id_fields = ("ma_nha_may",)
         fields = ("ma_nha_may", "ten_nha_may")
         export_order = fields
@@ -598,7 +599,7 @@ class BangViTriAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     search_fields = ("ma_vi_tri", "ma_he_thong", "kho", "ke", "ngan", "tang")
     list_per_page = 200  # Hiển thị 200 vị trí mỗi trang
 
-@admin.register(Bang_nha_may)
+@admin.register(NhaMay)
 class BangNhaMayAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = BangNhaMayResource
     list_display = ("ma_nha_may", "ten_nha_may")
@@ -715,6 +716,5 @@ class SimpleUserAdmin(BaseUserAdmin):
 #     def full_name(self, obj):
 #         return obj.full_name
 #     full_name.short_description = 'Tên đầy đủ'
-
 
 

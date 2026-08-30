@@ -153,10 +153,10 @@ def get_nha_may_list(request):
     Get list of factories for registration
     GET /api/khovattu/auth/nha-may/
     """
-    from .models import Bang_nha_may
+    from tochuc.models import NhaMay
     from .serializers import NhaMaySerializer
 
-    nha_mays = Bang_nha_may.objects.all()
+    nha_mays = NhaMay.objects.all()
     serializer = NhaMaySerializer(nha_mays, many=True)
     return Response({
         'success': True,

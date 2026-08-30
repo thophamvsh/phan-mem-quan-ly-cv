@@ -6,6 +6,7 @@ from .nhat_ky_vh import SonhatkyvanhanhDieselViewSet, SonhatkyvanhanhViewSet
 from .giao_ca_hc import SogiaonhancaHCViewSet
 from .giao_ca_vh import SogiaonhancaVHViewSet
 from .an_toan_dg import SoAnToanViewSet
+from .phan_cong_nhiem_vu_hc import BangPhanCongNhiemVuHCViewSet
 
 __all__ = [
     "NhatKySuKienViewSet",
@@ -19,4 +20,5 @@ __all__ = [
     "SogiaonhancaHCViewSet",
     "SogiaonhancaVHViewSet",
     "SoAnToanViewSet",
+    "BangPhanCongNhiemVuHCViewSet",
 ]

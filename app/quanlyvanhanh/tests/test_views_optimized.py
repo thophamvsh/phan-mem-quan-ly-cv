@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 from datetime import datetime, time, timedelta
 import pytz
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi, ThongSoVanHanh, ThongSoToMay, ThongSoTram110KV, NguongThongSo
 from django.utils import timezone
 
@@ -13,7 +13,7 @@ from django.utils import timezone
 class OptimizedViewsTests(APITestCase):
     def setUp(self):
         # Create factories
-        self.sh_factory = Bang_nha_may.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
+        self.sh_factory = NhaMay.objects.create(ma_nha_may="SH", ten_nha_may="Song Hinh")
 
         # Create user
         self.user = get_user_model().objects.create_user(
@@ -429,7 +429,6 @@ class OptimizedViewsTests(APITestCase):
         )
 
         today = timezone.localtime(timezone.now()).date()
-        yesterday = today - timedelta(days=1)
         dt_now = timezone.localtime(timezone.now())
         ThongSoToMay.objects.create(
             thiet_bi=bearing_device,
@@ -437,8 +436,8 @@ class OptimizedViewsTests(APITestCase):
             ten_thong_so="Nhiet do o do",
             don_vi="C",
             gia_tri=77.0,
-            thoi_diem_nhap=dt_now - timedelta(days=1, hours=1),
-            ngay_nhap=yesterday,
+            thoi_diem_nhap=dt_now - timedelta(hours=1),
+            ngay_nhap=today,
             nha_may="Song Hinh",
         )
         ThongSoToMay.objects.create(
@@ -468,7 +467,7 @@ class OptimizedViewsTests(APITestCase):
         self.assertEqual(alert["thiet_bi_ma"], "SH.TB.H1.GE.OD")
         self.assertEqual(alert["source"], "tomay")
 
-    def test_thong_so_active_alerts_endpoint_keeps_latest_alert_when_later_value_is_normal(self):
+    def test_thong_so_active_alerts_endpoint_clears_alert_when_later_value_is_normal(self):
         turbine_device = ThietBi.objects.create(
             ten="Tua bin",
             ma="TuB",
@@ -491,7 +490,6 @@ class OptimizedViewsTests(APITestCase):
         )
 
         today = timezone.localtime(timezone.now()).date()
-        yesterday = today - timedelta(days=1)
         dt_now = timezone.localtime(timezone.now())
         ThongSoToMay.objects.create(
             thiet_bi=shaft_seal_device,
@@ -499,8 +497,8 @@ class OptimizedViewsTests(APITestCase):
             ten_thong_so="Luu luong chen truc",
             don_vi="l/p",
             gia_tri=5.0,
-            thoi_diem_nhap=dt_now - timedelta(days=1, hours=2),
-            ngay_nhap=yesterday,
+            thoi_diem_nhap=dt_now - timedelta(hours=2),
+            ngay_nhap=today,
             nha_may="Song Hinh",
         )
         ThongSoToMay.objects.create(
@@ -509,8 +507,8 @@ class OptimizedViewsTests(APITestCase):
             ten_thong_so="Luu luong chen truc",
             don_vi="l/p",
             gia_tri=10.0,
-            thoi_diem_nhap=dt_now - timedelta(days=1, hours=1),
-            ngay_nhap=yesterday,
+            thoi_diem_nhap=dt_now - timedelta(hours=1),
+            ngay_nhap=today,
             nha_may="Song Hinh",
         )
         ThongSoTram110KV.objects.create(
@@ -529,16 +527,27 @@ class OptimizedViewsTests(APITestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        alert = next(
-            item for item in response.data
-            if item["ma_thong_so"] == "luu_luong_chen_truc"
+        self.assertFalse(any(
+            item["ma_thong_so"] == "luu_luong_chen_truc"
+            for item in response.data
+        ))
+
+    def test_thong_so_active_alerts_endpoint_ignores_measurements_older_than_24_hours(self):
+        NguongThongSo.objects.create(
+            nha_may="Song Hinh", thiet_bi=self.device,
+            ma_thong_so="ap_luc_cu", ten_thong_so="Áp lực cũ",
+            alarm=5.0, trip=4.0,
         )
-        self.assertEqual(alert["alert_type"], "alarm")
-        self.assertEqual(alert["direction"], "low")
-        self.assertEqual(alert["gia_tri"], 5.0)
-        self.assertEqual(alert["alarm"], 8.0)
-        self.assertEqual(alert["thiet_bi_ma"], "SH.TB.H1.TuB.SH")
-        self.assertEqual(alert["source"], "tomay")
+        old_time = timezone.localtime(timezone.now()) - timedelta(hours=25)
+        ThongSoToMay.objects.create(
+            thiet_bi=self.device, ma_thong_so="ap_luc_cu",
+            ten_thong_so="Áp lực cũ", don_vi="bar", gia_tri=4.5,
+            thoi_diem_nhap=old_time, ngay_nhap=old_time.date(), nha_may="Song Hinh",
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(reverse('quanlyvanhanh:thong-so-active-alerts'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(any(item["ma_thong_so"] == "ap_luc_cu" for item in response.data))
 
     def test_thong_so_active_alerts_permissions(self):
         """Test that active-alerts endpoint respects can_receive_alert_notifications permission."""
@@ -558,6 +567,17 @@ class OptimizedViewsTests(APITestCase):
             alarm=200.0,
             trip=250.0,
             rated=100.0,
+        )
+        current_time = timezone.localtime(timezone.now())
+        ThongSoVanHanh.objects.create(
+            thiet_bi=self.device,
+            ma_thong_so="dien_ap_h1",
+            ten_thong_so="Điện áp H1",
+            don_vi="kV",
+            gia_tri="220.5",
+            thoi_diem_nhap=current_time,
+            ngay_nhap=current_time.date(),
+            nha_may="Song Hinh",
         )
         
         # We need to temporarily remove 'test' from sys.argv to trigger real permission checks

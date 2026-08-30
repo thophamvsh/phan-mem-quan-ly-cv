@@ -16,7 +16,7 @@ class SuKien(TimestampedUUIDModel):
 
     thoi_gian_xay_ra = models.DateTimeField()
     nha_may = models.ForeignKey(
-        "khovattu.Bang_nha_may",
+        "tochuc.NhaMay",
         on_delete=models.PROTECT,
         related_name="su_kiens",
         null=True,

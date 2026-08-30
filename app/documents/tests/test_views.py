@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 
 from core.models import UserProfile
 from documents.models import Document, DocumentFolder
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 
 
 class DocumentViewApiTests(APITestCase):
@@ -40,7 +40,7 @@ class DocumentViewApiTests(APITestCase):
             can_use_ai_documents=False,
         )
 
-        self.songhinh = Bang_nha_may.objects.create(
+        self.songhinh = NhaMay.objects.create(
             ma_nha_may="SH",
             ten_nha_may="Song Hinh",
         )

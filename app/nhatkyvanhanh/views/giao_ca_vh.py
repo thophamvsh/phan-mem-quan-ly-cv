@@ -5,7 +5,9 @@ from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
-from django.core.exceptions import PermissionDenied
+from rest_framework.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError as DjangoValidationError
+from datetime import date
 
 from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory
 from nhatkyvanhanh.models import (
@@ -22,6 +24,9 @@ from nhatkyvanhanh.serializers import (
     LuuYChiDaoSoGiaoNhanCaVHSerializer,
     AnhSoGiaoNhanCaVHSerializer,
 )
+from quanlycatruc.models import LichTrucCa, NgayTrucCa
+from quanlycatruc.permissions import can_access_plant
+from quanlycatruc.services import actual_shift_staff
 
 
 def _sync_legacy_shift_staff(shift_log):
@@ -56,7 +61,6 @@ from nhatkyvanhanh.permissions import (
     IsNotShiftLogCreator,
 )
 from .helpers import (
-    _sync_truc_ktvh_from_admin_shift_log,
     _dong_bo_chu_ky_so_giao_nhan,
     _shift_log_locked,
     _can_edit_shift_log,
@@ -155,26 +159,178 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("User không có quyền cập nhật nhân sự ca.")
 
     def perform_create(self, serializer):
-        so = serializer.save(
-            user_giao_ca=self.request.user,
-            nguoi_tao=self.request.user,
-            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        source_schedule = serializer.validated_data.get("lich_truc_nguon")
+        factory_values = apply_request_factory_to_serializer(
+            self.request.user, serializer, "nha_may", "fk"
         )
-        _sync_truc_ktvh_from_admin_shift_log(so)
-        _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
-        so.save()
+        target_plant = factory_values.get("nha_may") or serializer.validated_data.get("nha_may")
+        target_date = serializer.validated_data.get("ngay_truc")
+        target_shift = serializer.validated_data.get("ca_truc")
+        if target_plant and target_date and target_shift and SogiaonhancaVH.objects.filter(
+            nha_may=target_plant, ngay_truc=target_date, ca_truc=target_shift
+        ).exists():
+            raise ValidationError(
+                {"ca_truc": ["Nhà máy này đã có sổ giao nhận ca vận hành cho ca trực này trong ngày đã chọn."]}
+            )
+        if source_schedule and target_plant and source_schedule.nha_may_id != target_plant.id:
+            raise PermissionDenied("Lịch trực nguồn không thuộc nhà máy của sổ.")
+        try:
+            so = serializer.save(
+                user_giao_ca=self.request.user,
+                nguoi_tao=self.request.user,
+                phien_ban_lich_nguon=source_schedule.phien_ban if source_schedule else None,
+                dong_bo_bien_che_at=timezone.now() if source_schedule else None,
+                dong_bo_truc_ktvh_at=(
+                    timezone.now()
+                    if serializer.validated_data.get("so_giao_nhan_ca_hc_nguon")
+                    else None
+                ),
+                **factory_values
+            )
+            _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
+            so.save()
+        except DjangoValidationError as exc:
+            msg = (
+                {"ca_truc": ["Nhà máy này đã có sổ giao nhận ca vận hành cho ca trực này trong ngày đã chọn."]}
+                if "already exists" in str(exc)
+                else (exc.message_dict if hasattr(exc, "message_dict") else exc.messages)
+            )
+            raise ValidationError(msg)
 
     def perform_update(self, serializer):
         if _shift_log_locked(serializer.instance):
             raise PermissionDenied("Sổ giao nhận ca đã được nhận ca, không được chỉnh sửa.")
         if not _can_edit_shift_log(self.request.user, serializer.instance):
             raise PermissionDenied("User khong co quyen cap nhat so giao nhan ca.")
-        so = serializer.save(
-            **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
+        source_schedule = serializer.validated_data.get(
+            "lich_truc_nguon", serializer.instance.lich_truc_nguon
         )
-        _sync_truc_ktvh_from_admin_shift_log(so)
-        _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
-        so.save()
+        factory_values = apply_request_factory_to_serializer(
+            self.request.user, serializer, "nha_may", "fk"
+        )
+        target_plant = factory_values.get("nha_may") or serializer.validated_data.get(
+            "nha_may", serializer.instance.nha_may
+        )
+        target_date = serializer.validated_data.get("ngay_truc", serializer.instance.ngay_truc)
+        target_shift = serializer.validated_data.get("ca_truc", serializer.instance.ca_truc)
+        if target_plant and target_date and target_shift and SogiaonhancaVH.objects.filter(
+            nha_may=target_plant, ngay_truc=target_date, ca_truc=target_shift
+        ).exclude(pk=serializer.instance.pk).exists():
+            raise ValidationError(
+                {"ca_truc": ["Nhà máy này đã có sổ giao nhận ca vận hành cho ca trực này trong ngày đã chọn."]}
+            )
+        if source_schedule and source_schedule.nha_may_id != target_plant.id:
+            raise PermissionDenied("Lịch trực nguồn không thuộc nhà máy của sổ.")
+        try:
+            so = serializer.save(
+                phien_ban_lich_nguon=source_schedule.phien_ban if source_schedule else None,
+                dong_bo_bien_che_at=timezone.now() if source_schedule else serializer.instance.dong_bo_bien_che_at,
+                dong_bo_truc_ktvh_at=(
+                    timezone.now()
+                    if serializer.validated_data.get("so_giao_nhan_ca_hc_nguon")
+                    else (
+                        None
+                        if "so_giao_nhan_ca_hc_nguon" in serializer.validated_data
+                        else serializer.instance.dong_bo_truc_ktvh_at
+                    )
+                ),
+                **factory_values
+            )
+            _dong_bo_chu_ky_so_giao_nhan(so, self.request.user)
+            so.save()
+        except DjangoValidationError as exc:
+            msg = (
+                {"ca_truc": ["Nhà máy này đã có sổ giao nhận ca vận hành cho ca trực này trong ngày đã chọn."]}
+                if "already exists" in str(exc)
+                else (exc.message_dict if hasattr(exc, "message_dict") else exc.messages)
+            )
+            raise ValidationError(msg)
+
+    @action(detail=False, methods=["get"], url_path="bien-che-lich-truc")
+    def bien_che_lich_truc(self, request):
+        try:
+            plant_id = int(request.query_params.get("nha_may", ""))
+            shift_date = date.fromisoformat(request.query_params.get("ngay_truc", ""))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "Nhà máy hoặc ngày trực không hợp lệ."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        shift_code = (request.query_params.get("ca_truc") or "").strip().upper()
+        shift_period = request.query_params.get("loai_thoi_gian_truc") or ""
+        if shift_period not in {"ngay", "dem", "sang", "chieu"} or not shift_code:
+            return Response(
+                {"detail": "Yêu cầu chọn ca trực và loại thời gian trực."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not can_access_plant(request.user, plant_id):
+            raise PermissionDenied("Bạn không có quyền xem lịch trực của nhà máy này.")
+
+        period = "ca_dem" if shift_period in {"dem", "sang"} else "ca_ngay"
+        team_field = "kip_ca_dem__ma_kip" if period == "ca_dem" else "kip_ca_ngay__ma_kip"
+        candidates = list(
+            NgayTrucCa.objects.filter(
+                lich_truc__nha_may_id=plant_id,
+                lich_truc__trang_thai__in=[
+                    LichTrucCa.TrangThai.DA_DUYET,
+                    LichTrucCa.TrangThai.DANG_AP_DUNG,
+                    LichTrucCa.TrangThai.DA_KHOA,
+                ],
+                ngay=shift_date,
+                **{team_field: shift_code},
+            ).select_related(
+                "lich_truc", "kip_ca_ngay", "kip_ca_dem"
+            ).prefetch_related(
+                "dieu_chinh_nhan_su__nhan_su_vang",
+                "dieu_chinh_nhan_su__nhan_su_thay",
+                "dieu_chinh_doi_den__nhan_su_vang",
+                "dieu_chinh_doi_den__nhan_su_thay",
+            )
+        )
+        priority = {
+            LichTrucCa.TrangThai.DANG_AP_DUNG: 3,
+            LichTrucCa.TrangThai.DA_KHOA: 2,
+            LichTrucCa.TrangThai.DA_DUYET: 1,
+        }
+        candidates.sort(
+            key=lambda day: (priority.get(day.lich_truc.trang_thai, 0), day.lich_truc.phien_ban),
+            reverse=True,
+        )
+        if not candidates:
+            return Response(
+                {"detail": "Không tìm thấy lịch đã duyệt, đang áp dụng hoặc đã khóa phù hợp với ngày và ca đã chọn."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        selected = candidates[0]
+        staff = actual_shift_staff(selected, period)
+        leaders = [item for item in staff if item.get("vai_tro") == "truong_ca"]
+        operation_staff = [
+            {
+                "nhan_su_id": item.get("nhan_su_id"),
+                "user_id": item.get("user_id"),
+                "ho_ten": item.get("ho_ten"),
+                "vai_tro": item.get("vai_tro"),
+                "nguon": item.get("nguon"),
+            }
+            for item in staff
+            if item.get("vai_tro") in {"truc_chinh", "truc_phu"}
+        ]
+        linked_leaders = [leader for leader in leaders if leader.get("user_id")]
+        leader_match = (
+            any(leader["user_id"] == request.user.id for leader in linked_leaders)
+            if linked_leaders else None
+        )
+        return Response({
+            "lich_truc_id": selected.lich_truc_id,
+            "ngay_truc_id": selected.id,
+            "phien_ban": selected.lich_truc.phien_ban,
+            "trang_thai": selected.lich_truc.trang_thai,
+            "ca_truc": shift_code,
+            "loai_ca": period,
+            "truong_ca": leaders,
+            "truong_ca_khop_nguoi_tao": leader_match,
+            "nhan_su": operation_staff,
+        })
 
     def perform_destroy(self, instance):
         if _shift_log_locked(instance):

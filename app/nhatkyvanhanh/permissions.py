@@ -123,6 +123,28 @@ class CanDeleteAdminShiftHandoverLogs(AnyUserProfilePermission):
     )
 
 
+class CanViewAdminShiftDutyRosters(UserProfilePermission):
+    permission_name = "can_view_admin_shift_duty_rosters"
+
+
+class CanCreateAdminShiftDutyRosters(UserProfilePermission):
+    permission_name = "can_create_admin_shift_duty_rosters"
+
+
+class CanEditAdminShiftDutyRosters(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_admin_shift_duty_rosters",
+        "can_create_admin_shift_duty_rosters",
+    )
+
+
+class CanDeleteAdminShiftDutyRosters(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_admin_shift_duty_rosters",
+        "can_create_admin_shift_duty_rosters",
+    )
+
+
 class CanViewOperationLogbooks(UserProfilePermission):
     permission_name = "can_view_operation_logbooks"
 
@@ -171,6 +193,44 @@ class CanDeleteWeeklyEquipmentSwitchLogs(AnyUserProfilePermission):
     )
 
 
+class CanConfirmWeeklyEquipmentSwitchLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_confirm_weekly_equipment_switch_logs",
+        "can_manage_all_weekly_equipment_switch_logs",
+    )
+
+
+class CanViewMonthlyEquipmentSwitchTemplates(AnyUserProfilePermission):
+    permission_names = (
+        "can_view_monthly_equipment_switch_templates",
+        "can_create_monthly_equipment_switch_templates",
+        "can_edit_monthly_equipment_switch_templates",
+        "can_delete_monthly_equipment_switch_templates",
+        "can_manage_all_monthly_equipment_switch_logs",
+    )
+
+
+class CanCreateMonthlyEquipmentSwitchTemplates(AnyUserProfilePermission):
+    permission_names = (
+        "can_create_monthly_equipment_switch_templates",
+        "can_manage_all_monthly_equipment_switch_logs",
+    )
+
+
+class CanEditMonthlyEquipmentSwitchTemplates(AnyUserProfilePermission):
+    permission_names = (
+        "can_edit_monthly_equipment_switch_templates",
+        "can_manage_all_monthly_equipment_switch_logs",
+    )
+
+
+class CanDeleteMonthlyEquipmentSwitchTemplates(AnyUserProfilePermission):
+    permission_names = (
+        "can_delete_monthly_equipment_switch_templates",
+        "can_manage_all_monthly_equipment_switch_logs",
+    )
+
+
 class CanViewMonthlyEquipmentSwitchLogs(UserProfilePermission):
     permission_name = "can_view_monthly_equipment_switch_logs"
 
@@ -189,6 +249,13 @@ class CanEditMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
 class CanDeleteMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
     permission_names = (
         "can_delete_own_monthly_equipment_switch_logs",
+        "can_manage_all_monthly_equipment_switch_logs",
+    )
+
+
+class CanConfirmMonthlyEquipmentSwitchLogs(AnyUserProfilePermission):
+    permission_names = (
+        "can_confirm_monthly_equipment_switch_logs",
         "can_manage_all_monthly_equipment_switch_logs",
     )
 

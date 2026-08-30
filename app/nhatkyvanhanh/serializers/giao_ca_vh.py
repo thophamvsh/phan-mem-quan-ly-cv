@@ -162,6 +162,12 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may",
             "nha_may_code",
             "nha_may_name",
+            "lich_truc_nguon",
+            "ngay_truc_ca_nguon",
+            "phien_ban_lich_nguon",
+            "dong_bo_bien_che_at",
+            "so_giao_nhan_ca_hc_nguon",
+            "dong_bo_truc_ktvh_at",
             "ngay_truc",
             "ca_truc",
             "loai_thoi_gian_truc",
@@ -206,6 +212,8 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
         read_only_fields = [
             "nha_may_code",
             "nha_may_name",
+            "dong_bo_bien_che_at",
+            "dong_bo_truc_ktvh_at",
             "noi_dung_chi_tiets",
             "nhan_su_ca",
             "luu_y_chi_daos",
@@ -225,6 +233,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "created_at",
             "updated_at",
         ]
+        validators = []
 
     def validate(self, attrs):
         start = attrs.get(
@@ -243,6 +252,48 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
                     )
                 }
             )
+        source_schedule = attrs.get(
+            "lich_truc_nguon", getattr(self.instance, "lich_truc_nguon", None)
+        )
+        source_day = attrs.get(
+            "ngay_truc_ca_nguon", getattr(self.instance, "ngay_truc_ca_nguon", None)
+        )
+        plant = attrs.get("nha_may", getattr(self.instance, "nha_may", None))
+        shift_date = attrs.get("ngay_truc", getattr(self.instance, "ngay_truc", None))
+        if bool(source_schedule) != bool(source_day):
+            raise serializers.ValidationError(
+                {"lich_truc_nguon": "Lịch trực nguồn và ngày trực nguồn phải được chọn cùng nhau."}
+            )
+        if source_schedule and source_day:
+            if source_day.lich_truc_id != source_schedule.id:
+                raise serializers.ValidationError(
+                    {"ngay_truc_ca_nguon": "Ngày trực nguồn không thuộc lịch trực đã chọn."}
+                )
+            if plant and source_schedule.nha_may_id != plant.id:
+                raise serializers.ValidationError(
+                    {"lich_truc_nguon": "Lịch trực nguồn không thuộc nhà máy của sổ."}
+                )
+            if shift_date and source_day.ngay != shift_date:
+                raise serializers.ValidationError(
+                    {"ngay_truc_ca_nguon": "Ngày trực nguồn không trùng ngày trực của sổ."}
+                )
+        admin_source = attrs.get(
+            "so_giao_nhan_ca_hc_nguon",
+            getattr(self.instance, "so_giao_nhan_ca_hc_nguon", None),
+        )
+        if admin_source:
+            if plant and admin_source.nha_may_id != plant.id:
+                raise serializers.ValidationError(
+                    {"so_giao_nhan_ca_hc_nguon": "Sổ hành chính nguồn không thuộc nhà máy của sổ vận hành."}
+                )
+            if start and end and not (
+                admin_source.thoi_gian_bat_dau_ca
+                and admin_source.thoi_gian_bat_dau_ca <= end
+                and admin_source.thoi_gian_giao_ca >= start
+            ):
+                raise serializers.ValidationError(
+                    {"so_giao_nhan_ca_hc_nguon": "Thời gian sổ hành chính nguồn không giao với ca vận hành."}
+                )
         device_states = attrs.get(
             "trang_thai_thiet_bi",
             getattr(self.instance, "trang_thai_thiet_bi", []),

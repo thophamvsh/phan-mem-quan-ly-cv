@@ -6,14 +6,14 @@ from unittest.mock import patch
 import qrcode
 
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
 from quanlyvanhanh.serializers import get_thiet_bi_qr_payload, ThietBiSerializer
 
 class ThietBiQRTests(APITestCase):
     def setUp(self):
         # Create factory and user
-        self.factory = Bang_nha_may.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
+        self.factory = NhaMay.objects.create(ma_nha_may="VS", ten_nha_may="Vinh Son")
         self.user = get_user_model().objects.create_user(
             email="testuser@example.com",
             password="testpass123",

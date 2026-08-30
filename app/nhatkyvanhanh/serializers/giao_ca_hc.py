@@ -11,6 +11,8 @@ class ChiTietSoGiaoNhanCaHCSerializer(serializers.ModelSerializer, UserSummaryMi
             "id",
             "so_giao_nhan_ca",
             "thoi_gian",
+            "thoi_gian_bat_dau",
+            "thoi_gian_ket_thuc",
             "tieu_de",
             "noi_dung",
             "thu_tu",
@@ -30,6 +32,21 @@ class ChiTietSoGiaoNhanCaHCSerializer(serializers.ModelSerializer, UserSummaryMi
     def get_nguoi_tao_display(self, obj):
         return self._get_user_display(obj.nguoi_tao)
 
+    def validate(self, attrs):
+        start = attrs.get(
+            "thoi_gian_bat_dau",
+            getattr(self.instance, "thoi_gian_bat_dau", None),
+        )
+        end = attrs.get(
+            "thoi_gian_ket_thuc",
+            getattr(self.instance, "thoi_gian_ket_thuc", None),
+        )
+        if start and end and end <= start:
+            raise serializers.ValidationError(
+                {"thoi_gian_ket_thuc": "Thời gian kết thúc phải sau thời gian bắt đầu."}
+            )
+        return attrs
+
 
 class NguoiTrucSoGiaoNhanCaHCSerializer(serializers.ModelSerializer, UserSummaryMixin):
     nguoi_tao_display = serializers.SerializerMethodField()
@@ -40,6 +57,8 @@ class NguoiTrucSoGiaoNhanCaHCSerializer(serializers.ModelSerializer, UserSummary
             "id",
             "so_giao_nhan_ca",
             "thoi_gian",
+            "thoi_gian_bat_dau",
+            "thoi_gian_ket_thuc",
             "ten_nguoi_truc",
             "thu_tu",
             "nguoi_tao",
@@ -57,6 +76,47 @@ class NguoiTrucSoGiaoNhanCaHCSerializer(serializers.ModelSerializer, UserSummary
 
     def get_nguoi_tao_display(self, obj):
         return self._get_user_display(obj.nguoi_tao)
+
+    def validate(self, attrs):
+        start = attrs.get(
+            "thoi_gian_bat_dau",
+            getattr(self.instance, "thoi_gian_bat_dau", None),
+        )
+        end = attrs.get(
+            "thoi_gian_ket_thuc",
+            getattr(self.instance, "thoi_gian_ket_thuc", None),
+        )
+        if start and end and end <= start:
+            raise serializers.ValidationError(
+                {"thoi_gian_ket_thuc": "Thời gian kết thúc phải sau thời gian bắt đầu."}
+            )
+        shift_log = self.context.get("shift_log") or getattr(
+            self.instance, "so_giao_nhan_ca", None
+        )
+        if shift_log and start and end:
+            if (
+                shift_log.thoi_gian_bat_dau_ca
+                and start < shift_log.thoi_gian_bat_dau_ca
+            ) or (shift_log.thoi_gian_giao_ca and end > shift_log.thoi_gian_giao_ca):
+                raise serializers.ValidationError(
+                    {"thoi_gian_ket_thuc": "Khoảng trực phải nằm trong thời gian của sổ."}
+                )
+            name = attrs.get(
+                "ten_nguoi_truc",
+                getattr(self.instance, "ten_nguoi_truc", ""),
+            ).strip()
+            overlapping = shift_log.nguoi_truc_chi_tiets.filter(
+                ten_nguoi_truc__iexact=name,
+                thoi_gian_bat_dau__lt=end,
+                thoi_gian_ket_thuc__gt=start,
+            )
+            if self.instance:
+                overlapping = overlapping.exclude(pk=self.instance.pk)
+            if name and overlapping.exists():
+                raise serializers.ValidationError(
+                    {"thoi_gian_bat_dau": "Các khoảng trực của cùng một người không được chồng lấn."}
+                )
+        return attrs
 
 
 class SogiaonhancaHCSerializer(serializers.ModelSerializer, UserSummaryMixin):
@@ -78,6 +138,11 @@ class SogiaonhancaHCSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "nha_may",
             "nha_may_code",
             "nha_may_name",
+            "lich_truc_nguon",
+            "ngay_truc_ca_nguon",
+            "phien_ban_lich_nguon",
+            "dong_bo_bien_che_at",
+            "nguoi_tao_thuoc_bien_che",
             "ngay_truc",
             "dia_diem",
             "nguoi_truc",
@@ -108,6 +173,8 @@ class SogiaonhancaHCSerializer(serializers.ModelSerializer, UserSummaryMixin):
         read_only_fields = [
             "nha_may_code",
             "nha_may_name",
+            "dong_bo_bien_che_at",
+            "nguoi_tao_thuoc_bien_che",
             "nguoi_truc_chi_tiets",
             "noi_dung_chi_tiets",
             "chu_ky_user_giao_ca",
@@ -125,6 +192,7 @@ class SogiaonhancaHCSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "created_at",
             "updated_at",
         ]
+        validators = []
 
     def validate(self, attrs):
         start = attrs.get(
@@ -143,6 +211,27 @@ class SogiaonhancaHCSerializer(serializers.ModelSerializer, UserSummaryMixin):
                     )
                 }
             )
+        source_schedule = attrs.get("lich_truc_nguon", getattr(self.instance, "lich_truc_nguon", None))
+        source_day = attrs.get("ngay_truc_ca_nguon", getattr(self.instance, "ngay_truc_ca_nguon", None))
+        plant = attrs.get("nha_may", getattr(self.instance, "nha_may", None))
+        shift_date = attrs.get("ngay_truc", getattr(self.instance, "ngay_truc", None))
+        if bool(source_schedule) != bool(source_day):
+            raise serializers.ValidationError(
+                {"lich_truc_nguon": "Lịch trực nguồn và ngày trực nguồn phải được chọn cùng nhau."}
+            )
+        if source_schedule and source_day:
+            if source_day.lich_truc_id != source_schedule.id:
+                raise serializers.ValidationError(
+                    {"ngay_truc_ca_nguon": "Ngày trực nguồn không thuộc lịch đã chọn."}
+                )
+            if plant and source_schedule.nha_may_id != plant.id:
+                raise serializers.ValidationError(
+                    {"lich_truc_nguon": "Lịch trực nguồn không thuộc nhà máy của sổ."}
+                )
+            if shift_date and source_day.ngay != shift_date:
+                raise serializers.ValidationError(
+                    {"ngay_truc_ca_nguon": "Ngày trực nguồn không trùng ngày trực của sổ."}
+                )
         return attrs
 
     def get_nha_may_code(self, obj):

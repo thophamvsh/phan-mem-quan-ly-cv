@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
 
 from core.models import UserProfile
-from khovattu.models import Bang_nha_may
+from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi, ThongSoToMay, ThongSoVanHanh
 
 
@@ -23,7 +23,7 @@ class Command(BaseCommand):
             dest="default_factory",
             default=None,
             help=(
-                "Optional Bang_nha_may.ma_nha_may used to fill blank ThietBi.nha_may. "
+                "Optional NhaMay.ma_nha_may used to fill blank ThietBi.nha_may. "
                 "Blank ThongSo rows are normally inferred from their ThietBi."
             ),
         )
@@ -31,7 +31,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.apply = options["apply"]
         self.default_factory_code = options["default_factory"]
-        self.factories = list(Bang_nha_may.objects.all().order_by("ma_nha_may"))
+        self.factories = list(NhaMay.objects.all().order_by("ma_nha_may"))
         self.factory_lookup = self._build_factory_lookup(self.factories)
 
         self.stdout.write(self.style.MIGRATE_HEADING("Factory scope audit: quanlyvanhanh"))
@@ -86,7 +86,7 @@ class Command(BaseCommand):
     def _get_default_factory_value(self):
         if not self.default_factory_code:
             return None
-        factory = Bang_nha_may.objects.filter(
+        factory = NhaMay.objects.filter(
             ma_nha_may__iexact=self.default_factory_code.strip()
         ).first()
         if not factory:
@@ -97,7 +97,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.HTTP_INFO("Configured factories"))
         if not self.factories:
-            self.stdout.write(self.style.WARNING("  No Bang_nha_may records found."))
+            self.stdout.write(self.style.WARNING("  No NhaMay records found."))
             return
         for factory in self.factories:
             self.stdout.write(f"  {factory.ma_nha_may}: {factory.ten_nha_may}")

@@ -3,7 +3,8 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from core.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Bang_nha_may, Bang_hinh_anh_vat_tu, Bang_xuat_xu
+from tochuc.models import NhaMay
+from .models import Bang_hinh_anh_vat_tu, Bang_xuat_xu
 from core.models import UserProfile
 
 
@@ -104,6 +105,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_edit_own_remediations', 'can_edit_all_remediations',
                  'can_edit_own_shift_handover_logs', 'can_delete_own_shift_handover_logs',
                  'can_manage_all_shift_handover_logs',
+                 'can_view_shift_schedule', 'can_create_shift_schedule',
+                 'can_edit_shift_schedule', 'can_delete_shift_schedule',
+                 'can_submit_shift_schedule', 'can_approve_shift_schedule',
+                 'can_manage_shift_roster', 'can_export_shift_schedule',
                  'can_view_weekly_equipment_switch_logs',
                  'can_create_weekly_equipment_switch_logs',
                  'can_edit_weekly_equipment_switch_logs',
@@ -150,7 +155,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class NhaMaySerializer(serializers.ModelSerializer):
     class Meta:
-        model = Bang_nha_may
+        model = NhaMay
         fields = ('id', 'ma_nha_may', 'ten_nha_may')
 
 
@@ -277,10 +282,10 @@ class VatTuUpsertSerializer(serializers.ModelSerializer):
         """Convert ma_nha_may string to bang_nha_may object"""
         if value:
             try:
-                from .models import Bang_nha_may
-                bang_nha_may = Bang_nha_may.objects.get(ma_nha_may=value.strip())
+                from tochuc.models import NhaMay
+                bang_nha_may = NhaMay.objects.get(ma_nha_may=value.strip())
                 return bang_nha_may
-            except Bang_nha_may.DoesNotExist:
+            except NhaMay.DoesNotExist:
                 raise serializers.ValidationError(f"Nhà máy với mã '{value}' không tồn tại")
         return None
 

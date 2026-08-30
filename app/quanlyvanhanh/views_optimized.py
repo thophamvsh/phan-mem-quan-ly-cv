@@ -538,6 +538,7 @@ class ThongSoToMayByDayView(APIView):
 
 class ThongSoActiveAlertsView(APIView):
     permission_classes = [IsAuthenticated]
+    max_alert_age = timedelta(hours=24)
 
     def get(self, request, *args, **kwargs):
         if not has_profile_permission(request.user, "can_receive_alert_notifications"):
@@ -554,6 +555,7 @@ class ThongSoActiveAlertsView(APIView):
         import pytz
 
         target_date_str = request.GET.get("date")
+        freshness_cutoff = None
         if target_date_str:
             try:
                 target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
@@ -561,28 +563,21 @@ class ThongSoActiveAlertsView(APIView):
                 target_date = timezone.localtime(timezone.now()).date()
             target_dates = [target_date]
         else:
-            today = timezone.localtime(timezone.now()).date()
-            has_today = (
-                filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=today).exists() or
-                filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=today).exists() or
-                filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap=today).exists()
-            )
-            if has_today:
-                target_date = today
-                target_dates = [today, today - timedelta(days=1)]
-            else:
-                from django.db.models import Max
-                latest_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
-                latest_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
-                latest_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").aggregate(Max('ngay_nhap'))['ngay_nhap__max']
-                dates = [d for d in [latest_vh, latest_tm, latest_tr] if d is not None]
-                target_date = max(dates) if dates else today
-                target_dates = [target_date]
+            target_dates = None
+            freshness_cutoff = timezone.now() - self.max_alert_age
 
         # 1. Query parameter records from all 3 models for the selected dates.
-        qs_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap__in=target_dates)
-        qs_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap__in=target_dates)
-        qs_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string").filter(ngay_nhap__in=target_dates)
+        qs_vh = filter_queryset_by_factory(ThongSoVanHanh.objects.all(), request.user, "nha_may", "string")
+        qs_tm = filter_queryset_by_factory(ThongSoToMay.objects.all(), request.user, "nha_may", "string")
+        qs_tr = filter_queryset_by_factory(ThongSoTram110KV.objects.all(), request.user, "nha_may", "string")
+        if target_dates is not None:
+            qs_vh = qs_vh.filter(ngay_nhap__in=target_dates)
+            qs_tm = qs_tm.filter(ngay_nhap__in=target_dates)
+            qs_tr = qs_tr.filter(ngay_nhap__in=target_dates)
+        else:
+            qs_vh = qs_vh.filter(thoi_diem_nhap__gte=freshness_cutoff)
+            qs_tm = qs_tm.filter(thoi_diem_nhap__gte=freshness_cutoff)
+            qs_tr = qs_tr.filter(thoi_diem_nhap__gte=freshness_cutoff)
 
         records = []
         for r in qs_vh.select_related("thiet_bi"):
@@ -649,11 +644,22 @@ class ThongSoActiveAlertsView(APIView):
             except Exception:
                 return None
 
+        # A normal value must clear an older alarm. Select the latest valid
+        # measurement first, then evaluate its threshold state.
+        latest_records = {}
+        for record in records:
+            if parse_number_local(record["gia_tri"]) is None:
+                continue
+            group_key = (record["thiet_bi"].ma_day_du, record["ma_thong_so"])
+            existing = latest_records.get(group_key)
+            if not existing or record["thoi_diem_nhap"] > existing["thoi_diem_nhap"]:
+                latest_records[group_key] = record
+
         # Resolve alerts
         alerts_map = {}
         thresholds_cache = {}
 
-        for r in records:
+        for r in latest_records.values():
             val = parse_number_local(r["gia_tri"])
             if val is None:
                 continue
