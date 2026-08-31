@@ -15,7 +15,7 @@ class NhaMayNhanSuFilter(admin.SimpleListFilter):
     parameter_name = "nha_may"
 
     def lookups(self, request, model_admin):
-        return NhaMay.objects.filter(dang_hoat_dong=True).values_list(
+        return NhaMay.objects.order_by("ten_nha_may").values_list(
             "id",
             "ten_nha_may",
         )
