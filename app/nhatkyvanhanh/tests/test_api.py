@@ -615,16 +615,19 @@ class NhatKyVanHanhAPITests(APITestCase):
             hien_tuong_dien_bien="Test event",
             nguoi_tao=self.creator,
         )
-        image = AnhTruocSuCo.objects.create(
-            su_kien=event,
-            hinh_anh=SimpleUploadedFile("event.jpg", b"test", content_type="image/jpeg"),
-        )
-        url = reverse(
-            "nhatkyvanhanh:nhatkysukien-xoa-anh-truoc-su-co",
-            kwargs={"pk": event.id, "image_id": image.id},
-        )
-        self.client.force_authenticate(user=self.viewer)
-        response = self.client.delete(url)
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            image = AnhTruocSuCo.objects.create(
+                su_kien=event,
+                hinh_anh=SimpleUploadedFile(
+                    "event.jpg", b"test", content_type="image/jpeg"
+                ),
+            )
+            url = reverse(
+                "nhatkyvanhanh:nhatkysukien-xoa-anh-truoc-su-co",
+                kwargs={"pk": event.id, "image_id": image.id},
+            )
+            self.client.force_authenticate(user=self.viewer)
+            response = self.client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(AnhTruocSuCo.objects.filter(pk=image.id).exists())
