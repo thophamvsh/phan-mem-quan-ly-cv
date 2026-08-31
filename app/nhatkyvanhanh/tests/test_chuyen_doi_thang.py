@@ -161,6 +161,10 @@ class ChuyenDoiTBThangTests(APITestCase):
     def test_create_duplicate_monthly_log_returns_clear_validation_error(self):
         self.client.force_authenticate(user=self.creator)
         url = reverse("nhatkyvanhanh:sochuyendoitbthang-list")
+        other_factory = NhaMay.objects.create(
+            ma_nha_may="VS",
+            ten_nha_may="Vinh Son",
+        )
         payload = {
             "nam": 2026,
             "thang": 8,
@@ -169,7 +173,11 @@ class ChuyenDoiTBThangTests(APITestCase):
         }
 
         first_response = self.client.post(url, payload, format="json")
-        duplicate_payload = {**payload, "ca_truc": "B"}
+        duplicate_payload = {
+            **payload,
+            "ca_truc": "B",
+            "nha_may": other_factory.id,
+        }
         duplicate_response = self.client.post(url, duplicate_payload, format="json")
 
         self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)

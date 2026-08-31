@@ -9,7 +9,12 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from django.utils import timezone
-from core.factory_scope import apply_request_factory_to_serializer, filter_queryset_by_factory, get_user_factory
+from core.factory_scope import (
+    apply_request_factory_to_serializer,
+    filter_queryset_by_factory,
+    get_user_factory,
+    has_all_factory_access,
+)
 from nhatkyvanhanh.models import MauChuyenDoiTBThang, SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang
 from nhatkyvanhanh.serializers import (
     MauChuyenDoiTBThangSerializer,
@@ -186,20 +191,28 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
-        if not data.get("nha_may"):
-            user_factory = get_user_factory(request.user)
-            if user_factory:
-                data["nha_may"] = user_factory.id
-            else:
-                sh = _get_song_hinh_factory()
-                if sh:
-                    data["nha_may"] = sh.id
+        user_factory = get_user_factory(request.user)
+        if not has_all_factory_access(request.user) and user_factory:
+            data["nha_may"] = user_factory.id
+        elif not data.get("nha_may"):
+            fallback_factory = user_factory or _get_song_hinh_factory()
+            if fallback_factory:
+                data["nha_may"] = fallback_factory.id
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         factory_data = apply_request_factory_to_serializer(request.user, serializer, "nha_may", "fk")
         if not factory_data.get("nha_may") and not serializer.validated_data.get("nha_may"):
             factory_data["nha_may"] = _get_song_hinh_factory()
+        target_factory = factory_data.get("nha_may") or serializer.validated_data.get("nha_may")
+        if SoChuyenDoiTBThang.objects.filter(
+            nha_may=target_factory,
+            nam=serializer.validated_data.get("nam"),
+            thang=serializer.validated_data.get("thang"),
+        ).exists():
+            raise DRFValidationError(
+                {"non_field_errors": ["Sổ chuyển đổi thiết bị tháng của nhà máy, năm và tháng này đã tồn tại."]}
+            )
 
         with transaction.atomic():
             so = serializer.save(nguoi_tao=request.user, **factory_data)

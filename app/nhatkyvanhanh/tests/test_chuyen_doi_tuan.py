@@ -157,6 +157,10 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
     def test_create_duplicate_weekly_log_returns_clear_validation_error(self):
         self.client.force_authenticate(user=self.creator)
         url = reverse("nhatkyvanhanh:sochuyendoithietbituan-list")
+        other_factory = NhaMay.objects.create(
+            ma_nha_may="VS",
+            ten_nha_may="Vinh Son",
+        )
         payload = {
             "nam": 2026,
             "tuan": 35,
@@ -165,7 +169,8 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
         }
 
         first_response = self.client.post(url, payload, format="json")
-        duplicate_response = self.client.post(url, payload, format="json")
+        duplicate_payload = {**payload, "nha_may": other_factory.id}
+        duplicate_response = self.client.post(url, duplicate_payload, format="json")
 
         self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
