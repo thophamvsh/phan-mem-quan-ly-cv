@@ -383,6 +383,32 @@ class ScheduleApiTests(ScheduleFixtureMixin, APITestCase):
         self.assertEqual(shift_log.phien_ban_lich_nguon, schedule.phien_ban)
         self.assertIsNotNone(shift_log.dong_bo_bien_che_at)
 
+    def test_shift_handover_uses_the_only_scheduled_team_when_form_has_stale_default(self):
+        schedule = self.make_schedule()
+        generate_monthly_schedule(schedule.id, self.user)
+        transition_schedule(schedule.id, self.user, "gui_duyet")
+        transition_schedule(schedule.id, self.user, "phe_duyet")
+        last_day = schedule.danh_sach_ngay.select_related("kip_ca_ngay").get(
+            ngay=date(2026, 8, 31)
+        )
+        scheduled_shift = last_day.kip_ca_ngay.ma_kip
+        stale_form_shift = next(code for code in ("A", "B", "C", "D") if code != scheduled_shift)
+
+        roster = self.client.get(
+            "/api/nhatkyvanhanh/so-giao-nhan-ca-vh/bien-che-lich-truc/",
+            {
+                "nha_may": self.plant.id,
+                "ngay_truc": "2026-08-31",
+                "ca_truc": stale_form_shift,
+                "loai_thoi_gian_truc": "ngay",
+            },
+        )
+
+        self.assertEqual(roster.status_code, 200, roster.data)
+        self.assertEqual(roster.data["ca_truc"], scheduled_shift)
+        self.assertTrue(roster.data["ca_truc_tu_dong_dieu_chinh"])
+        self.assertEqual(roster.data["ngay_truc_id"], last_day.id)
+
     def test_admin_shift_handover_can_load_hc_roster_without_requiring_creator_membership(self):
         profile = self.user.profile
         profile.can_view_admin_shift_handover_logs = True

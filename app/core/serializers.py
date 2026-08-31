@@ -276,6 +276,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_edit_shift_schedule', 'can_delete_shift_schedule',
                  'can_submit_shift_schedule', 'can_approve_shift_schedule',
                  'can_manage_shift_roster', 'can_export_shift_schedule',
+                 'can_view_organization_directory',
+                 'can_manage_organization_directory',
                  'can_view_admin_shift_handover_logs', 'can_create_admin_shift_handover_logs',
                  'can_receive_admin_shift_handover_logs', 'can_edit_admin_shift_handover_logs',
                  'can_delete_admin_shift_handover_logs',

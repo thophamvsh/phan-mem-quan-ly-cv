@@ -526,11 +526,12 @@ def _append_unique_name(names, value):
 
 def _build_admin_shift_duty_display(so_hc):
     names = []
-    _append_unique_name(names, _get_user_display_name(so_hc.user_giao_ca))
     for person in so_hc.nguoi_truc_chi_tiets.all():
         _append_unique_name(names, person.ten_nguoi_truc)
     for value in (so_hc.nguoi_truc, so_hc.nguoi_truc_2, so_hc.nguoi_truc_3):
         _append_unique_name(names, value)
+    if not names:
+        _append_unique_name(names, _get_user_display_name(so_hc.user_giao_ca))
     return ", ".join(names)
 
 

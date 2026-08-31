@@ -44,6 +44,8 @@ urlpatterns = [
     path("api/v1/nhatkyvanhanh/", include(("nhatkyvanhanh.urls", "nhatkyvanhanh"), namespace="v1-nhatkyvanhanh")),
     path("api/v1/quanlyvanhanh/", include(("quanlyvanhanh.urls", "quanlyvanhanh"), namespace="v1-quanlyvanhanh")),
     path("api/v1/quanlycatruc/", include(("quanlycatruc.urls", "quanlycatruc"), namespace="v1-quanlycatruc")),
+    path("api/tochuc/", include(("tochuc.urls", "tochuc"), namespace="legacy-tochuc")),
+    path("api/v1/tochuc/", include(("tochuc.urls", "tochuc"), namespace="v1-tochuc")),
     path("api/v1/ai/", include("ai_tools.urls")),
     path("api/v1/documents/", include("documents.urls")),
     path("api/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="legacy-thongsothuyvan")),

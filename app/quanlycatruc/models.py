@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from tochuc.models import BoPhan, DonViToChuc
 
 
 class TimeStampedModel(models.Model):
@@ -13,83 +14,6 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
-
-
-class DonViToChuc(TimeStampedModel):
-    class LoaiDonVi(models.TextChoices):
-        CONG_TY = "cong_ty", "Công ty"
-        CUM_NHA_MAY = "cum_nha_may", "Cụm nhà máy"
-        NHA_MAY = "nha_may", "Nhà máy"
-        VAN_PHONG = "van_phong", "Văn phòng"
-        KHAC = "khac", "Khác"
-
-    ma_don_vi = models.CharField(max_length=50, unique=True)
-    ten_don_vi = models.CharField(max_length=200)
-    loai_don_vi = models.CharField(max_length=20, choices=LoaiDonVi.choices, default=LoaiDonVi.NHA_MAY)
-    don_vi_cha = models.ForeignKey("self", on_delete=models.PROTECT, related_name="don_vi_con", null=True, blank=True)
-    nha_may = models.ForeignKey("tochuc.NhaMay", on_delete=models.PROTECT, related_name="don_vi_to_chuc", null=True, blank=True)
-    thu_tu = models.PositiveSmallIntegerField(default=1)
-    dang_hoat_dong = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["thu_tu", "ten_don_vi"]
-        verbose_name = "Đơn vị tổ chức"
-        verbose_name_plural = "Các đơn vị tổ chức"
-
-    def clean(self):
-        if self.pk and self.don_vi_cha_id == self.pk:
-            raise ValidationError({"don_vi_cha": "Đơn vị không thể là cấp trên của chính nó."})
-        ancestor = self.don_vi_cha
-        visited = set()
-        while ancestor:
-            if ancestor.pk == self.pk or ancestor.pk in visited:
-                raise ValidationError({"don_vi_cha": "Cấu trúc đơn vị tạo thành vòng lặp."})
-            visited.add(ancestor.pk)
-            ancestor = ancestor.don_vi_cha
-
-    @property
-    def nha_may_pham_vi_id(self):
-        current, visited = self, set()
-        while current and current.pk not in visited:
-            if current.nha_may_id:
-                return current.nha_may_id
-            visited.add(current.pk)
-            current = current.don_vi_cha
-        return None
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.ma_don_vi} - {self.ten_don_vi}"
-
-
-class BoPhan(TimeStampedModel):
-    class LoaiBoPhan(models.TextChoices):
-        VAN_HANH = "van_hanh", "Vận hành"
-        KY_THUAT = "ky_thuat", "Kỹ thuật"
-        HANH_CHINH = "hanh_chinh", "Hành chính"
-        BAO_VE = "bao_ve", "Bảo vệ"
-        BAO_TRI = "bao_tri", "Bảo trì"
-        AN_TOAN = "an_toan", "An toàn"
-        KHAC = "khac", "Khác"
-
-    don_vi = models.ForeignKey(DonViToChuc, on_delete=models.PROTECT, related_name="bo_phan")
-    ma_bo_phan = models.CharField(max_length=50)
-    ten_bo_phan = models.CharField(max_length=150)
-    loai_bo_phan = models.CharField(max_length=20, choices=LoaiBoPhan.choices, default=LoaiBoPhan.KHAC)
-    thu_tu = models.PositiveSmallIntegerField(default=1)
-    dang_hoat_dong = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["don_vi", "thu_tu", "ten_bo_phan"]
-        constraints = [models.UniqueConstraint(fields=["don_vi", "ma_bo_phan"], name="uq_bophan_donvi_ma")]
-        verbose_name = "Bộ phận"
-        verbose_name_plural = "Các bộ phận"
-
-    def __str__(self):
-        return f"{self.ten_bo_phan} - {self.don_vi.ten_don_vi}"
 
 
 class NhanSu(TimeStampedModel):

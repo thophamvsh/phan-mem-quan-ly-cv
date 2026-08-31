@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 from tochuc.models import NhaMay
 from nhatkyvanhanh.models import SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang, MauChuyenDoiTBThang
 from .mixins import UserSummaryMixin, FlexibleNhaMayRelatedField
@@ -171,6 +172,13 @@ class SoChuyenDoiTBThangSerializer(serializers.ModelSerializer, UserSummaryMixin
             "chi_tiets",
             "created_at",
             "updated_at",
+        ]
+        validators = [
+            UniqueTogetherValidator(
+                queryset=SoChuyenDoiTBThang.objects.all(),
+                fields=["nha_may", "nam", "thang"],
+                message="Sổ chuyển đổi thiết bị tháng của nhà máy, năm và tháng này đã tồn tại.",
+            )
         ]
 
     def get_chu_ky_nguoi_tao(self, obj):

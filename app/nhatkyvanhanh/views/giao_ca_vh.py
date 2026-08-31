@@ -268,25 +268,34 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
 
         period = "ca_dem" if shift_period in {"dem", "sang"} else "ca_ngay"
         team_field = "kip_ca_dem__ma_kip" if period == "ca_dem" else "kip_ca_ngay__ma_kip"
-        candidates = list(
-            NgayTrucCa.objects.filter(
-                lich_truc__nha_may_id=plant_id,
-                lich_truc__trang_thai__in=[
-                    LichTrucCa.TrangThai.DA_DUYET,
-                    LichTrucCa.TrangThai.DANG_AP_DUNG,
-                    LichTrucCa.TrangThai.DA_KHOA,
-                ],
-                ngay=shift_date,
-                **{team_field: shift_code},
-            ).select_related(
-                "lich_truc", "kip_ca_ngay", "kip_ca_dem"
-            ).prefetch_related(
-                "dieu_chinh_nhan_su__nhan_su_vang",
-                "dieu_chinh_nhan_su__nhan_su_thay",
-                "dieu_chinh_doi_den__nhan_su_vang",
-                "dieu_chinh_doi_den__nhan_su_thay",
-            )
+        eligible_days = NgayTrucCa.objects.filter(
+            lich_truc__nha_may_id=plant_id,
+            lich_truc__trang_thai__in=[
+                LichTrucCa.TrangThai.DA_DUYET,
+                LichTrucCa.TrangThai.DANG_AP_DUNG,
+                LichTrucCa.TrangThai.DA_KHOA,
+            ],
+            ngay=shift_date,
+        ).select_related(
+            "lich_truc", "kip_ca_ngay", "kip_ca_dem"
+        ).prefetch_related(
+            "dieu_chinh_nhan_su__nhan_su_vang",
+            "dieu_chinh_nhan_su__nhan_su_thay",
+            "dieu_chinh_doi_den__nhan_su_vang",
+            "dieu_chinh_doi_den__nhan_su_thay",
         )
+        candidates = list(eligible_days.filter(**{team_field: shift_code}))
+        auto_adjusted_shift = False
+        if not candidates:
+            eligible_candidates = list(eligible_days)
+            available_shift_codes = {
+                (day.kip_ca_dem if period == "ca_dem" else day.kip_ca_ngay).ma_kip.upper()
+                for day in eligible_candidates
+            }
+            if len(available_shift_codes) == 1:
+                shift_code = available_shift_codes.pop()
+                candidates = eligible_candidates
+                auto_adjusted_shift = True
         priority = {
             LichTrucCa.TrangThai.DANG_AP_DUNG: 3,
             LichTrucCa.TrangThai.DA_KHOA: 2,
@@ -326,6 +335,7 @@ class SogiaonhancaVHViewSet(viewsets.ModelViewSet):
             "phien_ban": selected.lich_truc.phien_ban,
             "trang_thai": selected.lich_truc.trang_thai,
             "ca_truc": shift_code,
+            "ca_truc_tu_dong_dieu_chinh": auto_adjusted_shift,
             "loai_ca": period,
             "truong_ca": leaders,
             "truong_ca_khop_nguoi_tao": leader_match,

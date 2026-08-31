@@ -41,6 +41,13 @@ from .helpers import (
 class SogiaonhancaHCFilterSet(django_filters.FilterSet):
     ngay_truc_tu = django_filters.DateFilter(field_name="ngay_truc", lookup_expr="gte")
     ngay_truc_den = django_filters.DateFilter(field_name="ngay_truc", lookup_expr="lte")
+    # Khoảng trực HC giao với [thoi_gian_chong_lan_tu, thoi_gian_chong_lan_den].
+    thoi_gian_chong_lan_tu = django_filters.IsoDateTimeFilter(
+        field_name="thoi_gian_giao_ca", lookup_expr="gte"
+    )
+    thoi_gian_chong_lan_den = django_filters.IsoDateTimeFilter(
+        field_name="thoi_gian_bat_dau_ca", lookup_expr="lte"
+    )
 
     class Meta:
         model = SogiaonhancaHC
@@ -50,6 +57,8 @@ class SogiaonhancaHCFilterSet(django_filters.FilterSet):
             "ngay_truc",
             "ngay_truc_tu",
             "ngay_truc_den",
+            "thoi_gian_chong_lan_tu",
+            "thoi_gian_chong_lan_den",
             "user_giao_ca",
             "user_nhan_ca",
         ]

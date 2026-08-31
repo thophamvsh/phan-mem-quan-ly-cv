@@ -837,6 +837,51 @@ class NhatKyVanHanhAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("ngay_truc", response.data)
 
+    def test_sogiaonhancahc_overlap_filter_finds_both_logs_on_handover_day(self):
+        self.creator_profile.can_view_admin_shift_handover_logs = True
+        self.creator_profile.save(update_fields=["can_view_admin_shift_handover_logs"])
+        admin_start = timezone.make_aware(datetime(2026, 8, 28, 11, 30))
+        admin_end = timezone.make_aware(datetime(2026, 8, 31, 11, 30))
+        admin_log = SogiaonhancaHC.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=admin_start.date(),
+            nguoi_truc="Nhân sự hành chính",
+            thoi_gian_bat_dau_ca=admin_start,
+            thoi_gian_giao_ca=admin_end,
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        next_admin_log = SogiaonhancaHC.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=date(2026, 8, 31),
+            nguoi_truc="Nhân sự hành chính ca sau",
+            thoi_gian_bat_dau_ca=admin_end,
+            thoi_gian_giao_ca=timezone.make_aware(datetime(2026, 9, 3, 11, 30)),
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.get(
+            reverse("nhatkyvanhanh:sogiaonhancahc-list"),
+            {
+                "nha_may": self.nha_may.id,
+                "thoi_gian_chong_lan_tu": timezone.make_aware(
+                    datetime(2026, 8, 31, 8, 0)
+                ).isoformat(),
+                "thoi_gian_chong_lan_den": timezone.make_aware(
+                    datetime(2026, 8, 31, 20, 0)
+                ).isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(
+            {item["id"] for item in response.data["results"]},
+            {str(admin_log.id), str(next_admin_log.id)},
+        )
+
     def test_sogiaonhancavh_uses_admin_shift_staff_only_when_explicitly_selected(self):
         shift_start = timezone.now().replace(hour=8, minute=0, second=0, microsecond=0)
         shift_end = shift_start.replace(hour=17)

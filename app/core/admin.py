@@ -334,6 +334,13 @@ class UserProfileInline(admin.StackedInline):
                 'can_manage_shift_roster', 'can_export_shift_schedule',
             ),
         }),
+        ('Quyền danh mục tổ chức dùng chung', {
+            'fields': (
+                'can_view_organization_directory',
+                'can_manage_organization_directory',
+            ),
+            'description': 'Quyền xem hoặc quản lý đơn vị và bộ phận dùng chung.',
+        }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
@@ -692,6 +699,13 @@ class UserProfileAdmin(admin.ModelAdmin):
                 'can_manage_shift_roster', 'can_export_shift_schedule',
             ),
             'description': 'Quyền xem, lập, quản lý kíp, phê duyệt và xuất lịch trực ca.'
+        }),
+        ('Quyền danh mục tổ chức dùng chung', {
+            'fields': (
+                'can_view_organization_directory',
+                'can_manage_organization_directory',
+            ),
+            'description': 'Quyền xem hoặc quản lý đơn vị và bộ phận dùng chung.',
         }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')

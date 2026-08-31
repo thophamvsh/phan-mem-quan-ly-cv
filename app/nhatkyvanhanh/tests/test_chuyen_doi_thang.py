@@ -158,6 +158,24 @@ class ChuyenDoiTBThangTests(APITestCase):
         )
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
 
+    def test_create_duplicate_monthly_log_returns_clear_validation_error(self):
+        self.client.force_authenticate(user=self.creator)
+        url = reverse("nhatkyvanhanh:sochuyendoitbthang-list")
+        payload = {
+            "nam": 2026,
+            "thang": 8,
+            "ca_truc": "A",
+            "nha_may": self.nha_may.id,
+        }
+
+        first_response = self.client.post(url, payload, format="json")
+        duplicate_payload = {**payload, "ca_truc": "B"}
+        duplicate_response = self.client.post(url, duplicate_payload, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("đã tồn tại", str(duplicate_response.data))
+
     def test_create_so_with_string_factory_code(self):
         self.client.force_authenticate(user=self.creator)
         url_so = reverse("nhatkyvanhanh:sochuyendoitbthang-list")

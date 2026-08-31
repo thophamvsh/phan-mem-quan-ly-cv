@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
 from nhatkyvanhanh.models import SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi, MauChuyenDoiThietBi
@@ -253,6 +254,13 @@ class SoChuyenDoiThietBiTuanSerializer(serializers.ModelSerializer, UserSummaryM
             "tuan_truoc_info",
             "created_at",
             "updated_at",
+        ]
+        validators = [
+            UniqueTogetherValidator(
+                queryset=SoChuyenDoiThietBiTuan.objects.all(),
+                fields=["nha_may", "nam", "tuan", "ca_truc"],
+                message="Sổ chuyển đổi thiết bị tuần của nhà máy, năm, tuần và ca trực này đã tồn tại.",
+            )
         ]
 
     def get_chu_ky_nguoi_tao(self, obj):

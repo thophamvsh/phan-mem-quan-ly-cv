@@ -1,20 +1,6 @@
 from django.contrib import admin
 
-from .models import BoPhan, ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, DonViToChuc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, NhomLichTruc, PhamViNhanSuCaTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
-
-
-@admin.register(DonViToChuc)
-class DonViToChucAdmin(admin.ModelAdmin):
-    list_display = ("ma_don_vi", "ten_don_vi", "loai_don_vi", "don_vi_cha", "nha_may", "dang_hoat_dong")
-    list_filter = ("loai_don_vi", "nha_may", "dang_hoat_dong")
-    search_fields = ("ma_don_vi", "ten_don_vi")
-
-
-@admin.register(BoPhan)
-class BoPhanAdmin(admin.ModelAdmin):
-    list_display = ("ma_bo_phan", "ten_bo_phan", "don_vi", "loai_bo_phan", "dang_hoat_dong")
-    list_filter = ("loai_bo_phan", "don_vi", "dang_hoat_dong")
-    search_fields = ("ma_bo_phan", "ten_bo_phan")
+from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, NhomLichTruc, PhamViNhanSuCaTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
 
 
 @admin.register(NhanSu)

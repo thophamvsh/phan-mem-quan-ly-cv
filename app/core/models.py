@@ -386,6 +386,16 @@ class UserProfile(models.Model):
     can_manage_shift_roster = models.BooleanField(default=False, help_text="Có quyền quản lý kíp và thành viên")
     can_export_shift_schedule = models.BooleanField(default=False, help_text="Có quyền xuất lịch trực ca")
 
+    # Danh mục tổ chức dùng chung
+    can_view_organization_directory = models.BooleanField(
+        default=False,
+        help_text="Có quyền xem danh mục đơn vị và bộ phận trong phạm vi nhà máy",
+    )
+    can_manage_organization_directory = models.BooleanField(
+        default=False,
+        help_text="Có quyền tạo, sửa và ngừng sử dụng đơn vị, bộ phận",
+    )
+
     # Phan quyen nhat ky van hanh - so giao nhan ca
     can_view_shift_handover_logs = models.BooleanField(
         default=True,

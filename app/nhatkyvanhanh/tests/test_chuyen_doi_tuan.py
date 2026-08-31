@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -154,6 +154,23 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
         )
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
 
+    def test_create_duplicate_weekly_log_returns_clear_validation_error(self):
+        self.client.force_authenticate(user=self.creator)
+        url = reverse("nhatkyvanhanh:sochuyendoithietbituan-list")
+        payload = {
+            "nam": 2026,
+            "tuan": 35,
+            "ca_truc": "A",
+            "nha_may": self.nha_may.id,
+        }
+
+        first_response = self.client.post(url, payload, format="json")
+        duplicate_response = self.client.post(url, payload, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("đã tồn tại", str(duplicate_response.data))
+
     def test_weekly_switch_log_workflow_and_locking(self):
         # 1. Creator creates weekly switch log
         self.client.force_authenticate(user=self.creator)
@@ -179,10 +196,13 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
 
         # 2. Creator creates switch run (LanChuyenDoiThietBi)
         url_tao_lan = reverse("nhatkyvanhanh:sochuyendoithietbituan-tao-lan-chuyen-doi", kwargs={"pk": so_id})
+        thoi_gian_trong_tuan = timezone.make_aware(
+            datetime.combine(so.tuan_bat_dau, time(hour=8))
+        )
         lan_res = self.client.post(
             url_tao_lan,
             {
-                "thoi_gian": timezone.now().isoformat(),
+                "thoi_gian": thoi_gian_trong_tuan.isoformat(),
                 "ghi_chu_chung": "Chuyen doi thiet bi dinh ky dau tuan",
             },
             format="json",

@@ -108,8 +108,8 @@ class SoChuyenDoiTBThang(TimestampedUUIDModel):
         ordering = ["-nam", "-thang", "-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["nha_may", "nam", "thang", "ca_truc"],
-                name="uq_so_chuyen_doi_tb_thang_nha_may_nam_thang_ca",
+                fields=["nha_may", "nam", "thang"],
+                name="uq_so_chuyen_doi_tb_thang_nha_may_nam_thang",
             )
         ]
         verbose_name = "Sổ chuyển đổi TB tháng"
