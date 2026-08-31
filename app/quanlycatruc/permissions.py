@@ -55,6 +55,27 @@ class RosterPermission(BasePermission):
         return can_access_plant(request.user, plant_id)
 
 
+class LegacyStaffPermission(RosterPermission):
+    """Giữ API nhân sự cũ trong thời gian các client chuyển sang Release C."""
+
+    def has_permission(self, request, view):
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            permissions = (
+                "can_view_shift_schedule",
+                "can_view_organization_directory",
+                "can_manage_organization_directory",
+            )
+        else:
+            permissions = (
+                "can_manage_shift_roster",
+                "can_manage_organization_directory",
+            )
+        return any(
+            has_profile_permission(request.user, permission)
+            for permission in permissions
+        )
+
+
 class ShiftAdjustmentPermission(BasePermission):
     def has_permission(self, request, view):
         if view.action in {"phe_duyet", "tu_choi", "phe_duyet_phieu", "tu_choi_phieu"}:

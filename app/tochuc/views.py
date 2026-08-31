@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
@@ -5,12 +7,17 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from .models import BoPhan, DonViToChuc
+from core.models import User
+from .models import BoPhan, DonViToChuc, NhanSu
 from .permissions import (
     OrganizationDirectoryPermission,
     can_access_organization_plant,
 )
-from .serializers import BoPhanSerializer, DonViToChucSerializer
+from .serializers import (
+    BoPhanSerializer,
+    DonViToChucSerializer,
+    NhanSuSerializer,
+)
 
 
 def _user_plant_id(user):
@@ -36,6 +43,152 @@ def _scope_units(queryset, user):
             don_vi_cha__don_vi_cha__nha_may_id=plant_id,
         )
     ).distinct()
+
+
+def _scope_staff(queryset, user):
+    if user.is_superuser or getattr(
+        getattr(user, "profile", None),
+        "is_all_factories",
+        False,
+    ):
+        return queryset
+    plant_id = _user_plant_id(user)
+    if not plant_id:
+        return queryset.none()
+    return queryset.filter(
+        Q(don_vi__nha_may_id=plant_id)
+        | Q(
+            don_vi__nha_may__isnull=True,
+            don_vi__don_vi_cha__nha_may_id=plant_id,
+        )
+        | Q(
+            don_vi__nha_may__isnull=True,
+            don_vi__don_vi_cha__nha_may__isnull=True,
+            don_vi__don_vi_cha__don_vi_cha__nha_may_id=plant_id,
+        )
+    ).distinct()
+
+
+class NhanSuViewSet(viewsets.ModelViewSet):
+    serializer_class = NhanSuSerializer
+    permission_classes = [OrganizationDirectoryPermission]
+    pagination_class = None
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = [
+        "don_vi",
+        "bo_phan",
+        "user",
+        "dang_lam_viec",
+    ]
+    search_fields = ["ho_ten", "ma_nhan_vien", "chuc_danh"]
+    ordering_fields = ["ho_ten", "ma_nhan_vien", "tu_ngay"]
+    ordering = ["don_vi", "bo_phan", "ho_ten"]
+
+    def get_queryset(self):
+        return _scope_staff(
+            NhanSu.objects.select_related("don_vi", "bo_phan", "user"),
+            self.request.user,
+        )
+
+    def _ensure_unit_access(self, serializer):
+        unit = serializer.validated_data.get(
+            "don_vi",
+            getattr(serializer.instance, "don_vi", None),
+        )
+        if not unit or not can_access_organization_plant(
+            self.request.user,
+            unit.nha_may_pham_vi_id,
+        ):
+            raise PermissionDenied(
+                "Bạn không có quyền quản lý nhân sự trong đơn vị này."
+            )
+
+    def perform_create(self, serializer):
+        self._ensure_unit_access(serializer)
+        person = serializer.save()
+
+        # Quan hệ tích hợp thuộc module lịch trực, chỉ được tạo khi nhân sự
+        # được thêm qua API. Việc tạo model trực tiếp (migration/test/import)
+        # không bị phát sinh dữ liệu ngoài ý muốn.
+        from quanlycatruc.models import (
+            ChiTietPhuongAnPhanCongCa,
+            NhomLichTruc,
+            PhamViNhanSuCaTruc,
+            PhuongAnPhanCongCa,
+        )
+
+        plant_id = person.nha_may_id
+        if not plant_id:
+            return
+        for group in NhomLichTruc.objects.filter(
+            nha_may_id=plant_id,
+            dang_hoat_dong=True,
+        ):
+            PhamViNhanSuCaTruc.objects.get_or_create(
+                nhom_lich=group,
+                nhan_su=person,
+                defaults={"dang_hoat_dong": True},
+            )
+        for plan in PhuongAnPhanCongCa.objects.filter(
+            nha_may_id=plant_id,
+            trang_thai=PhuongAnPhanCongCa.TrangThai.DU_THAO,
+        ):
+            ChiTietPhuongAnPhanCongCa.objects.get_or_create(
+                phuong_an=plan,
+                nhan_su=person,
+                defaults={
+                    "kip_truc": None,
+                    "vai_tro": "",
+                    "thu_tu_hien_thi": 1,
+                },
+            )
+
+    def perform_update(self, serializer):
+        self._ensure_unit_access(serializer)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        instance.dang_lam_viec = False
+        instance.den_ngay = instance.den_ngay or max(
+            date.today(),
+            instance.tu_ngay,
+        )
+        instance.save(
+            update_fields=["dang_lam_viec", "den_ngay", "updated_at"]
+        )
+
+    @action(detail=False, methods=["get"], url_path="tai-khoan-options")
+    def tai_khoan_options(self, request):
+        plant_id = request.query_params.get("nha_may")
+        if not plant_id or not can_access_organization_plant(
+            request.user,
+            plant_id,
+        ):
+            raise PermissionDenied(
+                "Bạn không có quyền xem tài khoản của nhà máy này."
+            )
+        queryset = User.objects.filter(
+            is_active=True,
+            profile__nha_may_id=plant_id,
+        ).select_related("profile").order_by("username")
+        return Response(
+            [
+                {
+                    "id": item.id,
+                    "username": item.username,
+                    "full_name": (
+                        item.profile.full_name
+                        or item.get_full_name()
+                        or item.username
+                    ),
+                }
+                for item in queryset
+            ]
+        )
 
 
 class DonViToChucViewSet(viewsets.ModelViewSet):

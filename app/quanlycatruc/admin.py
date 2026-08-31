@@ -1,13 +1,6 @@
 from django.contrib import admin
 
-from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, NhomLichTruc, PhamViNhanSuCaTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
-
-
-@admin.register(NhanSu)
-class NhanSuAdmin(admin.ModelAdmin):
-    list_display = ("ho_ten", "ma_nhan_vien", "don_vi", "bo_phan", "chuc_danh", "user", "dang_lam_viec")
-    list_filter = ("don_vi", "bo_phan", "dang_lam_viec")
-    search_fields = ("ho_ten", "ma_nhan_vien", "chuc_danh", "user__username")
+from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhomLichTruc, PhamViNhanSuCaTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
 
 
 @admin.register(NhomLichTruc)

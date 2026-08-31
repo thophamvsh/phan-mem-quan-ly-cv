@@ -1,30 +1,13 @@
 from django.db import transaction
 from rest_framework import serializers
-from tochuc.serializers import BoPhanSerializer, DonViToChucSerializer
+from tochuc.serializers import (
+    BoPhanSerializer,
+    DonViToChucSerializer,
+    NhanSuSerializer,
+)
 
 from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, NhomLichTruc, PhamViNhanSuCaTruc, PhanCongNhanSuHCNgay, PhuongAnPhanCongCa, ThanhVienKipTruc
 from .services import actual_shift_staff
-
-
-class NhanSuSerializer(serializers.ModelSerializer):
-    don_vi_ten = serializers.CharField(source="don_vi.ten_don_vi", read_only=True)
-    bo_phan_ten = serializers.CharField(source="bo_phan.ten_bo_phan", read_only=True)
-    username = serializers.CharField(source="user.username", read_only=True)
-
-    class Meta:
-        model = NhanSu
-        fields = ["id", "ma_nhan_vien", "ho_ten", "don_vi", "don_vi_ten", "bo_phan", "bo_phan_ten", "user", "username", "chuc_danh", "dien_thoai", "tu_ngay", "den_ngay", "dang_lam_viec"]
-
-    def validate(self, attrs):
-        unit = attrs.get("don_vi", getattr(self.instance, "don_vi", None))
-        department = attrs.get("bo_phan", getattr(self.instance, "bo_phan", None))
-        if unit and department and department.don_vi_id != unit.id:
-            raise serializers.ValidationError({"bo_phan": "Bộ phận phải thuộc đơn vị đã chọn."})
-        user = attrs.get("user", getattr(self.instance, "user", None))
-        user_plant_id = getattr(getattr(user, "profile", None), "nha_may_id", None) if user else None
-        if user and user_plant_id != unit.nha_may_pham_vi_id:
-            raise serializers.ValidationError({"user": "Tài khoản phải thuộc cùng nhà máy với nhân sự."})
-        return attrs
 
 
 class NhomLichTrucSerializer(serializers.ModelSerializer):

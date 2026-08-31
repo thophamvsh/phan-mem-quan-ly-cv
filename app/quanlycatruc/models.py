@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-from tochuc.models import BoPhan, DonViToChuc
+from tochuc.models import BoPhan, DonViToChuc, NhanSu
 
 
 class TimeStampedModel(models.Model):
@@ -14,42 +14,6 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
-
-
-class NhanSu(TimeStampedModel):
-    ma_nhan_vien = models.CharField(max_length=50, unique=True, null=True, blank=True)
-    ho_ten = models.CharField(max_length=150)
-    don_vi = models.ForeignKey(DonViToChuc, on_delete=models.PROTECT, related_name="nhan_su")
-    bo_phan = models.ForeignKey(BoPhan, on_delete=models.PROTECT, related_name="nhan_su")
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="nhan_su_ca_truc", null=True, blank=True)
-    chuc_danh = models.CharField(max_length=120, blank=True)
-    dien_thoai = models.CharField(max_length=30, blank=True)
-    tu_ngay = models.DateField(default=date.today)
-    den_ngay = models.DateField(null=True, blank=True)
-    dang_lam_viec = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["don_vi", "bo_phan", "ho_ten"]
-        indexes = [models.Index(fields=["don_vi", "bo_phan", "dang_lam_viec"])]
-        verbose_name = "Nhân sự"
-        verbose_name_plural = "Danh mục nhân sự"
-
-    def clean(self):
-        errors = {}
-        if self.bo_phan_id and self.don_vi_id and self.bo_phan.don_vi_id != self.don_vi_id:
-            errors["bo_phan"] = "Bộ phận phải thuộc đơn vị đã chọn."
-        if self.den_ngay and self.den_ngay < self.tu_ngay:
-            errors["den_ngay"] = "Ngày kết thúc không được trước ngày bắt đầu."
-        if errors:
-            raise ValidationError(errors)
-
-    def save(self, *args, **kwargs):
-        self.ma_nhan_vien = self.ma_nhan_vien or None
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.ho_ten
 
 
 class NhomLichTruc(TimeStampedModel):

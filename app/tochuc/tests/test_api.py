@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
-from tochuc.models import BoPhan, DonViToChuc, NhaMay
+from tochuc.models import BoPhan, DonViToChuc, NhaMay, NhanSu
 
 
 User = get_user_model()
@@ -140,4 +140,81 @@ class OrganizationDirectoryAPITests(APITestCase):
         self.assertEqual(
             {item["id"] for item in shared_response.data},
             {item["id"] for item in legacy_response.data},
+        )
+
+    def test_shared_staff_endpoint_preserves_legacy_compatibility(self):
+        user = create_user(
+            "shared-staff-manager",
+            self.song_hinh,
+            can_manage_organization_directory=True,
+        )
+        self.client.force_authenticate(user)
+        create_response = self.client.post(
+            "/api/v1/tochuc/nhan-su/",
+            {
+                "ma_nhan_vien": "SH-NV-01",
+                "ho_ten": "Nguyễn Văn Vận Hành",
+                "don_vi": self.song_hinh_unit.id,
+                "bo_phan": self.song_hinh_department.id,
+                "chuc_danh": "Vận hành viên",
+                "dang_lam_viec": True,
+            },
+            format="json",
+        )
+        shared_response = self.client.get("/api/v1/tochuc/nhan-su/")
+        legacy_response = self.client.get(
+            "/api/v1/quanlycatruc/nhan-su/"
+        )
+        account_options_response = self.client.get(
+            "/api/v1/tochuc/nhan-su/tai-khoan-options/",
+            {"nha_may": self.song_hinh.id},
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(create_response.data["user"])
+        self.assertEqual(shared_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(legacy_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            account_options_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            {item["id"] for item in account_options_response.data},
+            {user.id},
+        )
+        self.assertEqual(
+            {item["id"] for item in shared_response.data},
+            {item["id"] for item in legacy_response.data},
+        )
+        self.assertEqual(NhanSu.objects.count(), 1)
+
+    def test_shared_staff_is_scoped_by_factory(self):
+        vinh_son_department = BoPhan.objects.create(
+            don_vi=self.vinh_son_unit,
+            ma_bo_phan="VH",
+            ten_bo_phan="Vận hành",
+        )
+        own_staff = NhanSu.objects.create(
+            ho_ten="Nhân sự Sông Hinh",
+            don_vi=self.song_hinh_unit,
+            bo_phan=self.song_hinh_department,
+        )
+        NhanSu.objects.create(
+            ho_ten="Nhân sự Vĩnh Sơn",
+            don_vi=self.vinh_son_unit,
+            bo_phan=vinh_son_department,
+        )
+        user = create_user(
+            "shared-staff-viewer",
+            self.song_hinh,
+            can_view_organization_directory=True,
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.get("/api/v1/tochuc/nhan-su/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["id"] for item in response.data},
+            {own_staff.id},
         )
