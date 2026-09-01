@@ -60,6 +60,20 @@ class ThietBiQRTests(APITestCase):
             f"https://my-app.domain/quanlyvanhanh/thietbi?detailId={self.device.pk}"
         )
 
+    def test_searches_vietnamese_device_name_without_accents(self):
+        self.device.ten = "Máy cắt 171"
+        self.device.save(update_fields=["ten"])
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            "/api/v1/quanlyvanhanh/thiet-bi/",
+            {"q": "may cat"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        self.assertIn(self.device.id, {item["id"] for item in results})
+
     @patch('qrcode.QRCode.add_data')
     def test_qr_view_encodes_correct_url(self, mock_add_data):
         self.client.force_authenticate(user=self.user)

@@ -22,3 +22,28 @@ class DRFAuthenticationMiddleware:
                 # If authentication fails, let DRF handle it in the view (e.g. returning 401/403)
                 pass
         return self.get_response(request)
+
+
+class LegacyApiDeprecationMiddleware:
+    """Advertise the versioned successor without breaking legacy clients."""
+
+    excluded_paths = (
+        "/api/v1/",
+        "/api/schema/",
+        "/api/docs/",
+        "/api/redoc/",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        is_legacy = request.path.startswith("/api/") and not any(
+            request.path.startswith(path) for path in self.excluded_paths
+        )
+        if is_legacy:
+            response["Deprecation"] = "true"
+            response["Sunset"] = "Fri, 31 Dec 2027 23:59:59 GMT"
+            response["Link"] = '</api/v1/>; rel="successor-version"'
+        return response
