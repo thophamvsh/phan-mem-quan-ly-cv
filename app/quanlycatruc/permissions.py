@@ -30,6 +30,7 @@ class ShiftSchedulePermission(BasePermission):
         "phe_duyet": "can_approve_shift_schedule", "tu_choi": "can_approve_shift_schedule",
         "ap_dung": "can_approve_shift_schedule", "khoa": "can_approve_shift_schedule",
         "xuat_excel": "can_export_shift_schedule", "xuat_pdf": "can_export_shift_schedule",
+        "xuat_excel_danh_sach_ngay": "can_export_shift_schedule",
     }
 
     def has_permission(self, request, view):

@@ -1,5 +1,6 @@
 from datetime import date, datetime, time
 from io import BytesIO
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -214,6 +215,13 @@ class ScheduleApiTests(ScheduleFixtureMixin, APITestCase):
             ma_nhom=code, ten_nhom="Lịch vận hành nhà máy",
         )
         return group, unit, department
+
+    def _generate_and_approve(self, schedule):
+        generate_monthly_schedule(schedule.id, self.user)
+        transition_schedule(schedule.id, self.user, "gui_duyet")
+        transition_schedule(schedule.id, self.user, "phe_duyet")
+        schedule.refresh_from_db()
+        return schedule
 
     def test_individual_grant_allows_access_when_role_denies_permission(self):
         role = UserRole.objects.create(
@@ -783,6 +791,100 @@ class ScheduleApiTests(ScheduleFixtureMixin, APITestCase):
         schedule = self.make_schedule()
         response = self.client.get(f"/api/v1/quanlycatruc/lich-truc/{schedule.id}/xuat-excel/")
         self.assertEqual(response.status_code, 400)
+
+    def test_approved_schedule_exports_daily_staff_excel(self):
+        schedule = self._generate_and_approve(self.make_schedule())
+        response = self.client.get(
+            f"/api/v1/quanlycatruc/lich-truc/{schedule.id}/xuat-excel-danh-sach-ngay/",
+            {"tu_ngay": "2026-08-02", "den_ngay": "2026-08-04"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertTrue(response.content.startswith(b"PK"))
+
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(BytesIO(response.content), data_only=True)
+        sheet = workbook.active
+        values = [
+            str(cell.value)
+            for row in sheet.iter_rows()
+            for cell in row
+            if cell.value is not None
+        ]
+        self.assertIn("Ngày 02/8/2026 - (Chủ nhật)", values)
+        self.assertIn("Ngày 04/8/2026 - (Thứ 3)", values)
+        self.assertIn("TỔNG HỢP SỐ GIỜ LÀM VIỆC", values)
+
+    def test_daily_staff_excel_requires_export_permission(self):
+        schedule = self._generate_and_approve(self.make_schedule())
+        viewer = create_user(
+            "schedule-viewer",
+            self.plant,
+            can_view_shift_schedule=True,
+            can_export_shift_schedule=False,
+        )
+        self.client.force_authenticate(viewer)
+
+        response = self.client.get(
+            f"/api/v1/quanlycatruc/lich-truc/{schedule.id}/xuat-excel-danh-sach-ngay/"
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_daily_staff_excel_validates_date_range(self):
+        schedule = self._generate_and_approve(self.make_schedule())
+        url = f"/api/v1/quanlycatruc/lich-truc/{schedule.id}/xuat-excel-danh-sach-ngay/"
+
+        invalid_format = self.client.get(url, {"tu_ngay": "02-08-2026"})
+        reversed_range = self.client.get(
+            url,
+            {"tu_ngay": "2026-08-04", "den_ngay": "2026-08-02"},
+        )
+        outside_range = self.client.get(
+            url,
+            {"tu_ngay": "2026-07-31", "den_ngay": "2026-08-02"},
+        )
+
+        self.assertEqual(invalid_format.status_code, 400)
+        self.assertIn("tu_ngay", invalid_format.data)
+        self.assertEqual(reversed_range.status_code, 400)
+        self.assertIn("den_ngay", reversed_range.data)
+        self.assertEqual(outside_range.status_code, 400)
+        self.assertIn("detail", outside_range.data)
+
+    def test_daily_staff_excel_uses_approved_previous_month_version(self):
+        july_approved = self._generate_and_approve(self.make_schedule(month=7))
+        july_draft = LichTrucCa.objects.create(
+            nha_may=self.plant,
+            thang=7,
+            nam=2026,
+            phien_ban=2,
+            mau_chu_ky=self.template,
+            nguoi_tao=self.user,
+        )
+        generate_monthly_schedule(july_draft.id, self.user)
+        august = self._generate_and_approve(self.make_schedule())
+        url = f"/api/v1/quanlycatruc/lich-truc/{august.id}/xuat-excel-danh-sach-ngay/"
+
+        with patch("quanlycatruc.views.actual_shift_staff", return_value=[]) as staff_mock:
+            response = self.client.get(
+                url,
+                {"tu_ngay": "2026-08-01", "den_ngay": "2026-08-01"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        previous_days = [
+            call.args[0]
+            for call in staff_mock.call_args_list
+            if call.args[0] and call.args[0].ngay == date(2026, 7, 31)
+        ]
+        self.assertTrue(previous_days)
+        self.assertTrue(all(day.lich_truc_id == july_approved.id for day in previous_days))
 
     def test_approved_schedule_exports_excel_and_pdf(self):
         schedule = self.make_schedule()
