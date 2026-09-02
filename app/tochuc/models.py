@@ -1,8 +1,13 @@
 from datetime import date
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+
+
+def generate_employee_code():
+    return f"NS-{uuid4().hex[:12].upper()}"
 
 
 class NhaMay(models.Model):
@@ -95,6 +100,16 @@ class DonViToChuc(TimeStampedOrganizationModel):
         while current and current.pk not in visited:
             if current.nha_may_id:
                 return current.nha_may_id
+            visited.add(current.pk)
+            current = current.don_vi_cha
+        return None
+
+    @property
+    def nha_may_pham_vi(self):
+        current, visited = self, set()
+        while current and current.pk not in visited:
+            if current.nha_may_id:
+                return current.nha_may
             visited.add(current.pk)
             current = current.don_vi_cha
         return None
@@ -217,7 +232,7 @@ class NhanSu(TimeStampedOrganizationModel):
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        self.ma_nhan_vien = self.ma_nhan_vien or None
+        self.ma_nhan_vien = self.ma_nhan_vien or generate_employee_code()
         self.full_clean()
         return super().save(*args, **kwargs)
 

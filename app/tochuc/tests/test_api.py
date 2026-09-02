@@ -284,6 +284,8 @@ class OrganizationDirectoryAPITests(APITestCase):
         self.assertEqual(sheet["F1"].value, "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
         self.assertEqual(sheet["A7"].value, "Mã nhân viên")
         self.assertEqual(sheet["B7"].value, "Họ và tên")
+        self.assertEqual(sheet["C7"].value, "Mã nhà máy")
+        self.assertEqual(sheet["C8"].value, self.song_hinh.ma_nha_may)
         self.assertEqual(sheet["B8"].value, "Nguyễn Văn Excel")
 
     def test_manager_imports_staff_excel_in_own_factory(self):
@@ -299,6 +301,8 @@ class OrganizationDirectoryAPITests(APITestCase):
         sheet.append([
             "SH-XLSX-NEW",
             "Trần Văn Nhập",
+            self.song_hinh.ma_nha_may,
+            self.song_hinh.ten_nha_may,
             self.song_hinh_unit.ma_don_vi,
             self.song_hinh_department.ma_bo_phan,
             "",
@@ -337,6 +341,8 @@ class OrganizationDirectoryAPITests(APITestCase):
         sheet.append([
             "VS-XLSX-BLOCKED",
             "Nhân sự ngoài phạm vi",
+            self.vinh_son.ma_nha_may,
+            self.vinh_son.ten_nha_may,
             self.vinh_son_unit.ma_don_vi,
             "VH",
             "",

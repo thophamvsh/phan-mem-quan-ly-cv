@@ -52,6 +52,7 @@ class NhanSuAdmin(ImportExportModelAdmin):
     list_display = (
         "ho_ten",
         "ma_nhan_vien",
+        "nha_may_hien_thi",
         "don_vi",
         "bo_phan",
         "chuc_danh",
@@ -76,6 +77,10 @@ class NhanSuAdmin(ImportExportModelAdmin):
 
     def get_export_formats(self):
         return list(self.formats)
+
+    @admin.display(description="Nhà máy", ordering="don_vi__nha_may__ten_nha_may")
+    def nha_may_hien_thi(self, obj):
+        return obj.don_vi.nha_may_pham_vi if obj.don_vi_id else None
 
 
 @admin.register(DonViToChuc)

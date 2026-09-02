@@ -10,6 +10,8 @@ from tablib import Dataset
 VIETNAMESE_COLUMNS = (
     ("ma_nhan_vien", "Mã nhân viên", 18),
     ("ho_ten", "Họ và tên", 28),
+    ("ma_nha_may", "Mã nhà máy", 15),
+    ("ten_nha_may", "Tên nhà máy", 25),
     ("ma_don_vi", "Mã đơn vị", 18),
     ("ma_bo_phan", "Mã bộ phận", 18),
     ("username", "Tài khoản", 22),
@@ -106,9 +108,12 @@ def build_staff_workbook(queryset, units, departments, *, is_template=False):
     sheet.row_dimensions[header_row].height = 28
 
     for row_number, person in enumerate(queryset, header_row + 1):
+        plant = person.don_vi.nha_may_pham_vi
         values = (
             person.ma_nhan_vien or "",
             person.ho_ten,
+            plant.ma_nha_may if plant else "",
+            plant.ten_nha_may if plant else "",
             person.don_vi.ma_don_vi,
             person.bo_phan.ma_bo_phan,
             person.user.username if person.user else "",
@@ -130,7 +135,14 @@ def build_staff_workbook(queryset, units, departments, *, is_template=False):
     sheet.sheet_view.showGridLines = False
 
     directory = workbook.create_sheet("Danh mục mã")
-    directory.append(["Mã đơn vị", "Tên đơn vị", "Mã bộ phận", "Tên bộ phận"])
+    directory.append([
+        "Mã nhà máy",
+        "Tên nhà máy",
+        "Mã đơn vị",
+        "Tên đơn vị",
+        "Mã bộ phận",
+        "Tên bộ phận",
+    ])
     directory.freeze_panes = "A2"
     for cell in directory[1]:
         cell.font = Font(name="Arial", bold=True, color="FFFFFF")
@@ -140,12 +152,14 @@ def build_staff_workbook(queryset, units, departments, *, is_template=False):
         unit = unit_rows[index] if index < len(unit_rows) else None
         department = department_rows[index] if index < len(department_rows) else None
         directory.append([
+            unit.nha_may_pham_vi.ma_nha_may if unit else "",
+            unit.nha_may_pham_vi.ten_nha_may if unit else "",
             unit.ma_don_vi if unit else "",
             unit.ten_don_vi if unit else "",
             department.ma_bo_phan if department else "",
             department.ten_bo_phan if department else "",
         ])
-    for column, width in zip("ABCD", (18, 32, 18, 32)):
+    for column, width in zip("ABCDEF", (15, 25, 18, 32, 18, 32)):
         directory.column_dimensions[column].width = width
 
     output = BytesIO()

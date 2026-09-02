@@ -3,7 +3,13 @@ from datetime import date, datetime
 from django.contrib.auth import get_user_model
 from import_export import fields, resources, widgets
 
-from .models import BoPhan, DonViToChuc, NhaMay, NhanSu
+from .models import (
+    BoPhan,
+    DonViToChuc,
+    NhaMay,
+    NhanSu,
+    generate_employee_code,
+)
 
 
 class OptionalForeignKeyWidget(widgets.ForeignKeyWidget):
@@ -60,6 +66,14 @@ class NhaMayResource(resources.ModelResource):
 
 
 class NhanSuResource(resources.ModelResource):
+    ma_nha_may = fields.Field(
+        column_name="ma_nha_may",
+        readonly=True,
+    )
+    ten_nha_may = fields.Field(
+        column_name="ten_nha_may",
+        readonly=True,
+    )
     don_vi = fields.Field(
         column_name="ma_don_vi",
         attribute="don_vi",
@@ -92,6 +106,8 @@ class NhanSuResource(resources.ModelResource):
         fields = (
             "ma_nhan_vien",
             "ho_ten",
+            "ma_nha_may",
+            "ten_nha_may",
             "don_vi",
             "bo_phan",
             "user",
@@ -108,5 +124,46 @@ class NhanSuResource(resources.ModelResource):
     def before_import_row(self, row, **kwargs):
         employee_code = str(row.get("ma_nhan_vien") or "").strip()
         if not employee_code:
-            raise ValueError("ma_nhan_vien là bắt buộc khi nhập Excel.")
+            unit_code = str(row.get("ma_don_vi") or "").strip()
+            full_name = str(row.get("ho_ten") or "").strip()
+            department_code = str(row.get("ma_bo_phan") or "").strip()
+            existing = NhanSu.objects.filter(
+                ho_ten__iexact=full_name,
+                don_vi__ma_don_vi=unit_code,
+            )
+            if department_code:
+                existing = existing.filter(
+                    bo_phan__ma_bo_phan=department_code,
+                )
+            matches = list(existing[:2])
+            if len(matches) > 1:
+                raise ValueError(
+                    "Có nhiều nhân sự trùng họ tên và đơn vị; "
+                    "vui lòng nhập Mã nhân viên để xác định chính xác."
+                )
+            employee_code = (
+                matches[0].ma_nhan_vien
+                if matches and matches[0].ma_nhan_vien
+                else generate_employee_code()
+            )
         row["ma_nhan_vien"] = employee_code
+        unit_code = str(row.get("ma_don_vi") or "").strip()
+        plant_code = str(row.get("ma_nha_may") or "").strip().upper()
+        if unit_code and plant_code:
+            unit = DonViToChuc.objects.filter(ma_don_vi=unit_code).first()
+            if not unit:
+                raise ValueError(f"Không tồn tại đơn vị: {unit_code}.")
+            actual_code = unit.nha_may_pham_vi.ma_nha_may.upper()
+            if plant_code != actual_code:
+                raise ValueError(
+                    f"Đơn vị {unit_code} thuộc nhà máy {actual_code}, "
+                    f"không thuộc nhà máy {plant_code}."
+                )
+
+    def dehydrate_ma_nha_may(self, person):
+        plant = person.don_vi.nha_may_pham_vi if person.don_vi_id else None
+        return plant.ma_nha_may if plant else ""
+
+    def dehydrate_ten_nha_may(self, person):
+        plant = person.don_vi.nha_may_pham_vi if person.don_vi_id else None
+        return plant.ten_nha_may if plant else ""

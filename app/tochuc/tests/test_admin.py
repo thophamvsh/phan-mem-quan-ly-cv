@@ -74,6 +74,8 @@ class NhanSuAdminTests(TestCase):
 
         self.assertEqual(dataset.height, 1)
         row = dict(zip(dataset.headers, dataset[0]))
+        self.assertEqual(row["ma_nha_may"], self.plant.ma_nha_may)
+        self.assertEqual(row["ten_nha_may"], self.plant.ten_nha_may)
         self.assertEqual(row["ma_don_vi"], self.unit.ma_don_vi)
         self.assertEqual(row["ma_bo_phan"], self.department.ma_bo_phan)
 
@@ -81,6 +83,8 @@ class NhanSuAdminTests(TestCase):
         dataset = Dataset(headers=[
             "ma_nhan_vien",
             "ho_ten",
+            "ma_nha_may",
+            "ten_nha_may",
             "ma_don_vi",
             "ma_bo_phan",
             "username",
@@ -93,6 +97,8 @@ class NhanSuAdminTests(TestCase):
         dataset.append([
             "NV-IMPORT-01",
             "Nguyễn Văn Ca",
+            self.plant.ma_nha_may,
+            self.plant.ten_nha_may,
             self.unit.ma_don_vi,
             self.department.ma_bo_phan,
             "",
@@ -110,3 +116,54 @@ class NhanSuAdminTests(TestCase):
         self.assertEqual(imported.ho_ten, "Nguyễn Văn Ca")
         self.assertEqual(imported.don_vi, self.unit)
         self.assertEqual(imported.bo_phan, self.department)
+
+    def test_staff_resource_rejects_unit_from_another_factory_code(self):
+        dataset = Dataset(headers=[
+            "ma_nhan_vien",
+            "ho_ten",
+            "ma_nha_may",
+            "ten_nha_may",
+            "ma_don_vi",
+        ])
+        dataset.append([
+            "NV-WRONG-PLANT",
+            "Nhân sự sai nhà máy",
+            "VS",
+            "Vĩnh Sơn",
+            self.unit.ma_don_vi,
+        ])
+
+        result = NhanSuResource().import_data(dataset, dry_run=True)
+
+        self.assertTrue(result.has_errors())
+
+    def test_staff_resource_reimports_legacy_row_without_employee_code(self):
+        dataset = Dataset(headers=[
+            "ma_nhan_vien",
+            "ho_ten",
+            "ma_nha_may",
+            "ten_nha_may",
+            "ma_don_vi",
+            "ma_bo_phan",
+            "chuc_danh",
+        ])
+        dataset.append([
+            "",
+            self.staff.ho_ten,
+            self.plant.ma_nha_may,
+            self.plant.ten_nha_may,
+            self.unit.ma_don_vi,
+            self.department.ma_bo_phan,
+            "Trưởng ca",
+        ])
+
+        result = NhanSuResource().import_data(
+            dataset,
+            dry_run=False,
+            raise_errors=True,
+        )
+
+        self.assertFalse(result.has_errors())
+        self.assertEqual(NhanSu.objects.count(), 1)
+        self.staff.refresh_from_db()
+        self.assertEqual(self.staff.chuc_danh, "Trưởng ca")

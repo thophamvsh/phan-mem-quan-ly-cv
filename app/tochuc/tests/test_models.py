@@ -64,6 +64,31 @@ class NhaMayModelTests(TestCase):
 
         self.assertTrue(target.group_set.filter(pk=group.pk).exists())
 
+    def test_normalize_codes_and_repairs_factory_unit_scope(self):
+        song_hinh = NhaMay.objects.create(
+            ma_nha_may="NM-2",
+            ten_nha_may="Sông Hinh",
+        )
+        vinh_son = NhaMay.objects.create(
+            ma_nha_may="NM-1",
+            ten_nha_may="Vĩnh Sơn",
+        )
+        song_hinh_unit = DonViToChuc.objects.create(
+            ma_don_vi="UNIT-SH",
+            ten_don_vi="Nhà máy Thủy điện Sông Hinh",
+            nha_may=vinh_son,
+        )
+
+        migration = import_module("tochuc.migrations.0006_normalize_plant_codes")
+        migration.normalize_plant_codes(apps, None)
+
+        song_hinh.refresh_from_db()
+        vinh_son.refresh_from_db()
+        song_hinh_unit.refresh_from_db()
+        self.assertEqual(song_hinh.ma_nha_may, "SH")
+        self.assertEqual(vinh_son.ma_nha_may, "VS")
+        self.assertEqual(song_hinh_unit.nha_may_id, song_hinh.pk)
+
 
 class SharedOrganizationModelTests(TestCase):
     def setUp(self):
@@ -84,6 +109,29 @@ class SharedOrganizationModelTests(TestCase):
             "quanlycatruc_donvitochuc",
         )
         self.assertEqual(BoPhan._meta.db_table, "quanlycatruc_bophan")
+
+    def test_staff_without_manual_code_gets_stable_generated_code(self):
+        unit = DonViToChuc.objects.create(
+            ma_don_vi="AUTO-CODE-UNIT",
+            ten_don_vi="Đơn vị tự sinh mã",
+            nha_may=self.song_hinh,
+        )
+        department = BoPhan.objects.create(
+            don_vi=unit,
+            ma_bo_phan="AUTO-CODE-DEPT",
+            ten_bo_phan="Bộ phận tự sinh mã",
+        )
+
+        person = NhanSu.objects.create(
+            ho_ten="Nhân sự chưa có mã",
+            don_vi=unit,
+            bo_phan=department,
+        )
+        generated_code = person.ma_nhan_vien
+        person.save()
+
+        self.assertTrue(generated_code.startswith("NS-"))
+        self.assertEqual(person.ma_nhan_vien, generated_code)
 
     def test_shift_models_reference_shared_organization_models(self):
         self.assertIs(
