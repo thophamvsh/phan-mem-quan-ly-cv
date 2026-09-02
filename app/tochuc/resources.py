@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import re
 
 from django.contrib.auth import get_user_model
 from import_export import fields, resources, widgets
@@ -10,6 +11,9 @@ from .models import (
     NhanSu,
     generate_employee_code,
 )
+
+
+AUTO_EMPLOYEE_CODE = re.compile(r"^NS-(?:\d{8}|[A-F0-9]{12})$")
 
 
 class OptionalForeignKeyWidget(widgets.ForeignKeyWidget):
@@ -122,20 +126,38 @@ class NhanSuResource(resources.ModelResource):
         report_skipped = True
 
     def before_import_row(self, row, **kwargs):
-        employee_code = str(row.get("ma_nhan_vien") or "").strip()
-        if not employee_code:
-            unit_code = str(row.get("ma_don_vi") or "").strip()
-            full_name = str(row.get("ho_ten") or "").strip()
-            department_code = str(row.get("ma_bo_phan") or "").strip()
-            existing = NhanSu.objects.filter(
-                ho_ten__iexact=full_name,
-                don_vi__ma_don_vi=unit_code,
+        unit_code = str(row.get("ma_don_vi") or "").strip()
+        full_name = str(row.get("ho_ten") or "").strip()
+        department_code = str(row.get("ma_bo_phan") or "").strip()
+        matching_people = NhanSu.objects.filter(
+            ho_ten__iexact=full_name,
+            don_vi__ma_don_vi=unit_code,
+        )
+        if department_code:
+            matching_people = matching_people.filter(
+                bo_phan__ma_bo_phan=department_code,
             )
-            if department_code:
-                existing = existing.filter(
-                    bo_phan__ma_bo_phan=department_code,
+        matches = list(matching_people[:2])
+
+        employee_code = str(row.get("ma_nhan_vien") or "").strip()
+        if employee_code and AUTO_EMPLOYEE_CODE.fullmatch(employee_code):
+            if len(matches) > 1:
+                raise ValueError(
+                    "Có nhiều nhân sự trùng họ tên, đơn vị và bộ phận; "
+                    "vui lòng dùng mã nhân viên nghiệp vụ để xác định chính xác."
                 )
-            matches = list(existing[:2])
+            if matches:
+                employee_code = matches[0].ma_nhan_vien
+            else:
+                code_owner = NhanSu.objects.filter(
+                    ma_nhan_vien=employee_code,
+                ).first()
+                if code_owner:
+                    raise ValueError(
+                        f"Mã tự sinh {employee_code} đang thuộc nhân sự "
+                        f"{code_owner.ho_ten}; không thể dùng để cập nhật {full_name}."
+                    )
+        if not employee_code:
             if len(matches) > 1:
                 raise ValueError(
                     "Có nhiều nhân sự trùng họ tên và đơn vị; "
@@ -147,7 +169,6 @@ class NhanSuResource(resources.ModelResource):
                 else generate_employee_code()
             )
         row["ma_nhan_vien"] = employee_code
-        unit_code = str(row.get("ma_don_vi") or "").strip()
         plant_code = str(row.get("ma_nha_may") or "").strip().upper()
         if unit_code and plant_code:
             unit = DonViToChuc.objects.filter(ma_don_vi=unit_code).first()

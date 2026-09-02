@@ -82,12 +82,18 @@ class NhaMayModelTests(TestCase):
         migration = import_module("tochuc.migrations.0006_normalize_plant_codes")
         migration.normalize_plant_codes(apps, None)
 
+        unit_migration = import_module(
+            "tochuc.migrations.0008_normalize_root_unit_codes"
+        )
+        unit_migration.normalize_root_unit_codes(apps, None)
+
         song_hinh.refresh_from_db()
         vinh_son.refresh_from_db()
         song_hinh_unit.refresh_from_db()
         self.assertEqual(song_hinh.ma_nha_may, "SH")
         self.assertEqual(vinh_son.ma_nha_may, "VS")
         self.assertEqual(song_hinh_unit.nha_may_id, song_hinh.pk)
+        self.assertEqual(song_hinh_unit.ma_don_vi, "SH-NM")
 
 
 class SharedOrganizationModelTests(TestCase):

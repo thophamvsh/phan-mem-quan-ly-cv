@@ -167,3 +167,61 @@ class NhanSuAdminTests(TestCase):
         self.assertEqual(NhanSu.objects.count(), 1)
         self.staff.refresh_from_db()
         self.assertEqual(self.staff.chuc_danh, "Trưởng ca")
+
+    def test_staff_resource_maps_foreign_auto_code_to_matching_person(self):
+        dataset = Dataset(headers=[
+            "ma_nhan_vien",
+            "ho_ten",
+            "ma_nha_may",
+            "ten_nha_may",
+            "ma_don_vi",
+            "ma_bo_phan",
+            "chuc_danh",
+        ])
+        dataset.append([
+            "NS-99999999",
+            self.staff.ho_ten,
+            self.plant.ma_nha_may,
+            self.plant.ten_nha_may,
+            self.unit.ma_don_vi,
+            self.department.ma_bo_phan,
+            "Trực chính",
+        ])
+
+        result = NhanSuResource().import_data(
+            dataset,
+            dry_run=False,
+            raise_errors=True,
+        )
+
+        self.assertFalse(result.has_errors())
+        self.assertEqual(NhanSu.objects.count(), 1)
+        self.staff.refresh_from_db()
+        self.assertEqual(self.staff.ma_nhan_vien, "NV-ADMIN-01")
+        self.assertEqual(self.staff.chuc_danh, "Trực chính")
+
+    def test_staff_resource_rejects_foreign_auto_code_collision(self):
+        other = NhanSu.objects.create(
+            ma_nhan_vien="NS-99999999",
+            ho_ten="Nhân sự khác",
+            don_vi=self.unit,
+            bo_phan=self.department,
+        )
+        dataset = Dataset(headers=[
+            "ma_nhan_vien",
+            "ho_ten",
+            "ma_nha_may",
+            "ma_don_vi",
+            "ma_bo_phan",
+        ])
+        dataset.append([
+            other.ma_nhan_vien,
+            "Người nhập từ môi trường khác",
+            self.plant.ma_nha_may,
+            self.unit.ma_don_vi,
+            self.department.ma_bo_phan,
+        ])
+
+        result = NhanSuResource().import_data(dataset, dry_run=True)
+
+        self.assertTrue(result.has_errors())
