@@ -1,8 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from tablib import Dataset
 
+from tochuc.admin import NhaMayAdmin, NhanSuAdmin
 from tochuc.models import BoPhan, DonViToChuc, NhaMay, NhanSu
+from tochuc.resources import NhaMayResource, NhanSuResource
 
 
 class NhanSuAdminTests(TestCase):
@@ -16,20 +19,21 @@ class NhanSuAdminTests(TestCase):
             ma_nha_may="SH-ADMIN",
             ten_nha_may="Sông Hinh",
         )
-        unit = DonViToChuc.objects.create(
+        self.unit = DonViToChuc.objects.create(
             ma_don_vi="SH-ADMIN-UNIT",
             ten_don_vi="Quản lý vận hành",
             nha_may=self.plant,
         )
-        department = BoPhan.objects.create(
-            don_vi=unit,
+        self.department = BoPhan.objects.create(
+            don_vi=self.unit,
             ma_bo_phan="VH-ADMIN",
             ten_bo_phan="Vận hành",
         )
         self.staff = NhanSu.objects.create(
             ho_ten="Nguyễn Văn Trực",
-            don_vi=unit,
-            bo_phan=department,
+            ma_nhan_vien="NV-ADMIN-01",
+            don_vi=self.unit,
+            bo_phan=self.department,
         )
         self.client.force_login(self.admin_user)
 
@@ -48,3 +52,61 @@ class NhanSuAdminTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.staff.ho_ten)
+
+    def test_factory_admin_belongs_to_tochuc_and_keeps_excel_resource(self):
+        response = self.client.get(reverse("admin:tochuc_nhamay_changelist"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(NhaMayAdmin.resource_class, NhaMayResource)
+
+    def test_staff_admin_exposes_xlsx_import_and_export(self):
+        changelist = self.client.get(reverse("admin:tochuc_nhansu_changelist"))
+        import_page = self.client.get(reverse("admin:tochuc_nhansu_import"))
+        export_page = self.client.get(reverse("admin:tochuc_nhansu_export"))
+
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(import_page.status_code, 200)
+        self.assertEqual(export_page.status_code, 200)
+        self.assertIs(NhanSuAdmin.resource_class, NhanSuResource)
+
+    def test_staff_resource_exports_natural_organization_codes(self):
+        dataset = NhanSuResource().export(NhanSu.objects.filter(pk=self.staff.pk))
+
+        self.assertEqual(dataset.height, 1)
+        row = dict(zip(dataset.headers, dataset[0]))
+        self.assertEqual(row["ma_don_vi"], self.unit.ma_don_vi)
+        self.assertEqual(row["ma_bo_phan"], self.department.ma_bo_phan)
+
+    def test_staff_resource_imports_and_updates_by_employee_code(self):
+        dataset = Dataset(headers=[
+            "ma_nhan_vien",
+            "ho_ten",
+            "ma_don_vi",
+            "ma_bo_phan",
+            "username",
+            "chuc_danh",
+            "dien_thoai",
+            "tu_ngay",
+            "den_ngay",
+            "dang_lam_viec",
+        ])
+        dataset.append([
+            "NV-IMPORT-01",
+            "Nguyễn Văn Ca",
+            self.unit.ma_don_vi,
+            self.department.ma_bo_phan,
+            "",
+            "Trực chính",
+            "0900000000",
+            "01/09/2026",
+            "",
+            True,
+        ])
+
+        result = NhanSuResource().import_data(dataset, dry_run=False, raise_errors=True)
+
+        self.assertFalse(result.has_errors())
+        imported = NhanSu.objects.get(ma_nhan_vien="NV-IMPORT-01")
+        self.assertEqual(imported.ho_ten, "Nguyễn Văn Ca")
+        self.assertEqual(imported.don_vi, self.unit)
+        self.assertEqual(imported.bo_phan, self.department)

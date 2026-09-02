@@ -491,13 +491,6 @@ class BangViTriResource(resources.ModelResource):
         fields = ("ma_vi_tri", "ma_he_thong", "kho", "ke", "ngan", "tang", "mo_ta")
         export_order = fields
 
-class BangNhaMayResource(resources.ModelResource):
-    class Meta:
-        model = NhaMay
-        import_id_fields = ("ma_nha_may",)
-        fields = ("ma_nha_may", "ten_nha_may")
-        export_order = fields
-
 class BangXuatXuResource(resources.ModelResource):
     class Meta:
         model = Bang_xuat_xu
@@ -598,13 +591,6 @@ class BangViTriAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     list_display = ("ma_vi_tri", "ma_he_thong", "kho", "ke", "ngan", "tang")
     search_fields = ("ma_vi_tri", "ma_he_thong", "kho", "ke", "ngan", "tang")
     list_per_page = 200  # Hiển thị 200 vị trí mỗi trang
-
-@admin.register(NhaMay)
-class BangNhaMayAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
-    resource_class = BangNhaMayResource
-    list_display = ("ma_nha_may", "ten_nha_may")
-    search_fields = ("ma_nha_may", "ten_nha_may")
-    list_per_page = 200  # Hiển thị 200 nhà máy mỗi trang
 
 @admin.register(Bang_xuat_xu)
 class BangXuatXuAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
@@ -716,5 +702,4 @@ class SimpleUserAdmin(BaseUserAdmin):
 #     def full_name(self, obj):
 #         return obj.full_name
 #     full_name.short_description = 'Tên đầy đủ'
-
 

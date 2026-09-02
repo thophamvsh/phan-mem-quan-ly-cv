@@ -1,14 +1,17 @@
 from datetime import date
 
+from django.db import transaction
 from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from core.models import User
-from .models import BoPhan, DonViToChuc, NhanSu
+from .models import BoPhan, DonViToChuc, NhaMay, NhanSu
 from .permissions import (
     OrganizationDirectoryPermission,
     can_access_organization_plant,
@@ -16,8 +19,11 @@ from .permissions import (
 from .serializers import (
     BoPhanSerializer,
     DonViToChucSerializer,
+    NhaMaySerializer,
     NhanSuSerializer,
 )
+from .excel import build_staff_workbook, staff_dataset_from_upload, workbook_response
+from .resources import NhanSuResource
 
 
 def _user_plant_id(user):
@@ -69,6 +75,24 @@ def _scope_staff(queryset, user):
     ).distinct()
 
 
+class NhaMayViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = NhaMaySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    queryset = NhaMay.objects.order_by("ten_nha_may")
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.user.is_superuser or getattr(
+            getattr(self.request.user, "profile", None),
+            "is_all_factories",
+            False,
+        ):
+            return queryset
+        plant_id = _user_plant_id(self.request.user)
+        return queryset.filter(pk=plant_id) if plant_id else queryset.none()
+
+
 class NhanSuViewSet(viewsets.ModelViewSet):
     serializer_class = NhanSuSerializer
     permission_classes = [OrganizationDirectoryPermission]
@@ -87,6 +111,32 @@ class NhanSuViewSet(viewsets.ModelViewSet):
     search_fields = ["ho_ten", "ma_nhan_vien", "chuc_danh"]
     ordering_fields = ["ho_ten", "ma_nhan_vien", "tu_ngay"]
     ordering = ["don_vi", "bo_phan", "ho_ten"]
+
+    def _excel_units(self, request):
+        queryset = _scope_units(DonViToChuc.objects.all(), request.user)
+        plant_id = request.query_params.get("nha_may")
+        if not plant_id:
+            return queryset
+        if not can_access_organization_plant(request.user, plant_id):
+            raise PermissionDenied("Bạn không có quyền truy cập nhà máy đã chọn.")
+        return queryset.filter(
+            Q(nha_may_id=plant_id)
+            | Q(don_vi_cha__nha_may_id=plant_id)
+            | Q(don_vi_cha__don_vi_cha__nha_may_id=plant_id)
+        ).distinct()
+
+    def _excel_scope(self, request):
+        queryset = self.get_queryset()
+        plant_id = request.query_params.get("nha_may")
+        if plant_id:
+            if not can_access_organization_plant(request.user, plant_id):
+                raise PermissionDenied("Bạn không có quyền truy cập nhà máy đã chọn.")
+            queryset = queryset.filter(
+                Q(don_vi__nha_may_id=plant_id)
+                | Q(don_vi__don_vi_cha__nha_may_id=plant_id)
+                | Q(don_vi__don_vi_cha__don_vi_cha__nha_may_id=plant_id)
+            ).distinct()
+        return queryset
 
     def get_queryset(self):
         return _scope_staff(
@@ -189,6 +239,95 @@ class NhanSuViewSet(viewsets.ModelViewSet):
                 for item in queryset
             ]
         )
+
+    @action(detail=False, methods=["get"], url_path="excel-template")
+    def excel_template(self, request):
+        staff = self._excel_scope(request)
+        units = self._excel_units(request)
+        departments = BoPhan.objects.filter(don_vi__in=units)
+        content = build_staff_workbook(
+            staff.none(),
+            units.order_by("ma_don_vi"),
+            departments.order_by("don_vi", "ma_bo_phan"),
+            is_template=True,
+        )
+        return workbook_response(content, "mau-danh-muc-nhan-su.xlsx")
+
+    @action(detail=False, methods=["get"], url_path="export-excel")
+    def export_excel(self, request):
+        staff = self.filter_queryset(self._excel_scope(request)).select_related(
+            "don_vi", "bo_phan", "user"
+        )
+        units = DonViToChuc.objects.filter(pk__in=staff.values("don_vi_id"))
+        departments = BoPhan.objects.filter(pk__in=staff.values("bo_phan_id"))
+        content = build_staff_workbook(staff, units, departments)
+        return workbook_response(content, "danh-muc-nhan-su.xlsx")
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-excel",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_excel(self, request):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"detail": "Vui lòng chọn file Excel."}, status=status.HTTP_400_BAD_REQUEST)
+        if not uploaded_file.name.lower().endswith(".xlsx"):
+            return Response({"detail": "Chỉ hỗ trợ file Excel .xlsx."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            dataset = staff_dataset_from_upload(uploaded_file)
+            allowed_units = {
+                item.ma_don_vi: item
+                for item in self._excel_units(request)
+            }
+            invalid_units = sorted({
+                str(row.get("ma_don_vi") or "").strip()
+                for row in dataset.dict
+                if str(row.get("ma_don_vi") or "").strip() not in allowed_units
+            })
+            if invalid_units:
+                return Response(
+                    {"detail": f"Không có quyền hoặc không tồn tại đơn vị: {', '.join(invalid_units)}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            usernames = {
+                str(row.get("username") or "").strip()
+                for row in dataset.dict
+                if str(row.get("username") or "").strip()
+            }
+            users = {
+                item.username: item
+                for item in User.objects.filter(username__in=usernames).select_related("profile")
+            }
+            for row in dataset.dict:
+                username = str(row.get("username") or "").strip()
+                if not username:
+                    continue
+                user = users.get(username)
+                if not user:
+                    raise ValueError(f"Không tồn tại tài khoản: {username}.")
+                unit = allowed_units[str(row.get("ma_don_vi") or "").strip()]
+                if getattr(user.profile, "nha_may_id", None) != unit.nha_may_pham_vi_id:
+                    raise ValueError(
+                        f"Tài khoản {username} không thuộc cùng nhà máy với đơn vị {unit.ma_don_vi}."
+                    )
+            with transaction.atomic():
+                result = NhanSuResource().import_data(
+                    dataset,
+                    dry_run=False,
+                    raise_errors=True,
+                    use_transactions=True,
+                )
+        except Exception as exc:
+            return Response({"detail": f"Không thể nhập Excel: {exc}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "message": "Nhập danh mục nhân sự thành công.",
+            "total": dataset.height,
+            "created": result.totals.get("new", 0),
+            "updated": result.totals.get("update", 0),
+            "skipped": result.totals.get("skip", 0),
+        })
 
 
 class DonViToChucViewSet(viewsets.ModelViewSet):

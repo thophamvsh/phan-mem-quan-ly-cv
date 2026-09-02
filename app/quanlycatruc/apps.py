@@ -8,8 +8,8 @@ class QuanLyCaTrucConfig(AppConfig):
 
     def ready(self):
         from auditlog.registry import auditlog
-        from .models import KipTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, ThanhVienKipTruc
+        from .models import KipTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, ThanhVienKipTruc
 
-        for model in (NhanSu, KipTruc, ThanhVienKipTruc, MauChuKyCaTruc, LichTrucCa, NgayTrucCa):
+        for model in (KipTruc, ThanhVienKipTruc, MauChuKyCaTruc, LichTrucCa, NgayTrucCa):
             if not auditlog.contains(model):
                 auditlog.register(model)

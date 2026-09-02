@@ -16,7 +16,8 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from core.models import User
-from .models import BoPhan, ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, DonViToChuc, KipTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, NhomLichTruc, PhamViNhanSuCaTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
+from tochuc.models import BoPhan, DonViToChuc, NhanSu
+from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhomLichTruc, PhamViNhanSuCaTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
 from .permissions import LegacyStaffPermission, RosterPermission, ShiftAdjustmentPermission, ShiftSchedulePermission, can_access_plant, has_profile_permission
 from .serializers import BoPhanSerializer, ChiTietPhuongAnPhanCongCaSerializer, DieuChinhNhanSuCaTrucSerializer, DonViToChucSerializer, KipTrucSerializer, LichTrucCaSerializer, MauChuKyCaTrucSerializer, NgayTrucCaSerializer, NhanSuSerializer, NhomLichTrucSerializer, PhamViNhanSuCaTrucSerializer, PhuongAnPhanCongCaSerializer, ThanhVienKipTrucSerializer, TransitionSerializer
 from .services import _snapshot_staff, actual_shift_staff, custom_schedule_staff_labels, generate_monthly_schedule, transition_schedule, validate_operation_staffing, validate_replacement_availability

@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate
 from core.models import User
 from django.contrib.auth.password_validation import validate_password
 from tochuc.models import NhaMay
+from tochuc.serializers import NhaMaySerializer
 from .models import Bang_hinh_anh_vat_tu, Bang_xuat_xu
 from core.models import UserProfile
 
@@ -151,12 +152,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         # Update profile fields
         return super().update(instance, validated_data)
-
-
-class NhaMaySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = NhaMay
-        fields = ('id', 'ma_nha_may', 'ten_nha_may')
 
 
 class FileUploadSerializer(serializers.Serializer):

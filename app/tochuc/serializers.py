@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from .models import BoPhan, DonViToChuc, NhanSu
+from .models import BoPhan, DonViToChuc, NhaMay, NhanSu
+
+
+class NhaMaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NhaMay
+        fields = ["id", "ma_nha_may", "ten_nha_may"]
 
 
 class NhanSuSerializer(serializers.ModelSerializer):

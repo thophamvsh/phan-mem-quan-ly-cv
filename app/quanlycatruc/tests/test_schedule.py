@@ -7,9 +7,9 @@ from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from core.models import User, UserProfile, UserRole
-from tochuc.models import NhaMay
+from tochuc.models import BoPhan, DonViToChuc, NhaMay, NhanSu
 from nhatkyvanhanh.models import SogiaonhancaHC, SogiaonhancaVH
-from quanlycatruc.models import BoPhan, ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, DonViToChuc, KipTruc, LichTrucCa, MauChuKyCaTruc, NhanSu, NhomLichTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
+from quanlycatruc.models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichTrucCa, MauChuKyCaTruc, NhomLichTruc, PhuongAnPhanCongCa, ThanhVienKipTruc
 from quanlycatruc.services import abbreviated_staff_names, actual_shift_staff, generate_monthly_schedule, transition_schedule
 
 

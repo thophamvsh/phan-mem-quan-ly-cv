@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from io import BytesIO
+from openpyxl import load_workbook
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -63,6 +65,34 @@ class OrganizationDirectoryAPITests(APITestCase):
         self.assertEqual(
             {item["id"] for item in response.data},
             {self.song_hinh_unit.id},
+        )
+
+    def test_factory_endpoint_is_authenticated_and_scoped(self):
+        anonymous = self.client.get("/api/v1/tochuc/nha-may/")
+        user = create_user(
+            "factory-viewer",
+            self.song_hinh,
+            can_view_organization_directory=True,
+        )
+        self.client.force_authenticate(user)
+        scoped = self.client.get("/api/v1/tochuc/nha-may/")
+
+        self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(scoped.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["id"] for item in scoped.data},
+            {self.song_hinh.id},
+        )
+        self.assertNotIn("Deprecation", scoped)
+
+    def test_legacy_factory_endpoint_points_to_shared_successor(self):
+        response = self.client.get("/api/v1/khovattu/auth/nha-may/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Deprecation"], "true")
+        self.assertEqual(
+            response["Link"],
+            '</api/v1/tochuc/nha-may/>; rel="successor-version"',
         )
 
     def test_user_without_related_permission_is_denied(self):
@@ -137,6 +167,11 @@ class OrganizationDirectoryAPITests(APITestCase):
 
         self.assertEqual(shared_response.status_code, status.HTTP_200_OK)
         self.assertEqual(legacy_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(legacy_response["Deprecation"], "true")
+        self.assertEqual(
+            legacy_response["Link"],
+            '</api/v1/tochuc/don-vi/>; rel="successor-version"',
+        )
         self.assertEqual(
             {item["id"] for item in shared_response.data},
             {item["id"] for item in legacy_response.data},
@@ -174,6 +209,11 @@ class OrganizationDirectoryAPITests(APITestCase):
         self.assertIsNone(create_response.data["user"])
         self.assertEqual(shared_response.status_code, status.HTTP_200_OK)
         self.assertEqual(legacy_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(legacy_response["Deprecation"], "true")
+        self.assertEqual(
+            legacy_response["Link"],
+            '</api/v1/tochuc/nhan-su/>; rel="successor-version"',
+        )
         self.assertEqual(
             account_options_response.status_code,
             status.HTTP_200_OK,
@@ -218,3 +258,104 @@ class OrganizationDirectoryAPITests(APITestCase):
             {item["id"] for item in response.data},
             {own_staff.id},
         )
+
+    def test_staff_excel_template_and_export_have_vietnamese_headers(self):
+        user = create_user(
+            "staff-excel-viewer",
+            self.song_hinh,
+            can_view_organization_directory=True,
+        )
+        NhanSu.objects.create(
+            ma_nhan_vien="SH-XLSX-01",
+            ho_ten="Nguyễn Văn Excel",
+            don_vi=self.song_hinh_unit,
+            bo_phan=self.song_hinh_department,
+        )
+        self.client.force_authenticate(user)
+
+        template = self.client.get("/api/v1/tochuc/nhan-su/excel-template/")
+        exported = self.client.get("/api/v1/tochuc/nhan-su/export-excel/")
+
+        self.assertEqual(template.status_code, status.HTTP_200_OK)
+        self.assertEqual(exported.status_code, status.HTTP_200_OK)
+        workbook = load_workbook(BytesIO(exported.content), data_only=True)
+        sheet = workbook["Danh mục nhân sự"]
+        self.assertEqual(sheet["A1"].value, "CÔNG TY CỔ PHẦN THỦY ĐIỆN VĨNH SƠN - SÔNG HINH")
+        self.assertEqual(sheet["F1"].value, "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
+        self.assertEqual(sheet["A7"].value, "Mã nhân viên")
+        self.assertEqual(sheet["B7"].value, "Họ và tên")
+        self.assertEqual(sheet["B8"].value, "Nguyễn Văn Excel")
+
+    def test_manager_imports_staff_excel_in_own_factory(self):
+        user = create_user(
+            "staff-excel-manager",
+            self.song_hinh,
+            can_manage_organization_directory=True,
+        )
+        self.client.force_authenticate(user)
+        template = self.client.get("/api/v1/tochuc/nhan-su/excel-template/")
+        workbook = load_workbook(BytesIO(template.content))
+        sheet = workbook["Danh mục nhân sự"]
+        sheet.append([
+            "SH-XLSX-NEW",
+            "Trần Văn Nhập",
+            self.song_hinh_unit.ma_don_vi,
+            self.song_hinh_department.ma_bo_phan,
+            "",
+            "Trực chính",
+            "0900000000",
+            "01/09/2026",
+            "",
+            "Có",
+        ])
+        payload = BytesIO()
+        workbook.save(payload)
+        payload.seek(0)
+        payload.name = "nhan-su.xlsx"
+
+        response = self.client.post(
+            "/api/v1/tochuc/nhan-su/import-excel/",
+            {"file": payload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["created"], 1)
+        self.assertTrue(NhanSu.objects.filter(ma_nhan_vien="SH-XLSX-NEW").exists())
+
+    def test_staff_excel_import_rejects_unit_outside_factory(self):
+        user = create_user(
+            "staff-excel-scoped",
+            self.song_hinh,
+            can_manage_organization_directory=True,
+        )
+        self.client.force_authenticate(user)
+        workbook = load_workbook(BytesIO(
+            self.client.get("/api/v1/tochuc/nhan-su/excel-template/").content
+        ))
+        sheet = workbook["Danh mục nhân sự"]
+        sheet.append([
+            "VS-XLSX-BLOCKED",
+            "Nhân sự ngoài phạm vi",
+            self.vinh_son_unit.ma_don_vi,
+            "VH",
+            "",
+            "",
+            "",
+            "01/09/2026",
+            "",
+            "Có",
+        ])
+        payload = BytesIO()
+        workbook.save(payload)
+        payload.seek(0)
+        payload.name = "nhan-su.xlsx"
+
+        response = self.client.post(
+            "/api/v1/tochuc/nhan-su/import-excel/",
+            {"file": payload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(NhanSu.objects.filter(ma_nhan_vien="VS-XLSX-BLOCKED").exists())

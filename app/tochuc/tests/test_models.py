@@ -1,9 +1,13 @@
-from django.contrib.auth.models import Permission
+from importlib import import_module
+
+from django.apps import apps
+from django.contrib.auth.models import Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from quanlycatruc.models import NhanSu, NhomLichTruc
-from tochuc.models import BoPhan, DonViToChuc, NhaMay
+from quanlycatruc.models import NhomLichTruc
+from tochuc.models import BoPhan, DonViToChuc, NhaMay, NhanSu
 
 
 class NhaMayModelTests(TestCase):
@@ -34,6 +38,31 @@ class NhaMayModelTests(TestCase):
             {"add_nhamay", "change_nhamay", "delete_nhamay", "view_nhamay"}
             <= codenames
         )
+
+    def test_legacy_permission_assignments_are_transferred(self):
+        legacy_type, _ = ContentType.objects.get_or_create(
+            app_label="khovattu",
+            model="bang_nha_may",
+        )
+        legacy, _ = Permission.objects.get_or_create(
+            content_type=legacy_type,
+            codename="view_bang_nha_may",
+            defaults={"name": "Can view legacy factory"},
+        )
+        target = Permission.objects.get(
+            content_type__app_label="tochuc",
+            content_type__model="nhamay",
+            codename="view_nhamay",
+        )
+        group = Group.objects.create(name="Kiểm tra chuyển quyền tổ chức")
+        group.permissions.add(legacy)
+
+        migration = import_module(
+            "tochuc.migrations.0005_transfer_legacy_organization_permissions"
+        )
+        migration.transfer_permissions(apps, None)
+
+        self.assertTrue(target.group_set.filter(pk=group.pk).exists())
 
 
 class SharedOrganizationModelTests(TestCase):

@@ -1,13 +1,25 @@
-"""Shared organization directory administration.
-
-That module owns the existing import/export resource. The registered model is
-already ``tochuc.NhaMay``; moving the resource itself is a separate cleanup and
-does not affect domain ownership.
-"""
 from django.contrib import admin
 from django.db.models import Q
+from import_export.admin import ImportExportModelAdmin
+from import_export.formats import base_formats
 
 from .models import BoPhan, DonViToChuc, NhaMay, NhanSu
+from .resources import NhaMayResource, NhanSuResource
+
+
+@admin.register(NhaMay)
+class NhaMayAdmin(ImportExportModelAdmin):
+    resource_class = NhaMayResource
+    formats = (base_formats.XLSX,)
+    list_display = ("ma_nha_may", "ten_nha_may")
+    search_fields = ("ma_nha_may", "ten_nha_may")
+    list_per_page = 200
+
+    def get_import_formats(self):
+        return list(self.formats)
+
+    def get_export_formats(self):
+        return list(self.formats)
 
 
 class NhaMayNhanSuFilter(admin.SimpleListFilter):
@@ -34,7 +46,9 @@ class NhaMayNhanSuFilter(admin.SimpleListFilter):
 
 
 @admin.register(NhanSu)
-class NhanSuAdmin(admin.ModelAdmin):
+class NhanSuAdmin(ImportExportModelAdmin):
+    resource_class = NhanSuResource
+    formats = (base_formats.XLSX,)
     list_display = (
         "ho_ten",
         "ma_nhan_vien",
@@ -56,6 +70,12 @@ class NhanSuAdmin(admin.ModelAdmin):
         "chuc_danh",
         "user__username",
     )
+
+    def get_import_formats(self):
+        return list(self.formats)
+
+    def get_export_formats(self):
+        return list(self.formats)
 
 
 @admin.register(DonViToChuc)

@@ -5,8 +5,9 @@ from tochuc.serializers import (
     DonViToChucSerializer,
     NhanSuSerializer,
 )
+from tochuc.models import NhanSu
 
-from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhanSu, NhomLichTruc, PhamViNhanSuCaTruc, PhanCongNhanSuHCNgay, PhuongAnPhanCongCa, ThanhVienKipTruc
+from .models import ChiTietPhuongAnPhanCongCa, DieuChinhNhanSuCaTruc, KipTruc, LichSuLichTruc, LichTrucCa, MauChuKyCaTruc, NgayTrucCa, NhomLichTruc, PhamViNhanSuCaTruc, PhanCongNhanSuHCNgay, PhuongAnPhanCongCa, ThanhVienKipTruc
 from .services import actual_shift_staff
 
 

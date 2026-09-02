@@ -212,7 +212,7 @@ class MonthDayWidget(widgets.Widget):
 
         raise ValueError("Ngày phải có định dạng dd/MM.")
 
-    def render(self, value, obj=None):
+    def render(self, value, obj=None, **kwargs):
         return value or ""
 
 

@@ -9,8 +9,8 @@ class TochucConfig(AppConfig):
     def ready(self):
         from auditlog.registry import auditlog
 
-        from .models import BoPhan, DonViToChuc
+        from .models import BoPhan, DonViToChuc, NhaMay, NhanSu
 
-        for model in (DonViToChuc, BoPhan):
+        for model in (NhaMay, DonViToChuc, BoPhan, NhanSu):
             if not auditlog.contains(model):
                 auditlog.register(model)

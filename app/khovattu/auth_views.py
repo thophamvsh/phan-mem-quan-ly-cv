@@ -154,7 +154,7 @@ def get_nha_may_list(request):
     GET /api/khovattu/auth/nha-may/
     """
     from tochuc.models import NhaMay
-    from .serializers import NhaMaySerializer
+    from tochuc.serializers import NhaMaySerializer
 
     nha_mays = NhaMay.objects.all()
     serializer = NhaMaySerializer(nha_mays, many=True)

@@ -33,17 +33,35 @@ class LegacyApiDeprecationMiddleware:
         "/api/docs/",
         "/api/redoc/",
     )
+    versioned_legacy_successors = {
+        "/api/v1/quanlycatruc/don-vi/": "/api/v1/tochuc/don-vi/",
+        "/api/v1/quanlycatruc/bo-phan/": "/api/v1/tochuc/bo-phan/",
+        "/api/v1/quanlycatruc/nhan-su/": "/api/v1/tochuc/nhan-su/",
+        "/api/v1/khovattu/auth/nha-may/": "/api/v1/tochuc/nha-may/",
+    }
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         response = self.get_response(request)
-        is_legacy = request.path.startswith("/api/") and not any(
+        successor = next(
+            (
+                target
+                for prefix, target in self.versioned_legacy_successors.items()
+                if request.path.startswith(prefix)
+            ),
+            None,
+        )
+        is_legacy = successor is not None or (
+            request.path.startswith("/api/") and not any(
             request.path.startswith(path) for path in self.excluded_paths
+            )
         )
         if is_legacy:
             response["Deprecation"] = "true"
             response["Sunset"] = "Fri, 31 Dec 2027 23:59:59 GMT"
-            response["Link"] = '</api/v1/>; rel="successor-version"'
+            response["Link"] = (
+                f'<{successor or "/api/v1/"}>; rel="successor-version"'
+            )
         return response

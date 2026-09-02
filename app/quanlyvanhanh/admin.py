@@ -71,7 +71,7 @@ class FlexibleDateWidget(widgets.Widget):
         # Nếu không parse được, trả về None thay vì lỗi
         return None
 
-    def render(self, value, obj=None):
+    def render(self, value, obj=None, **kwargs):
         """Render ngày tháng thành string"""
         if value:
             return value.strftime('%Y-%m-%d')
@@ -247,35 +247,7 @@ class SafeExportChangeListMixin:
     search_help_text = ""
 
     def get_export_queryset(self, request):
-        from django.contrib.admin.views.main import ChangeList
-
-        list_display = self.get_list_display(request)
-        list_display_links = self.get_list_display_links(request, list_display)
-        list_filter = self.get_list_filter(request)
-        search_fields = self.get_search_fields(request)
-        list_select_related = self.get_list_select_related(request)
-        list_editable = getattr(self, "list_editable", ())
-        list_per_page = getattr(self, "list_per_page", 100)
-        list_max_show_all = getattr(self, "list_max_show_all", 200)
-        sortable_by = getattr(self, "sortable_by", None)
-        date_hierarchy = getattr(self, "date_hierarchy", None)
-
-        cl = ChangeList(
-            request,
-            self.model,
-            list_display,
-            list_display_links,
-            list_filter,
-            date_hierarchy,
-            search_fields,
-            list_select_related,
-            list_per_page,
-            list_max_show_all,
-            list_editable,
-            self,
-            sortable_by,
-        )
-        return cl.get_queryset(request)
+        return self.get_changelist_instance(request).get_queryset(request)
 
     @admin.action(description="Xuất Excel các bản ghi đã chọn")
     def export_selected_to_excel(self, request, queryset):
