@@ -449,6 +449,26 @@ class UserProfile(models.Model):
         default=False,
         help_text="Có quyền kích hoạt phiên bản mẫu trạng thái thiết bị",
     )
+    can_view_shift_summary_templates = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem mẫu tóm lược của sổ giao nhận ca vận hành",
+    )
+    can_create_shift_summary_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền tạo mẫu và phiên bản mẫu tóm lược",
+    )
+    can_edit_shift_summary_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền sửa thông tin và cấu hình mẫu tóm lược",
+    )
+    can_delete_shift_summary_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền xóa mẫu tóm lược chưa được sử dụng",
+    )
+    can_activate_shift_summary_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền kích hoạt phiên bản mẫu tóm lược",
+    )
     can_view_shift_handover_directives = models.BooleanField(
         default=False,
         help_text="Có quyền xem lưu ý chỉ đạo sổ giao nhận ca vận hành"

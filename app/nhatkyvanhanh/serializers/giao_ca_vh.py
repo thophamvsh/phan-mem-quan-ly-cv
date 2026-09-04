@@ -8,7 +8,7 @@ from nhatkyvanhanh.models import (
 )
 from .mixins import UserSummaryMixin
 from nhatkyvanhanh.device_status import summarize_device_status, validate_device_status_snapshot
-from nhatkyvanhanh.models import MauTrangThaiThietBiCa
+from nhatkyvanhanh.models import MauTomLuocGiaoCaVH, MauTrangThaiThietBiCa
 from quanlyvanhanh.models import ThietBi
 
 class ChiTietSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
@@ -192,6 +192,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "cac_phuong_tien_trang_bi_ca",
             "luu_y",
             "tong_muc_luc",
+            "mau_tom_luoc_nguon",
             "hinh_anh",
             "hinh_anh_url",
             "hinh_anh_bo_sung",
@@ -336,6 +337,14 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             )
             attrs["tinh_trang_van_hanh_trong_ca"] = "\n\n".join(
                 part for part in (summary, extra.strip()) if part
+            )
+        summary_template = attrs.get(
+            "mau_tom_luoc_nguon",
+            getattr(self.instance, "mau_tom_luoc_nguon", None),
+        )
+        if summary_template and plant and summary_template.nha_may_id != plant.id:
+            raise serializers.ValidationError(
+                {"mau_tom_luoc_nguon": "Mẫu tóm lược không thuộc nhà máy của sổ."}
             )
         return attrs
 

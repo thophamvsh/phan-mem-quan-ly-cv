@@ -85,6 +85,14 @@ class SogiaonhancaVH(TimestampedUUIDModel):
     cac_phuong_tien_trang_bi_ca = models.TextField(blank=True)
     luu_y = models.TextField(blank=True)
     tong_muc_luc = models.TextField(blank=True)
+    mau_tom_luoc_nguon = models.ForeignKey(
+        "nhatkyvanhanh.MauTomLuocGiaoCaVH",
+        on_delete=models.SET_NULL,
+        related_name="so_giao_nhan_ca_vh",
+        null=True,
+        blank=True,
+        verbose_name="Mẫu tóm lược nguồn",
+    )
     hinh_anh = models.ImageField(upload_to="operations/so_giao_nhan_ca_vh/", null=True, blank=True)
     chu_ky_user_giao_ca = models.ImageField(
         upload_to="operations/so_giao_nhan_ca_vh/chu_ky/giao_ca/",

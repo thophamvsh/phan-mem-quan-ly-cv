@@ -8,6 +8,7 @@ from .giao_ca_vh import SogiaonhancaVHViewSet
 from .an_toan_dg import SoAnToanViewSet
 from .phan_cong_nhiem_vu_hc import BangPhanCongNhiemVuHCViewSet
 from .device_template import MauTrangThaiThietBiCaViewSet
+from .summary_template import MauTomLuocGiaoCaVHViewSet
 
 __all__ = [
     "NhatKySuKienViewSet",
@@ -23,4 +24,5 @@ __all__ = [
     "SoAnToanViewSet",
     "BangPhanCongNhiemVuHCViewSet",
     "MauTrangThaiThietBiCaViewSet",
+    "MauTomLuocGiaoCaVHViewSet",
 ]

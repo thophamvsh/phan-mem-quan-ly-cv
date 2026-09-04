@@ -43,6 +43,8 @@ from .models import (
     MauTrangThaiThietBiCa,
     NhomMauTrangThaiThietBiCa,
     ChiTietMauTrangThaiThietBiCa,
+    MauTomLuocGiaoCaVH,
+    HangMucMauTomLuocGiaoCaVH,
 )
 
 
@@ -810,6 +812,25 @@ class MauTrangThaiThietBiCaAdmin(admin.ModelAdmin):
     list_filter = ("nha_may", "dang_ap_dung")
     search_fields = ("ten_mau", "nha_may__ma_nha_may", "nha_may__ten_nha_may")
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        if not obj.nguoi_tao_id:
+            obj.nguoi_tao = request.user
+        super().save_model(request, obj, form, change)
+
+
+class HangMucMauTomLuocGiaoCaVHInline(admin.TabularInline):
+    model = HangMucMauTomLuocGiaoCaVH
+    extra = 0
+
+
+@admin.register(MauTomLuocGiaoCaVH)
+class MauTomLuocGiaoCaVHAdmin(admin.ModelAdmin):
+    list_display = ("ten_mau", "nha_may", "phien_ban", "dang_ap_dung", "nguoi_tao", "updated_at")
+    list_filter = ("nha_may", "dang_ap_dung")
+    search_fields = ("ten_mau", "nha_may__ma_nha_may", "nha_may__ten_nha_may")
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+    inlines = [HangMucMauTomLuocGiaoCaVHInline]
 
     def save_model(self, request, obj, form, change):
         if not obj.nguoi_tao_id:

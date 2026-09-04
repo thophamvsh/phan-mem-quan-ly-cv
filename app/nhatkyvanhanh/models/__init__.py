@@ -26,3 +26,4 @@ from .device_template import (
     NhomMauTrangThaiThietBiCa,
     ChiTietMauTrangThaiThietBiCa,
 )
+from .summary_template import MauTomLuocGiaoCaVH, HangMucMauTomLuocGiaoCaVH
