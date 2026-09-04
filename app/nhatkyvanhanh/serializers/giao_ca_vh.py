@@ -7,6 +7,9 @@ from nhatkyvanhanh.models import (
     AnhSoGiaoNhanCaVH,
 )
 from .mixins import UserSummaryMixin
+from nhatkyvanhanh.device_status import summarize_device_status, validate_device_status_snapshot
+from nhatkyvanhanh.models import MauTrangThaiThietBiCa
+from quanlyvanhanh.models import ThietBi
 
 class ChiTietSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     nguoi_tao_display = serializers.SerializerMethodField()
@@ -184,6 +187,7 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "noi_dung_chi_tiets",
             "luu_y_chi_daos",
             "tinh_trang_van_hanh_trong_ca",
+            "ghi_chu_van_hanh_bo_sung",
             "trang_thai_thiet_bi",
             "cac_phuong_tien_trang_bi_ca",
             "luu_y",
@@ -298,29 +302,41 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "trang_thai_thiet_bi",
             getattr(self.instance, "trang_thai_thiet_bi", []),
         )
-        if not isinstance(device_states, list):
-            raise serializers.ValidationError(
-                {"trang_thai_thiet_bi": "Danh sách trạng thái thiết bị không hợp lệ."}
+        try:
+            validate_device_status_snapshot(device_states, plant=plant)
+        except ValueError as exc:
+            raise serializers.ValidationError({"trang_thai_thiet_bi": str(exc)})
+        if isinstance(device_states, dict):
+            try:
+                template = MauTrangThaiThietBiCa.objects.get(pk=device_states["template_id"])
+            except (MauTrangThaiThietBiCa.DoesNotExist, ValueError, TypeError, KeyError):
+                raise serializers.ValidationError({"trang_thai_thiet_bi": "Mẫu thiết bị không tồn tại."})
+            if plant and template.nha_may_id != plant.id:
+                raise serializers.ValidationError({"trang_thai_thiet_bi": "Mẫu thiết bị không thuộc nhà máy của sổ."})
+            if template.phien_ban != device_states.get("template_version"):
+                raise serializers.ValidationError({"trang_thai_thiet_bi": "Phiên bản mẫu thiết bị không hợp lệ."})
+            linked_ids = {
+                str(row.get("thiet_bi_id"))
+                for group in device_states.get("groups", [])
+                for row in group.get("thiet_bi", [])
+                if row.get("thiet_bi_id")
+            }
+            linked_devices = {str(device.pk): device for device in ThietBi.objects.filter(pk__in=linked_ids)}
+            if set(linked_devices) != linked_ids:
+                raise serializers.ValidationError({"trang_thai_thiet_bi": "Có thiết bị liên kết không tồn tại."})
+            plant_code = (plant.ma_nha_may or "").casefold() if plant else ""
+            plant_name = (plant.ten_nha_may or "").casefold() if plant else ""
+            for device in linked_devices.values():
+                if (device.nha_may or "").casefold() not in {plant_code, plant_name} and not (device.ma_day_du or "").casefold().startswith(f"{plant_code}."):
+                    raise serializers.ValidationError({"trang_thai_thiet_bi": f"Thiết bị {device.ma_day_du} không thuộc nhà máy của sổ."})
+            summary = summarize_device_status(device_states)
+            extra = attrs.get(
+                "ghi_chu_van_hanh_bo_sung",
+                getattr(self.instance, "ghi_chu_van_hanh_bo_sung", ""),
             )
-        allowed = {"dong", "cat", "cat_vtcl", "khac"}
-        seen = set()
-        for row in device_states:
-            if not isinstance(row, dict):
-                raise serializers.ValidationError(
-                    {"trang_thai_thiet_bi": "Mỗi trạng thái thiết bị phải là một đối tượng."}
-                )
-            code = str(row.get("ma_thiet_bi", "")).strip()
-            state = str(row.get("trang_thai", "")).strip()
-            if not code or state not in allowed:
-                raise serializers.ValidationError(
-                    {"trang_thai_thiet_bi": "Yêu cầu nhập thiết bị và trạng thái hợp lệ."}
-                )
-            normalized = code.casefold()
-            if normalized in seen:
-                raise serializers.ValidationError(
-                    {"trang_thai_thiet_bi": f"Thiết bị {code} bị trùng."}
-                )
-            seen.add(normalized)
+            attrs["tinh_trang_van_hanh_trong_ca"] = "\n\n".join(
+                part for part in (summary, extra.strip()) if part
+            )
         return attrs
 
     def get_nha_may_code(self, obj):

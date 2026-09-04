@@ -14,6 +14,7 @@ from .views import (
     SogiaonhancaVHViewSet,
     SoAnToanViewSet,
     BangPhanCongNhiemVuHCViewSet,
+    MauTrangThaiThietBiCaViewSet,
 )
 
 app_name = "nhatkyvanhanh"
@@ -31,6 +32,7 @@ router.register(r"mau-chuyen-doi-thiet-bi", MauChuyenDoiThietBiViewSet, basename
 router.register(r"so-chuyen-doi-thiet-bi-tuan", SoChuyenDoiThietBiTuanViewSet, basename="sochuyendoithietbituan")
 router.register(r"mau-chuyen-doi-tb-thang", MauChuyenDoiTBThangViewSet, basename="mauchuyendoitbthang")
 router.register(r"so-chuyen-doi-tb-thang", SoChuyenDoiTBThangViewSet, basename="sochuyendoitbthang")
+router.register(r"mau-trang-thai-thiet-bi", MauTrangThaiThietBiCaViewSet, basename="mautrangthaithietbi")
 
 urlpatterns = [
     path("", include(router.urls)),

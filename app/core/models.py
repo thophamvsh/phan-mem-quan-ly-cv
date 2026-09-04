@@ -429,6 +429,26 @@ class UserProfile(models.Model):
         default=False,
         help_text="Có quyền sửa và xóa tất cả sổ giao nhận ca vận hành khi chưa nhận ca"
     )
+    can_view_shift_device_templates = models.BooleanField(
+        default=True,
+        help_text="Có quyền xem mẫu trạng thái thiết bị của sổ giao nhận ca vận hành",
+    )
+    can_create_shift_device_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền tạo mẫu và phiên bản mẫu trạng thái thiết bị",
+    )
+    can_edit_shift_device_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền đổi tiêu đề và cấu hình mẫu trạng thái thiết bị",
+    )
+    can_delete_shift_device_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền xóa mẫu trạng thái thiết bị chưa được sử dụng",
+    )
+    can_activate_shift_device_templates = models.BooleanField(
+        default=False,
+        help_text="Có quyền kích hoạt phiên bản mẫu trạng thái thiết bị",
+    )
     can_view_shift_handover_directives = models.BooleanField(
         default=False,
         help_text="Có quyền xem lưu ý chỉ đạo sổ giao nhận ca vận hành"

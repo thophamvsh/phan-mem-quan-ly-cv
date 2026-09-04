@@ -21,3 +21,8 @@ from .an_toan_dg import SoAnToanDauGio
 from .chuyen_doi_tuan import MauChuyenDoiThietBi, SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi
 from .chuyen_doi_thang import MauChuyenDoiTBThang, SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang
 from .phan_cong_nhiem_vu_hc import BangPhanCongNhiemVuHC, ChiTietNhiemVuThuTrongTuan
+from .device_template import (
+    MauTrangThaiThietBiCa,
+    NhomMauTrangThaiThietBiCa,
+    ChiTietMauTrangThaiThietBiCa,
+)

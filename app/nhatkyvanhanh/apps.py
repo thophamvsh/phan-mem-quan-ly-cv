@@ -17,7 +17,8 @@ class NhatkyvanhanhConfig(AppConfig):
             Sonhatkyvanhanh, SonhatkyvanhanhDiesel,
             SoBCHCSongHinh, SoAnToanDauGio,
             MauChuyenDoiThietBi, SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi,
-            MauChuyenDoiTBThang, SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang
+            MauChuyenDoiTBThang, SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang,
+            MauTrangThaiThietBiCa, NhomMauTrangThaiThietBiCa, ChiTietMauTrangThaiThietBiCa,
         )
 
         auditlog.register(SuKien)
@@ -41,4 +42,6 @@ class NhatkyvanhanhConfig(AppConfig):
         auditlog.register(MauChuyenDoiTBThang)
         auditlog.register(SoChuyenDoiTBThang)
         auditlog.register(ChiTietChuyenDoiTBThang)
-
+        auditlog.register(MauTrangThaiThietBiCa)
+        auditlog.register(NhomMauTrangThaiThietBiCa)
+        auditlog.register(ChiTietMauTrangThaiThietBiCa)

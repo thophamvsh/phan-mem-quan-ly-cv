@@ -44,6 +44,7 @@ from .phan_cong_nhiem_vu_hc import (
     BangPhanCongNhiemVuHCSerializer,
     ChiTietNhiemVuThuTrongTuanSerializer,
 )
+from .device_template import MauTrangThaiThietBiCaSerializer
 
 __all__ = [
     "user_can_edit_chi_dao",
@@ -72,4 +73,5 @@ __all__ = [
     "SoChuyenDoiTBThangSerializer",
     "BangPhanCongNhiemVuHCSerializer",
     "ChiTietNhiemVuThuTrongTuanSerializer",
+    "MauTrangThaiThietBiCaSerializer",
 ]

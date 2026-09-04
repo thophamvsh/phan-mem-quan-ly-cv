@@ -76,6 +76,7 @@ class SogiaonhancaVH(TimestampedUUIDModel):
     thoi_gian_giao_ca = models.DateTimeField()
     noi_dung_chi_tiet = models.TextField(blank=True)
     tinh_trang_van_hanh_trong_ca = models.TextField(blank=True)
+    ghi_chu_van_hanh_bo_sung = models.TextField(blank=True, verbose_name="Ghi chú vận hành bổ sung")
     trang_thai_thiet_bi = models.JSONField(
         default=list,
         blank=True,

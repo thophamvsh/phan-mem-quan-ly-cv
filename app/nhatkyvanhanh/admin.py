@@ -40,6 +40,9 @@ from .models import (
     SoAnToanDauGio,
     BangPhanCongNhiemVuHC,
     ChiTietNhiemVuThuTrongTuan,
+    MauTrangThaiThietBiCa,
+    NhomMauTrangThaiThietBiCa,
+    ChiTietMauTrangThaiThietBiCa,
 )
 
 
@@ -785,3 +788,30 @@ class BangPhanCongNhiemVuHCAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("nguoi_tao", "created_at", "updated_at")
     inlines = [ChiTietNhiemVuThuTrongTuanInline]
+
+
+class ChiTietMauTrangThaiThietBiCaInline(admin.TabularInline):
+    model = ChiTietMauTrangThaiThietBiCa
+    extra = 0
+    autocomplete_fields = ("thiet_bi",)
+
+
+@admin.register(NhomMauTrangThaiThietBiCa)
+class NhomMauTrangThaiThietBiCaAdmin(admin.ModelAdmin):
+    list_display = ("tieu_de", "ma_nhom", "mau", "thu_tu")
+    list_filter = ("mau__nha_may",)
+    search_fields = ("tieu_de", "ma_nhom", "mau__ten_mau")
+    inlines = [ChiTietMauTrangThaiThietBiCaInline]
+
+
+@admin.register(MauTrangThaiThietBiCa)
+class MauTrangThaiThietBiCaAdmin(admin.ModelAdmin):
+    list_display = ("ten_mau", "nha_may", "phien_ban", "dang_ap_dung", "nguoi_tao", "updated_at")
+    list_filter = ("nha_may", "dang_ap_dung")
+    search_fields = ("ten_mau", "nha_may__ma_nha_may", "nha_may__ten_nha_may")
+    readonly_fields = ("nguoi_tao", "created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        if not obj.nguoi_tao_id:
+            obj.nguoi_tao = request.user
+        super().save_model(request, obj, form, change)
