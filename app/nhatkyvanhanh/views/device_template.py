@@ -62,14 +62,25 @@ class MauTrangThaiThietBiCaViewSet(viewsets.ModelViewSet):
         values = apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
         serializer.save(nguoi_tao=self.request.user, **values)
 
+    @transaction.atomic
     def perform_destroy(self, instance):
         if instance.da_duoc_su_dung:
             raise ValidationError("Không thể xóa mẫu đã được sổ giao nhận ca sử dụng.")
-        if instance.dang_ap_dung:
-            raise ValidationError(
-                "Không thể xóa mẫu đang áp dụng. Hãy kích hoạt mẫu thay thế trước."
-            )
+        was_active = instance.dang_ap_dung
+        plant = instance.nha_may
+        pk = instance.pk
         instance.delete()
+        if was_active:
+            other_template = (
+                MauTrangThaiThietBiCa.objects.filter(nha_may=plant)
+                .exclude(pk=pk)
+                .order_by("-phien_ban")
+                .first()
+            )
+            if other_template:
+                other_template.dang_ap_dung = True
+                other_template.save(update_fields=["dang_ap_dung", "updated_at"])
+
 
     @action(detail=False, methods=["get"], url_path="dang-ap-dung")
     def dang_ap_dung(self, request):

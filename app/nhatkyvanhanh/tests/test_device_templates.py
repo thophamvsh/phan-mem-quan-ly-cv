@@ -244,7 +244,30 @@ class DeviceStatusTemplateApiTests(APITestCase):
         protected = self.client.delete(
             f"/api/nhatkyvanhanh/mau-trang-thai-thiet-bi/{created.data['id']}/"
         )
-        self.assertEqual(protected.status_code, 400)
+        self.assertEqual(protected.status_code, 204)
+
+    def test_delete_active_unused_template_activates_previous_version(self):
+        # Version 1
+        t1 = self.client.post("/api/nhatkyvanhanh/mau-trang-thai-thiet-bi/", self.payload, format="json").data
+        self.client.post(f"/api/nhatkyvanhanh/mau-trang-thai-thiet-bi/{t1['id']}/kich-hoat/", {}, format="json")
+
+        # Version 2
+        t2 = self.client.post(
+            f"/api/nhatkyvanhanh/mau-trang-thai-thiet-bi/{t1['id']}/tao-phien-ban/",
+            {"ten_mau": "v2", "groups": self.payload["groups"]},
+            format="json",
+        ).data
+        self.client.post(f"/api/nhatkyvanhanh/mau-trang-thai-thiet-bi/{t2['id']}/kich-hoat/", {}, format="json")
+
+        # Verify v2 is currently active
+        self.assertTrue(MauTrangThaiThietBiCa.objects.get(pk=t2["id"]).dang_ap_dung)
+        self.assertFalse(MauTrangThaiThietBiCa.objects.get(pk=t1["id"]).dang_ap_dung)
+
+        # Delete active v2 (unused) -> Should succeed and reactivate v1
+        response = self.client.delete(f"/api/nhatkyvanhanh/mau-trang-thai-thiet-bi/{t2['id']}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(MauTrangThaiThietBiCa.objects.filter(pk=t2["id"]).exists())
+        self.assertTrue(MauTrangThaiThietBiCa.objects.get(pk=t1["id"]).dang_ap_dung)
 
     def test_django_model_permissions_and_factory_scope_are_enforced(self):
         django_user = self._profile_user(
