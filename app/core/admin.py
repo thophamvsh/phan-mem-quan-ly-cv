@@ -5,6 +5,52 @@ from django.utils.translation import gettext_lazy as _
 from django.db import models
 from django import forms
 from .models import User, UserProfile, UserActivityLog, UserRole
+from .models import UserRoleDelegation, UserManagementAudit
+
+
+@admin.register(UserRoleDelegation)
+class UserRoleDelegationAdmin(admin.ModelAdmin):
+    list_display = ('delegate', 'nha_may', 'assignable_role', 'is_active')
+    list_filter = ('nha_may', 'is_active')
+    search_fields = ('delegate__username', 'assignable_role__name')
+    readonly_fields = ('created_by', 'created_at', 'updated_at')
+
+    def has_module_permission(self, request):
+        return request.user.is_active and request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return self.has_module_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(UserManagementAudit)
+class UserManagementAuditAdmin(UserRoleDelegationAdmin):
+    list_display = ('actor', 'target', 'nha_may', 'action', 'created_at')
+    list_filter = ('nha_may', 'action')
+    search_fields = ('actor__username', 'target__username')
+    readonly_fields = ('actor', 'target', 'nha_may', 'action', 'changes', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 OPEN_PROFILE_FIELDSETS = {
@@ -16,7 +62,10 @@ OPEN_PROFILE_FIELDSETS = {
 
 
 def make_profile_fieldsets_collapsible(fieldsets):
-    collapsible_fieldsets = []
+    collapsible_fieldsets = [('Quản lý tài khoản', {'classes': ('collapse',), 'fields': (
+        'can_view_users', 'can_create_users', 'can_edit_users',
+        'can_assign_user_roles', 'can_manage_user_status',
+    )})] if not any(title == 'Quản lý tài khoản' for title, _ in fieldsets) else []
     for title, options in fieldsets:
         if title in OPEN_PROFILE_FIELDSETS:
             collapsible_fieldsets.append((title, options))

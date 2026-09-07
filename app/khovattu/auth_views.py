@@ -2,7 +2,8 @@
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
+from core.account_auth import AccountRefreshToken as RefreshToken
+from core.serializers import SelfProfileUpdateSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -130,7 +131,7 @@ def update_user_profile(request):
             is_mobile_user=True
         )
 
-    serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+    serializer = SelfProfileUpdateSerializer(profile, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response({

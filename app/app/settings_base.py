@@ -200,7 +200,7 @@ CACHES = {
 REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler',
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'core.account_auth.AccountJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -239,6 +239,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 SIMPLE_JWT = {
+    'TOKEN_OBTAIN_SERIALIZER': 'core.account_auth.AccountTokenObtainPairSerializer',
+    'TOKEN_REFRESH_SERIALIZER': 'core.account_auth.AccountTokenRefreshSerializer',
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,

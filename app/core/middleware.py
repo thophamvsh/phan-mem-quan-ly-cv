@@ -13,7 +13,7 @@ class DRFAuthenticationMiddleware:
         header = request.headers.get('Authorization') or request.META.get('HTTP_AUTHORIZATION')
         if header and (header.startswith('Bearer ') or header.startswith('bearer ')):
             try:
-                from rest_framework_simplejwt.authentication import JWTAuthentication
+                from core.account_auth import AccountJWTAuthentication as JWTAuthentication
                 authenticator = JWTAuthentication()
                 auth_result = authenticator.authenticate(request)
                 if auth_result:

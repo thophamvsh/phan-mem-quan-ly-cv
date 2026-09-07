@@ -11,6 +11,14 @@ from django.contrib.auth.models import (
 
 
 
+def resolve_role_permissions(fields, role_permissions, individual_permissions):
+    """Pure, exhaustive union. Missing keys do not preserve stale flags."""
+    role_permissions = role_permissions if isinstance(role_permissions, dict) else {}
+    individual_permissions = individual_permissions if isinstance(individual_permissions, dict) else {}
+    return {field: bool(role_permissions.get(field, False))
+            or bool(individual_permissions.get(field, False)) for field in fields}
+
+
 class UserManager(BaseUserManager):
     """Manager for users."""
 
@@ -59,6 +67,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(max_length=255, blank=True, help_text="Tên")
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    session_version = models.PositiveIntegerField(default=0, editable=False)
+
+    def _get_session_auth_hash(self, secret=None):
+        if not self.session_version:
+            return super()._get_session_auth_hash(secret=secret)
+        from django.utils.crypto import salted_hmac
+        return salted_hmac(
+            'core.User.session', f'{self.password}:{self.session_version}',
+            secret=secret, algorithm='sha256',
+        ).hexdigest()
 
     objects = UserManager()
 
@@ -172,6 +190,12 @@ class UserProfile(models.Model):
     Profile model liên kết với custom User model
     Chứa các thông tin bổ sung cho user
     """
+    can_view_users = models.BooleanField(default=False, verbose_name='Có quyền xem tài khoản')
+    can_create_users = models.BooleanField(default=False, verbose_name='Có quyền tạo tài khoản')
+    can_edit_users = models.BooleanField(default=False, verbose_name='Có quyền sửa tài khoản')
+    can_assign_user_roles = models.BooleanField(default=False, verbose_name='Có quyền gán vai trò')
+    can_manage_user_status = models.BooleanField(default=False, verbose_name='Có quyền khóa/mở tài khoản')
+
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -880,18 +904,11 @@ class UserProfile(models.Model):
             if isinstance(f, models.BooleanField) and f.name.startswith('can_')
         ]
 
-        role_permissions = self.role.permissions or {}
-        individual_permissions = self.individual_permissions or {}
-        for field in can_fields:
-            if field in role_permissions:
-                setattr(
-                    self,
-                    field,
-                    bool(role_permissions[field])
-                    or bool(individual_permissions.get(field, False)),
-                )
-            elif field in individual_permissions:
-                setattr(self, field, bool(individual_permissions[field]))
+        permissions = resolve_role_permissions(
+            can_fields, self.role.permissions, self.individual_permissions,
+        )
+        for field, allowed in permissions.items():
+            setattr(self, field, allowed)
 
     def has_effective_permission(self, permission):
         """Return the effective custom permission for this profile."""
@@ -974,6 +991,37 @@ class UserProfile(models.Model):
             self.user.save(sync_from_profile=True, update_fields=update_fields)
         else:
             self.user.save(sync_from_profile=True)
+
+
+class UserRoleDelegation(models.Model):
+    delegate = models.ForeignKey(User, on_delete=models.CASCADE, related_name='role_delegations')
+    nha_may = models.ForeignKey('tochuc.NhaMay', on_delete=models.CASCADE)
+    assignable_role = models.ForeignKey(UserRole, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+', editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Ủy quyền cấp vai trò'
+        verbose_name_plural = 'Ủy quyền cấp vai trò'
+        constraints = [models.UniqueConstraint(
+            fields=['delegate', 'nha_may', 'assignable_role'], name='unique_role_delegation',
+        )]
+
+
+class UserManagementAudit(models.Model):
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+')
+    target = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+')
+    nha_may = models.ForeignKey('tochuc.NhaMay', on_delete=models.SET_NULL, null=True)
+    action = models.CharField(max_length=30)
+    changes = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Lịch sử quản lý tài khoản'
+        verbose_name_plural = 'Lịch sử quản lý tài khoản'
+        ordering = ['-created_at']
 
 
 class UserActivityLog(models.Model):

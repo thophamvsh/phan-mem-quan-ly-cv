@@ -143,7 +143,7 @@ class ModelTests(TestCase):
         self.assertFalse(profile.can_delete_materials)
         self.assertTrue(profile.can_approve_export_request)
 
-    def test_role_does_not_clear_new_permission_missing_from_role_config(self):
+    def test_role_clears_permissions_missing_from_both_grant_sources(self):
         role = UserRole.objects.create(
             name='Vai trò cấu hình cũ',
             permissions={'can_view_materials': True},
@@ -158,8 +158,8 @@ class ModelTests(TestCase):
         profile.save()
         profile.refresh_from_db()
 
-        self.assertTrue(profile.can_view_shift_schedule)
-        self.assertTrue(profile.can_create_shift_schedule)
+        self.assertFalse(profile.can_view_shift_schedule)
+        self.assertFalse(profile.can_create_shift_schedule)
         self.assertTrue(profile.can_view_materials)
 
     def test_role_permissions_sync_on_role_update(self):

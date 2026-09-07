@@ -251,6 +251,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = ('id', 'user_id', 'username', 'email', 'is_staff', 'is_superuser', 'first_name', 'last_name', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'is_mobile_user',
                  'avatar', 'avatar_url', 'chuc_danh', 'chu_ky', 'chu_ky_url', 'nha_may', 'nha_may_code', 'nha_may_name', 'is_all_factories',
                  'created_at', 'updated_at',
+                 'can_view_users', 'can_create_users', 'can_edit_users',
+                 'can_assign_user_roles', 'can_manage_user_status',
                  # Permissions - thêm để đồng nhất với khovattu serializer
                  'can_view_materials', 'can_add_materials', 'can_edit_materials', 'can_delete_materials',
                  'can_import_excel', 'can_export_excel', 'can_create_export_request', 'can_approve_export_request',
@@ -386,3 +388,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+
+
+class SelfProfileUpdateSerializer(UserProfileSerializer):
+    """Explicit writable surface, shared by every self-profile alias."""
+    def to_internal_value(self, data):
+        from collections.abc import Mapping
+        if not isinstance(data, Mapping):
+            raise serializers.ValidationError({'detail': 'Dữ liệu hồ sơ không hợp lệ.'})
+        allowed = {'first_name', 'last_name', 'ho_ten', 'ho', 'ten',
+                   'phone', 'avatar', 'chu_ky', 'chuc_danh'}
+        forbidden = set(data) - allowed
+        if forbidden:
+            raise serializers.ValidationError({
+                field: 'Không được cập nhật trường này qua hồ sơ cá nhân.'
+                for field in sorted(forbidden)
+            })
+        return super().to_internal_value(data)

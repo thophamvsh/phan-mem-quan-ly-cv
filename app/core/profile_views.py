@@ -8,6 +8,7 @@ import time
 
 from .models import User, UserProfile
 from .serializers import UserOptionSerializer, UserSerializer, UserProfileSerializer
+from .serializers import SelfProfileUpdateSerializer
 
 class UserProfileAPIView(APIView):
     """API để lấy và cập nhật thông tin profile của user hiện tại"""
@@ -51,7 +52,7 @@ class UserProfileAPIView(APIView):
                 user=request.user,
                 defaults={'is_mobile_user': True}
             )
-            serializer = UserProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
+            serializer = SelfProfileUpdateSerializer(profile, data=request.data, partial=True, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return self._get_response_with_cache_headers({

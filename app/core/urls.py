@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -23,6 +23,7 @@ from . import profile_views
 from . import upload_views
 
 urlpatterns = [
+    path('user-management/', include('core.user_management_urls')),
     # ===== Public endpoints =====
     path('auth/register/', auth_views.UserRegistrationAPIView.as_view(), name='user-register'),
     path('auth/login/', auth_views.UserLoginAPIView.as_view(), name='user-login'),

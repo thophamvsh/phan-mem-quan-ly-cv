@@ -2,8 +2,8 @@ from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from .account_auth import AccountRefreshToken as RefreshToken
+from .account_auth import AccountTokenRefreshSerializer as TokenRefreshSerializer
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.http import JsonResponse
 from django.conf import settings
@@ -15,7 +15,6 @@ from .models import User, UserProfile
 from .auth_cookies import delete_refresh_cookie, set_refresh_cookie
 from .throttles import LoginRateThrottle, RegistrationRateThrottle, TokenRateThrottle
 from .serializers import (
-    UserRegistrationSerializer,
     UserLoginSerializer,
     UserSerializer,
     UserProfileSerializer
@@ -159,20 +158,8 @@ class UserRegistrationAPIView(APIView):
     throttle_classes = [RegistrationRateThrottle]
 
     def post(self, request):
-        serializer = UserRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            return Response({
-                'ok': True,
-                'message': 'Đăng ký thành công',
-                'user': UserSerializer(user).data
-            }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                'ok': False,
-                'message': 'Đăng ký thất bại',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Đăng ký công khai đã tắt. Vui lòng liên hệ người quản lý tài khoản.'},
+                        status=status.HTTP_403_FORBIDDEN)
 
 
 class UserLoginAPIView(APIView):

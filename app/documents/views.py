@@ -14,7 +14,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import PermissionDenied
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from core.account_auth import AccountJWTAuthentication as JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from documents.models import Document, DocumentFolder

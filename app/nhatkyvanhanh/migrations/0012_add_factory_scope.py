@@ -44,6 +44,7 @@ def backfill_factory(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
+        ("core", "0006_auto_20250928_0127"),
         ("khovattu", "0002_bang_de_nghi_nhap_nguoi_de_nghi_and_more"),
         ("nhatkyvanhanh", "0011_remove_khacphucsukien_lich_su_xu_ly_tiep_tuc"),
     ]
