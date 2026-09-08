@@ -57,12 +57,20 @@ services:
       REALTIME_SNAPSHOT_SCHEDULER_ENABLED: "False"
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      AUDIT_ARCHIVE_ENABLED: ${AUDIT_ARCHIVE_ENABLED:-false}
+      AUDIT_ARCHIVE_DIR: ${AUDIT_ARCHIVE_DIR:-/vol/audit-archives}
+      ACTIVITY_LOG_RETENTION_DAYS: ${ACTIVITY_LOG_RETENTION_DAYS:-180}
+      DATA_AUDIT_RETENTION_DAYS: ${DATA_AUDIT_RETENTION_DAYS:-365}
+      USER_MANAGEMENT_AUDIT_RETENTION_DAYS: ${USER_MANAGEMENT_AUDIT_RETENTION_DAYS:-730}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
+      - ./vol/audit-archives:/vol/audit-archives
       - ./secrets:/run/secrets/vsh:ro
     command: run.sh
     healthcheck:
@@ -106,10 +114,18 @@ services:
       REALTIME_SNAPSHOT_SCHEDULER_ENABLED: "False"
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      AUDIT_ARCHIVE_ENABLED: ${AUDIT_ARCHIVE_ENABLED:-false}
+      AUDIT_ARCHIVE_DIR: ${AUDIT_ARCHIVE_DIR:-/vol/audit-archives}
+      ACTIVITY_LOG_RETENTION_DAYS: ${ACTIVITY_LOG_RETENTION_DAYS:-180}
+      DATA_AUDIT_RETENTION_DAYS: ${DATA_AUDIT_RETENTION_DAYS:-365}
+      USER_MANAGEMENT_AUDIT_RETENTION_DAYS: ${USER_MANAGEMENT_AUDIT_RETENTION_DAYS:-730}
     volumes:
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
+      - ./vol/audit-archives:/vol/audit-archives
       - ./secrets:/run/secrets/vsh:ro
     command: >
       sh -c "
@@ -153,10 +169,18 @@ services:
       REALTIME_SNAPSHOT_SCHEDULER_ENABLED: "False"
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      AUDIT_ARCHIVE_ENABLED: ${AUDIT_ARCHIVE_ENABLED:-false}
+      AUDIT_ARCHIVE_DIR: ${AUDIT_ARCHIVE_DIR:-/vol/audit-archives}
+      ACTIVITY_LOG_RETENTION_DAYS: ${ACTIVITY_LOG_RETENTION_DAYS:-180}
+      DATA_AUDIT_RETENTION_DAYS: ${DATA_AUDIT_RETENTION_DAYS:-365}
+      USER_MANAGEMENT_AUDIT_RETENTION_DAYS: ${USER_MANAGEMENT_AUDIT_RETENTION_DAYS:-730}
     volumes:
       - ./vol/web/media:/vol/web/media
       - ./vol/web/static:/vol/web/static
       - ./vol/web/logs:/vol/web/logs
+      - ./vol/audit-archives:/vol/audit-archives
       - ./secrets:/run/secrets/vsh:ro
     command: >
       sh -c "

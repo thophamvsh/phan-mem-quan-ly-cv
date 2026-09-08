@@ -220,3 +220,4 @@ __marimo__/
 # GCP Credentials and sensitive JSON files
 *.json
 secrets/
+cold_storage/

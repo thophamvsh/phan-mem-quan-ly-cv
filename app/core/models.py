@@ -195,6 +195,10 @@ class UserProfile(models.Model):
     can_edit_users = models.BooleanField(default=False, verbose_name='Có quyền sửa tài khoản')
     can_assign_user_roles = models.BooleanField(default=False, verbose_name='Có quyền gán vai trò')
     can_manage_user_status = models.BooleanField(default=False, verbose_name='Có quyền khóa/mở tài khoản')
+    can_view_activity_logs = models.BooleanField(default=False, verbose_name='Có quyền xem nhật ký truy cập')
+    can_view_data_audit_logs = models.BooleanField(default=False, verbose_name='Có quyền xem vết thay đổi dữ liệu')
+    can_view_user_management_audit = models.BooleanField(default=False, verbose_name='Có quyền xem lịch sử quản lý tài khoản')
+    can_export_audit_logs = models.BooleanField(default=False, verbose_name='Có quyền xuất báo cáo kiểm toán')
 
     user = models.OneToOneField(
         User,
@@ -1037,6 +1041,15 @@ class UserActivityLog(models.Model):
     description = models.TextField(blank=True, help_text="Mô tả chi tiết")
     ip_address = models.GenericIPAddressField(null=True, blank=True, help_text="Địa chỉ IP")
     user_agent = models.TextField(blank=True, help_text="Thông tin trình duyệt/thiết bị")
+    nha_may = models.ForeignKey(
+        'tochuc.NhaMay',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='activity_logs',
+        verbose_name="Nhà máy",
+        help_text="Nhà máy snapshot tại thời điểm ghi nhận log"
+    )
     timestamp = models.DateTimeField(auto_now_add=True, help_text="Thời gian ghi nhận")
 
     class Meta:

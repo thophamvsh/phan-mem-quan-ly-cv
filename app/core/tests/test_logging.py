@@ -168,11 +168,11 @@ class AuditLogTests(TestCase):
         create_log = logs.first()
         self.assertEqual(create_log.actor, user_hoaxh)
 
-    @override_settings(LOG_RETENTION_DAYS=30)
     def test_clear_old_logs_task_deletes_older_logs_only(self):
         from core.tasks import clear_old_logs_task
         from django.utils import timezone
         from datetime import timedelta
+        import tempfile
         
         user_model = get_user_model()
         user = user_model.objects.create_user(
@@ -209,7 +209,15 @@ class AuditLogTests(TestCase):
         LogEntry.objects.filter(pk=old_audit_log.pk).update(timestamp=timezone.now() - timedelta(days=40))
 
         # 2. Run Celery task
-        result = clear_old_logs_task()
+        with tempfile.TemporaryDirectory() as archive_dir:
+            with override_settings(
+                AUDIT_ARCHIVE_ENABLED=True,
+                AUDIT_ARCHIVE_DIR=archive_dir,
+                ACTIVITY_LOG_RETENTION_DAYS=30,
+                DATA_AUDIT_RETENTION_DAYS=30,
+                USER_MANAGEMENT_AUDIT_RETENTION_DAYS=30,
+            ):
+                result = clear_old_logs_task()
 
         # 3. Assertions
         # Check returned deleted counts

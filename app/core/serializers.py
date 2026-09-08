@@ -253,6 +253,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'created_at', 'updated_at',
                  'can_view_users', 'can_create_users', 'can_edit_users',
                  'can_assign_user_roles', 'can_manage_user_status',
+                 'can_view_activity_logs', 'can_view_data_audit_logs',
+                 'can_view_user_management_audit', 'can_export_audit_logs',
                  # Permissions - thêm để đồng nhất với khovattu serializer
                  'can_view_materials', 'can_add_materials', 'can_edit_materials', 'can_delete_materials',
                  'can_import_excel', 'can_export_excel', 'can_create_export_request', 'can_approve_export_request',

@@ -15,3 +15,8 @@ class TokenRateThrottle(AnonRateThrottle):
 
 class AiRateThrottle(UserRateThrottle):
     scope = "ai"
+
+
+class AuditExportRateThrottle(UserRateThrottle):
+    scope = "audit_export"
+    rate = "10/minute"

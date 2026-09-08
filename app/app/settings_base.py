@@ -1,4 +1,5 @@
 import os
+import ipaddress
 from pathlib import Path
 from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
@@ -40,6 +41,19 @@ def env_required(name: str) -> str:
     return value
 
 
+def env_int_range(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw_value = os.environ.get(name, str(default))
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured(f"{name} must be an integer") from exc
+    if not minimum <= value <= maximum:
+        raise ImproperlyConfigured(
+            f"{name} must be between {minimum} and {maximum}"
+        )
+    return value
+
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-dev-only-change-me")
 
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
@@ -61,6 +75,40 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "1800"))
 # Cài đặt thời gian lưu trữ log (theo ngày). Mặc định là 180 ngày. Các log cũ hơn sẽ bị xóa tự động.
 LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "180"))
+ACTIVITY_LOG_RETENTION_DAYS = env_int_range(
+    "ACTIVITY_LOG_RETENTION_DAYS", 180, 1, 36500
+)
+DATA_AUDIT_RETENTION_DAYS = env_int_range(
+    "DATA_AUDIT_RETENTION_DAYS", 365, 1, 36500
+)
+USER_MANAGEMENT_AUDIT_RETENTION_DAYS = env_int_range(
+    "USER_MANAGEMENT_AUDIT_RETENTION_DAYS", 730, 1, 36500
+)
+AUDIT_ARCHIVE_ENABLED = env_bool("AUDIT_ARCHIVE_ENABLED", False)
+AUDIT_ARCHIVE_DIR = os.environ.get(
+    "AUDIT_ARCHIVE_DIR",
+    str(BASE_DIR.parent / "vol" / "audit-archives"),
+)
+
+# Forwarding headers are security-sensitive. Ignore them unless the immediate
+# peer belongs to an explicitly configured trusted proxy network.
+TRUST_PROXY_HEADERS = env_bool("TRUST_PROXY_HEADERS", False)
+TRUSTED_PROXY_CIDRS = tuple(
+    value.strip()
+    for value in os.environ.get("TRUSTED_PROXY_CIDRS", "").split(",")
+    if value.strip()
+)
+for proxy_cidr in TRUSTED_PROXY_CIDRS:
+    try:
+        ipaddress.ip_network(proxy_cidr, strict=False)
+    except ValueError as exc:
+        raise ImproperlyConfigured(
+            f"Invalid network in TRUSTED_PROXY_CIDRS: {proxy_cidr}"
+        ) from exc
+if TRUST_PROXY_HEADERS and not TRUSTED_PROXY_CIDRS:
+    raise ImproperlyConfigured(
+        "TRUSTED_PROXY_CIDRS is required when TRUST_PROXY_HEADERS=true"
+    )
 
 from celery.schedules import crontab
 

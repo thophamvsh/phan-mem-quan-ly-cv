@@ -400,6 +400,15 @@ class UserProfileInline(admin.StackedInline):
             ),
             'description': 'Quyền xem hoặc quản lý đơn vị và bộ phận dùng chung.',
         }),
+        ('Quyền kiểm toán và nhật ký hệ thống', {
+            'fields': (
+                'can_view_activity_logs',
+                'can_view_data_audit_logs',
+                'can_view_user_management_audit',
+                'can_export_audit_logs',
+            ),
+            'description': 'Quyền xem nhật ký đăng nhập, biến động dữ liệu, quản lý tài khoản và xuất Excel.'
+        }),
         ('Hình ảnh', {
             'fields': ('avatar', 'chu_ky')
         }),
@@ -802,10 +811,10 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 @admin.register(UserActivityLog)
 class UserActivityLogAdmin(admin.ModelAdmin):
-    list_display = ('user', 'action_type', 'description', 'ip_address', 'timestamp')
-    list_filter = ('action_type', 'timestamp')
+    list_display = ('user', 'action_type', 'nha_may', 'description', 'ip_address', 'timestamp')
+    list_filter = ('action_type', 'nha_may', 'timestamp')
     search_fields = ('user__email', 'user__username', 'description', 'ip_address')
-    readonly_fields = ('user', 'action_type', 'description', 'ip_address', 'user_agent', 'timestamp')
+    readonly_fields = ('user', 'action_type', 'nha_may', 'description', 'ip_address', 'user_agent', 'timestamp')
 
     def has_add_permission(self, request):
         return False

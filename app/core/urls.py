@@ -24,6 +24,7 @@ from . import upload_views
 
 urlpatterns = [
     path('user-management/', include('core.user_management_urls')),
+    path('audit/', include('core.audit_urls')),
     # ===== Public endpoints =====
     path('auth/register/', auth_views.UserRegistrationAPIView.as_view(), name='user-register'),
     path('auth/login/', auth_views.UserLoginAPIView.as_view(), name='user-login'),
