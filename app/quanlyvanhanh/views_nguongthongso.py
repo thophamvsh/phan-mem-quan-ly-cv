@@ -11,6 +11,7 @@ from core.factory_scope import (
     filter_queryset_by_factory,
     has_profile_permission,
 )
+from core.sync_audit import audit_excel_import
 from .models import NguongThongSo, ThietBi
 from .serializers import NguongThongSoSerializer
 from .admin import NguongThongSoResource
@@ -157,6 +158,7 @@ class NguongThongSoViewSet(viewsets.ModelViewSet):
             return JsonResponse({'error': f'Lỗi hệ thống: {str(e)}'}, status=500)
 
     @action(detail=False, methods=['post'])
+    @audit_excel_import("Ngưỡng thông số")
     def excel_import(self, request):
         """Import/cập nhật hàng loạt ngưỡng thông số từ file Excel"""
         try:

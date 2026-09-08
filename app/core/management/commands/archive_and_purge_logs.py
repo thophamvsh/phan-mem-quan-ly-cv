@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from core.models import UserActivityLog, UserManagementAudit
+from core.models import DataSyncAudit, UserActivityLog, UserManagementAudit
 from core.tasks import archive_and_purge_model_logs
 
 
@@ -24,21 +24,21 @@ class Command(BaseCommand):
         parser.add_argument(
             '--target',
             type=str,
-            choices=['all', 'activity', 'data', 'user'],
+            choices=['all', 'activity', 'data', 'sync', 'user'],
             default='all',
-            help='Chỉ định phân hệ log cần xử lý: all (toàn bộ), activity, data, user (mặc định: all)',
+            help='Chỉ định phân hệ log cần xử lý: all, activity, data, sync hoặc user (mặc định: all)',
         )
         parser.add_argument(
             '--retention-activity',
             type=int,
             default=None,
-            help='Ghi đè số ngày lưu trữ cho Nhật ký truy cập (UserActivityLog, mặc định 180 ngày)',
+            help='Ghi đè số ngày lưu trữ cho Nhật ký truy cập (UserActivityLog, mặc định 90 ngày)',
         )
         parser.add_argument(
             '--retention-data',
             type=int,
             default=None,
-            help='Ghi đè số ngày lưu trữ cho Vết thay đổi dữ liệu (LogEntry, mặc định 365 ngày)',
+            help='Ghi đè số ngày lưu trữ cho Vết thay đổi dữ liệu (LogEntry, mặc định 180 ngày)',
         )
         parser.add_argument(
             '--retention-user',
@@ -47,19 +47,38 @@ class Command(BaseCommand):
             help='Ghi đè số ngày lưu trữ cho Quản trị tài khoản (UserManagementAudit, mặc định 730 ngày)',
         )
         parser.add_argument(
+            '--retention-sync',
+            type=int,
+            default=None,
+            help='Ghi đè số ngày lưu trữ cho Phiên đồng bộ dữ liệu (mặc định 90 ngày)',
+        )
+        parser.add_argument(
             '--batch-size',
             type=int,
             default=1000,
             help='Kích thước lô xử lý mỗi đợt nén xuất dữ liệu (mặc định 1000)',
+        )
+        parser.add_argument(
+            '--max-records',
+            type=int,
+            default=None,
+            help='Số bản ghi tối đa xử lý cho mỗi loại log trong một lần chạy.',
         )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         target = options['target']
         batch_size = options['batch_size']
+        max_records = options['max_records']
+        if max_records is None:
+            max_records = getattr(settings, 'AUDIT_PURGE_MAX_RECORDS_PER_RUN', 10000)
         if batch_size < 1 or batch_size > 10000:
             raise CommandError('--batch-size phải nằm trong khoảng 1 đến 10000.')
-        for option_name in ('retention_activity', 'retention_data', 'retention_user'):
+        if max_records < 1 or max_records > 1000000:
+            raise CommandError('--max-records phải nằm trong khoảng 1 đến 1000000.')
+        for option_name in (
+            'retention_activity', 'retention_data', 'retention_sync', 'retention_user',
+        ):
             value = options[option_name]
             if value is not None and (value < 1 or value > 36500):
                 flag = option_name.replace('_', '-')
@@ -78,6 +97,8 @@ class Command(BaseCommand):
             targets_to_run.append('activity')
         if target in ('all', 'data'):
             targets_to_run.append('data')
+        if target in ('all', 'sync'):
+            targets_to_run.append('sync')
         if target in ('all', 'user'):
             targets_to_run.append('user')
 
@@ -87,7 +108,7 @@ class Command(BaseCommand):
         for tgt in targets_to_run:
             if tgt == 'activity':
                 retention = options['retention_activity'] or getattr(
-                    settings, 'ACTIVITY_LOG_RETENTION_DAYS', 180
+                    settings, 'ACTIVITY_LOG_RETENTION_DAYS', 90
                 )
                 cutoff = timezone.now() - timedelta(days=retention)
                 self.stdout.write(f"\n[1] Xử lý Nhật ký truy cập (UserActivityLog):")
@@ -99,6 +120,7 @@ class Command(BaseCommand):
                     cutoff_date=cutoff,
                     archive_prefix='user_activity_logs',
                     batch_size=batch_size,
+                    max_records=max_records,
                     dry_run=dry_run
                 )
                 self._report_result(res, dry_run)
@@ -107,7 +129,7 @@ class Command(BaseCommand):
 
             elif tgt == 'data':
                 retention = options['retention_data'] or getattr(
-                    settings, 'DATA_AUDIT_RETENTION_DAYS', 365
+                    settings, 'DATA_AUDIT_RETENTION_DAYS', 180
                 )
                 cutoff = timezone.now() - timedelta(days=retention)
                 self.stdout.write(f"\n[2] Xử lý Vết thay đổi dữ liệu (django-auditlog LogEntry):")
@@ -119,6 +141,28 @@ class Command(BaseCommand):
                     cutoff_date=cutoff,
                     archive_prefix='data_audit_logs',
                     batch_size=batch_size,
+                    max_records=max_records,
+                    dry_run=dry_run
+                )
+                self._report_result(res, dry_run)
+                total_archived += res['archived']
+                total_deleted += res['deleted']
+
+            elif tgt == 'sync':
+                retention = options['retention_sync'] or getattr(
+                    settings, 'DATA_SYNC_AUDIT_RETENTION_DAYS', 90
+                )
+                cutoff = timezone.now() - timedelta(days=retention)
+                self.stdout.write("\n[3] Xử lý Phiên đồng bộ dữ liệu (DataSyncAudit):")
+                self.stdout.write(f"    - Thời hạn retention: {retention} ngày (mốc cutoff: {cutoff.strftime('%Y-%m-%d %H:%M:%S')})")
+
+                res = archive_and_purge_model_logs(
+                    model_class=DataSyncAudit,
+                    date_field='started_at',
+                    cutoff_date=cutoff,
+                    archive_prefix='data_sync_audit_logs',
+                    batch_size=batch_size,
+                    max_records=max_records,
                     dry_run=dry_run
                 )
                 self._report_result(res, dry_run)
@@ -130,7 +174,7 @@ class Command(BaseCommand):
                     settings, 'USER_MANAGEMENT_AUDIT_RETENTION_DAYS', 730
                 )
                 cutoff = timezone.now() - timedelta(days=retention)
-                self.stdout.write(f"\n[3] Xử lý Nhật ký quản trị tài khoản (UserManagementAudit):")
+                self.stdout.write(f"\n[4] Xử lý Nhật ký quản trị tài khoản (UserManagementAudit):")
                 self.stdout.write(f"    - Thời hạn retention: {retention} ngày (mốc cutoff: {cutoff.strftime('%Y-%m-%d %H:%M:%S')})")
 
                 res = archive_and_purge_model_logs(
@@ -139,6 +183,7 @@ class Command(BaseCommand):
                     cutoff_date=cutoff,
                     archive_prefix='user_management_audit_logs',
                     batch_size=batch_size,
+                    max_records=max_records,
                     dry_run=dry_run
                 )
                 self._report_result(res, dry_run)
@@ -172,3 +217,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"       + File archive: {res['archive_file']}")
                 self.stdout.write(f"       + SHA-256: {res['sha256']}")
                 self.stdout.write(f"       + Đã xóa trong DB: {res['deleted']} bản ghi.")
+                if res.get('remaining'):
+                    self.stdout.write(
+                        f"       + Còn {res['remaining']} bản ghi quá hạn, sẽ xử lý ở lần chạy tiếp theo."
+                    )

@@ -2,6 +2,10 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.utils import timezone
+
+from core.models import DataSyncAudit
+from core.sync_audit import data_date_bounds, record_data_sync, resolve_sync_plant
 
 from .google_sheet_services import (
     GOOGLE_SHEET_SYNC_START_DATE,
@@ -180,6 +184,9 @@ class SaveGoogleSheetDataAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        started_at = timezone.now()
+        plant = resolve_sync_plant(nhamay)
+        date_from, date_to = data_date_bounds(data_list, "thoi_gian")
         try:
             result = GoogleSheetHydrologyService().save_san_luong(
                 data_list=data_list,
@@ -188,7 +195,34 @@ class SaveGoogleSheetDataAPIView(APIView):
                 can_modify=user_can_modify_hydrology_object,
             )
         except PermissionError as exc:
+            record_data_sync(
+                actor=request.user, nha_may=plant,
+                source=DataSyncAudit.Source.GOOGLE_SHEET,
+                data_type="Sản lượng", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at, processed_count=len(data_list),
+                failed_count=len(data_list), date_from=date_from, date_to=date_to,
+                error_summary=str(exc),
+            )
             return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as exc:
+            record_data_sync(
+                actor=request.user, nha_may=plant,
+                source=DataSyncAudit.Source.GOOGLE_SHEET,
+                data_type="Sản lượng", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at, processed_count=len(data_list),
+                failed_count=len(data_list), date_from=date_from, date_to=date_to,
+                error_summary=str(exc),
+            )
+            raise
+
+        record_data_sync(
+            actor=request.user, nha_may=plant,
+            source=DataSyncAudit.Source.GOOGLE_SHEET,
+            data_type="Sản lượng", status=DataSyncAudit.Status.SUCCESS,
+            started_at=started_at, processed_count=len(data_list),
+            created_count=result.saved_count, updated_count=result.updated_count,
+            date_from=date_from, date_to=date_to,
+        )
 
         return Response(
             {
@@ -269,6 +303,9 @@ class SaveGioPhatAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        started_at = timezone.now()
+        plant = resolve_sync_plant(nhamay)
+        date_from, date_to = data_date_bounds(data_list, "ngay")
         try:
             result = GoogleSheetHydrologyService().save_gio_phat(
                 data_list=data_list,
@@ -277,7 +314,34 @@ class SaveGioPhatAPIView(APIView):
                 can_modify=user_can_modify_hydrology_object,
             )
         except PermissionError as exc:
+            record_data_sync(
+                actor=request.user, nha_may=plant,
+                source=DataSyncAudit.Source.GOOGLE_SHEET,
+                data_type="Giờ phát", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at, processed_count=len(data_list),
+                failed_count=len(data_list), date_from=date_from, date_to=date_to,
+                error_summary=str(exc),
+            )
             return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as exc:
+            record_data_sync(
+                actor=request.user, nha_may=plant,
+                source=DataSyncAudit.Source.GOOGLE_SHEET,
+                data_type="Giờ phát", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at, processed_count=len(data_list),
+                failed_count=len(data_list), date_from=date_from, date_to=date_to,
+                error_summary=str(exc),
+            )
+            raise
+
+        record_data_sync(
+            actor=request.user, nha_may=plant,
+            source=DataSyncAudit.Source.GOOGLE_SHEET,
+            data_type="Giờ phát", status=DataSyncAudit.Status.SUCCESS,
+            started_at=started_at, processed_count=len(data_list),
+            created_count=result.saved_count, updated_count=result.updated_count,
+            date_from=date_from, date_to=date_to,
+        )
 
         return Response(
             {
@@ -358,6 +422,9 @@ class SaveThuyVanThucTeAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        started_at = timezone.now()
+        plant = resolve_sync_plant(nhamay)
+        date_from, date_to = data_date_bounds(data_list, "ngay")
         try:
             result = GoogleSheetHydrologyService().save_thuc_te(
                 data_list=data_list,
@@ -366,7 +433,34 @@ class SaveThuyVanThucTeAPIView(APIView):
                 can_modify=user_can_modify_hydrology_object,
             )
         except PermissionError as exc:
+            record_data_sync(
+                actor=request.user, nha_may=plant,
+                source=DataSyncAudit.Source.GOOGLE_SHEET,
+                data_type="Thủy văn thực tế", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at, processed_count=len(data_list),
+                failed_count=len(data_list), date_from=date_from, date_to=date_to,
+                error_summary=str(exc),
+            )
             return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as exc:
+            record_data_sync(
+                actor=request.user, nha_may=plant,
+                source=DataSyncAudit.Source.GOOGLE_SHEET,
+                data_type="Thủy văn thực tế", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at, processed_count=len(data_list),
+                failed_count=len(data_list), date_from=date_from, date_to=date_to,
+                error_summary=str(exc),
+            )
+            raise
+
+        record_data_sync(
+            actor=request.user, nha_may=plant,
+            source=DataSyncAudit.Source.GOOGLE_SHEET,
+            data_type="Thủy văn thực tế", status=DataSyncAudit.Status.SUCCESS,
+            started_at=started_at, processed_count=len(data_list),
+            created_count=result.saved_count, updated_count=result.updated_count,
+            date_from=date_from, date_to=date_to,
+        )
 
         return Response(
             {

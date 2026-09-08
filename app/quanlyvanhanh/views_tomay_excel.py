@@ -12,6 +12,7 @@ from core.factory_scope import (
     has_profile_permission,
     has_all_factory_access,
 )
+from core.sync_audit import audit_excel_import
 from .models import ThietBi, ThongSoToMay
 from .services.thongso_tomay_service import get_specific_thiet_bi
 
@@ -734,6 +735,8 @@ def _import_excel_tomay(request, device_type=None):
             {
                 "message": f"Import thành công {imported_count} bản ghi thông số tổ máy {detected_type}",
                 "imported_count": imported_count,
+                "created": len(to_create),
+                "updated": len(to_update),
                 "status": "success",
             },
             status=200,
@@ -806,6 +809,7 @@ def excel_template_h2(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@audit_excel_import("Thông số tổ máy")
 def import_excel_tomay(request):
     """Import dữ liệu từ Excel cho thông số tổ máy (Tự động nhận diện H1/H2)"""
     if not has_profile_permission(request.user, "can_import_excel"):
@@ -823,6 +827,7 @@ def import_excel_tomay(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@audit_excel_import("Thông số tổ máy H1")
 def import_excel_h1(request):
     """Wrapper tương thích ngược cho import H1"""
     if not has_profile_permission(request.user, "can_import_excel"):
@@ -840,6 +845,7 @@ def import_excel_h1(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@audit_excel_import("Thông số tổ máy H2")
 def import_excel_h2(request):
     """Wrapper tương thích ngược cho import H2"""
     if not has_profile_permission(request.user, "can_import_excel"):

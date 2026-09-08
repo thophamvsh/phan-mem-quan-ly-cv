@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.db import models
 from django import forms
 from .models import User, UserProfile, UserActivityLog, UserRole
-from .models import UserRoleDelegation, UserManagementAudit
+from .models import DataSyncAudit, UserRoleDelegation, UserManagementAudit
 
 
 @admin.register(UserRoleDelegation)
@@ -815,6 +815,23 @@ class UserActivityLogAdmin(admin.ModelAdmin):
     list_filter = ('action_type', 'nha_may', 'timestamp')
     search_fields = ('user__email', 'user__username', 'description', 'ip_address')
     readonly_fields = ('user', 'action_type', 'nha_may', 'description', 'ip_address', 'user_agent', 'timestamp')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DataSyncAudit)
+class DataSyncAuditAdmin(admin.ModelAdmin):
+    list_display = ('started_at', 'actor', 'nha_may', 'source', 'data_type', 'status', 'processed_count')
+    list_filter = ('status', 'source', 'data_type', 'nha_may', 'started_at')
+    search_fields = ('actor__username', 'actor__email', 'filename', 'error_summary')
+    readonly_fields = tuple(field.name for field in DataSyncAudit._meta.fields)
 
     def has_add_permission(self, request):
         return False

@@ -4,7 +4,7 @@ from auditlog.models import LogEntry
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import UserActivityLog, UserManagementAudit
+from .models import DataSyncAudit, UserActivityLog, UserManagementAudit
 from .audit_plant_resolver import get_plant_cache, get_plant_details, resolve_plant_id
 
 User = get_user_model()
@@ -127,6 +127,9 @@ class AuditFilterSerializer(serializers.Serializer):
     model = serializers.CharField(required=False, allow_blank=True, max_length=100)
     model_name = serializers.CharField(required=False, allow_blank=True, max_length=100)
     content_type_id = serializers.IntegerField(required=False, min_value=1)
+    source = serializers.ChoiceField(required=False, allow_blank=True, choices=DataSyncAudit.Source.choices)
+    data_type = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    status = serializers.ChoiceField(required=False, allow_blank=True, choices=DataSyncAudit.Status.choices)
     from_date = serializers.DateField(required=False)
     to_date = serializers.DateField(required=False)
     search = serializers.CharField(
@@ -150,7 +153,7 @@ class AuditFilterSerializer(serializers.Serializer):
 
 class AuditExportRequestSerializer(AuditFilterSerializer):
     tab = serializers.ChoiceField(
-        choices=('activity', 'data', 'data_changes', 'user_management')
+        choices=('activity', 'data', 'data_changes', 'sync', 'user_management')
     )
 
     def validate_tab(self, value):
@@ -382,3 +385,42 @@ class UserManagementAuditSerializer(serializers.ModelSerializer):
                 return f"Cập nhật thông tin: {', '.join(modified_fields)}"
 
         return "Cập nhật dữ liệu"
+
+
+class DataSyncAuditSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source='actor.username', read_only=True)
+    actor_name = serializers.SerializerMethodField()
+    nha_may_id = serializers.IntegerField(source='nha_may.id', read_only=True)
+    nha_may_code = serializers.CharField(source='nha_may.ma_nha_may', read_only=True)
+    nha_may_name = serializers.CharField(source='nha_may.ten_nha_may', read_only=True)
+    source_display = serializers.CharField(source='get_source_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    metadata = serializers.SerializerMethodField()
+    error_summary = serializers.SerializerMethodField()
+    duration_seconds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DataSyncAudit
+        fields = (
+            'id', 'actor_username', 'actor_name', 'nha_may_id',
+            'nha_may_code', 'nha_may_name', 'source', 'source_display',
+            'data_type', 'status', 'status_display', 'filename',
+            'checksum_sha256', 'date_from', 'date_to', 'processed_count',
+            'created_count', 'updated_count', 'skipped_count', 'failed_count',
+            'error_summary', 'metadata', 'started_at', 'finished_at',
+            'duration_seconds',
+        )
+
+    def get_actor_name(self, obj):
+        return format_user_display(obj.actor)
+
+    def get_metadata(self, obj):
+        return sanitize_audit_payload(obj.metadata)
+
+    def get_error_summary(self, obj):
+        return sanitize_text(obj.error_summary)
+
+    def get_duration_seconds(self, obj):
+        if not obj.started_at or not obj.finished_at:
+            return None
+        return max(round((obj.finished_at - obj.started_at).total_seconds(), 3), 0)

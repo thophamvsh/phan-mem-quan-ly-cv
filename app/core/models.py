@@ -7,6 +7,7 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+import uuid
 
 
 
@@ -1059,3 +1060,66 @@ class UserActivityLog(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.action_type} at {self.timestamp}"
+
+
+class DataSyncAudit(models.Model):
+    """Immutable summary of one data import/synchronisation attempt."""
+
+    class Source(models.TextChoices):
+        EXCEL = "EXCEL", "Excel"
+        GOOGLE_SHEET = "GOOGLE_SHEET", "Google Sheet"
+        API = "API", "API"
+        SCHEDULE = "SCHEDULE", "Tác vụ tự động"
+
+    class Status(models.TextChoices):
+        SUCCESS = "SUCCESS", "Thành công"
+        PARTIAL = "PARTIAL", "Thành công một phần"
+        FAILED = "FAILED", "Thất bại"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="data_sync_audits",
+        verbose_name="Người thực hiện",
+    )
+    nha_may = models.ForeignKey(
+        "tochuc.NhaMay",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="data_sync_audits",
+        verbose_name="Nhà máy",
+    )
+    source = models.CharField(max_length=24, choices=Source.choices)
+    data_type = models.CharField(max_length=64, verbose_name="Loại dữ liệu")
+    status = models.CharField(max_length=16, choices=Status.choices)
+    filename = models.CharField(max_length=255, blank=True, verbose_name="Tên file")
+    checksum_sha256 = models.CharField(max_length=64, blank=True, editable=False)
+    date_from = models.DateField(null=True, blank=True, verbose_name="Từ ngày dữ liệu")
+    date_to = models.DateField(null=True, blank=True, verbose_name="Đến ngày dữ liệu")
+    processed_count = models.PositiveIntegerField(default=0)
+    created_count = models.PositiveIntegerField(default=0)
+    updated_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    error_summary = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["nha_may", "started_at"], name="syncaudit_plant_time_idx"),
+            models.Index(fields=["status", "started_at"], name="syncaudit_status_time_idx"),
+            models.Index(fields=["data_type", "started_at"], name="syncaudit_type_time_idx"),
+        ]
+        verbose_name = "Phiên đồng bộ dữ liệu"
+        verbose_name_plural = "Các phiên đồng bộ dữ liệu"
+
+    def __str__(self):
+        return f"{self.get_source_display()} - {self.data_type} - {self.get_status_display()}"

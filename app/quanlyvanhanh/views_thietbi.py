@@ -18,6 +18,7 @@ from core.factory_scope import (
     has_profile_permission,
     get_user_factory_code,
 )
+from core.sync_audit import audit_excel_import
 from quanlyvanhanh.models import ThietBi
 from quanlyvanhanh.serializers import (
     ThietBiDetailSerializer,
@@ -602,6 +603,7 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         return response
 
     @action(detail=False, methods=["post"])
+    @audit_excel_import("Danh mục thiết bị")
     def import_excel(self, request):
         """Import danh sách thiết bị từ file Excel"""
         import pandas as pd
@@ -655,6 +657,8 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         has_all_access = has_all_factory_access(request.user)
 
         success_count = 0
+        created_count = 0
+        updated_count = 0
         errors = []
 
         with transaction.atomic():
@@ -782,6 +786,10 @@ class ThietBiViewSet(viewsets.ModelViewSet):
 
                     thiet_bi.save()
                     success_count += 1
+                    if is_new:
+                        created_count += 1
+                    else:
+                        updated_count += 1
                 except Exception as e:
                     errors.append(f"Dòng {index + 2}: Lỗi hệ thống: {str(e)}")
                     continue
@@ -790,11 +798,15 @@ class ThietBiViewSet(viewsets.ModelViewSet):
             return Response({
                 'message': f'Import hoàn tất nhưng có một số lỗi. Thành công: {success_count}/{len(df)} dòng.',
                 'success_count': success_count,
+                'created': created_count,
+                'updated': updated_count,
                 'errors': errors
             }, status=status.HTTP_207_MULTI_STATUS)
             
         return Response({
             'message': f'Import thành công {success_count}/{len(df)} thiết bị.',
             'success_count': success_count,
+            'created': created_count,
+            'updated': updated_count,
             'errors': []
         }, status=status.HTTP_200_OK)

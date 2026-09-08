@@ -5,6 +5,7 @@ from .audit_views import (
     AuditExportExcelView,
     AuditMetadataView,
     DataChangeLogViewSet,
+    DataSyncAuditViewSet,
     UserActivityLogViewSet,
     UserManagementAuditViewSet,
 )
@@ -12,6 +13,7 @@ from .audit_views import (
 router = DefaultRouter()
 router.register(r'activity-logs', UserActivityLogViewSet, basename='audit-activity-log')
 router.register(r'data-changes', DataChangeLogViewSet, basename='audit-data-change')
+router.register(r'data-syncs', DataSyncAuditViewSet, basename='audit-data-sync')
 router.register(r'user-management', UserManagementAuditViewSet, basename='audit-user-management')
 
 urlpatterns = [

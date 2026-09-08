@@ -13,13 +13,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from tochuc.models import NhaMay
-from .models import UserActivityLog, UserManagementAudit
+from .models import DataSyncAudit, UserActivityLog, UserManagementAudit
 from .throttles import AuditExportRateThrottle
 from .audit_serializers import (
     ACTION_DISPLAY_MAP,
     AuditExportRequestSerializer,
     AuditFilterSerializer,
     DataChangeLogSerializer,
+    DataSyncAuditSerializer,
     MODEL_DISPLAY_NAMES,
     USER_MGT_ACTION_MAP,
     UserActivityLogSerializer,
@@ -33,6 +34,7 @@ from .audit_serializers import (
 
 ACTIVITY_ACTIONS = {'LOGIN', 'LOGOUT', 'LOGIN_FAILED'}
 USER_MANAGEMENT_ACTIONS = {'create', 'edit', 'role', 'status'}
+SYNC_STATUSES = {'SUCCESS', 'PARTIAL', 'FAILED'}
 DATA_ACTIONS = {0, 1, 2, 3}
 
 
@@ -56,7 +58,8 @@ def validate_filters(raw_data, tab=None, export=False):
     cleaned_data = raw_data.copy()
     for field_name in (
         'plant_id', 'nha_may', 'action', 'action_type', 'model',
-        'model_name', 'content_type_id', 'from_date', 'to_date', 'search',
+        'model_name', 'content_type_id', 'source', 'data_type', 'status',
+        'from_date', 'to_date', 'search',
     ):
         if cleaned_data.get(field_name) == '':
             cleaned_data.pop(field_name, None)
@@ -75,6 +78,11 @@ def validate_filters(raw_data, tab=None, export=False):
             if parsed_action not in DATA_ACTIONS:
                 raise ValidationError({'action': 'Hành động dữ liệu không hợp lệ.'})
             filters['action'] = parsed_action
+        elif tab == 'sync':
+            normalized = str(action).upper()
+            if normalized not in SYNC_STATUSES:
+                raise ValidationError({'action': 'Trạng thái đồng bộ không hợp lệ.'})
+            filters['action'] = normalized
         else:
             allowed = ACTIVITY_ACTIONS if tab == 'activity' else USER_MANAGEMENT_ACTIONS
             normalized = str(action).upper() if tab == 'activity' else str(action).lower()
@@ -316,6 +324,50 @@ class UserManagementAuditViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
+class DataSyncAuditViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = DataSyncAuditSerializer
+    pagination_class = AuditLogPagination
+    permission_classes = [permissions.IsAuthenticated, HasDataAuditLogPermission]
+
+    def get_queryset(self):
+        user = self.request.user
+        filters = validate_filters(self.request.query_params, tab='sync')
+        qs = DataSyncAudit.objects.select_related('actor', 'nha_may').order_by('-started_at')
+        is_super, is_all, user_plant = get_scope(user)
+        if not is_all:
+            if not user_plant:
+                return qs.none()
+            qs = qs.filter(nha_may_id=user_plant)
+        else:
+            if not is_super:
+                qs = qs.filter(nha_may_id__isnull=False)
+            plant_id = filters.get('plant_id') or filters.get('nha_may')
+            if plant_id:
+                qs = qs.filter(nha_may_id=plant_id)
+
+        action = filters.get('action') or filters.get('status')
+        if action:
+            qs = qs.filter(status__iexact=action)
+        if filters.get('source'):
+            qs = qs.filter(source__iexact=filters['source'])
+        if filters.get('data_type'):
+            qs = qs.filter(data_type__iexact=filters['data_type'])
+        if filters.get('from_date'):
+            qs = qs.filter(started_at__date__gte=filters['from_date'])
+        if filters.get('to_date'):
+            qs = qs.filter(started_at__date__lte=filters['to_date'])
+        if filters.get('search'):
+            search = filters['search'].strip()
+            qs = qs.filter(
+                Q(actor__username__icontains=search)
+                | Q(actor__email__icontains=search)
+                | Q(data_type__icontains=search)
+                | Q(filename__icontains=search)
+                | Q(error_summary__icontains=search)
+            )
+        return qs
+
+
 class AuditMetadataView(APIView):
     """
     Trả về danh mục cấu hình bộ lọc (nhà máy, danh sách model, danh sách thao tác)
@@ -384,12 +436,33 @@ class AuditMetadataView(APIView):
             {'code': 'status', 'name': 'Khóa/Mở tài khoản'},
         ]
 
+        sync_statuses = [
+            {'code': 'SUCCESS', 'name': 'Thành công'},
+            {'code': 'PARTIAL', 'name': 'Thành công một phần'},
+            {'code': 'FAILED', 'name': 'Thất bại'},
+        ]
+        sync_sources = [
+            {'code': code, 'name': name}
+            for code, name in DataSyncAudit.Source.choices
+        ]
+        sync_qs = DataSyncAudit.objects.all()
+        if not is_all:
+            sync_qs = sync_qs.filter(nha_may_id=user_plant_id) if user_plant_id else sync_qs.none()
+        elif not is_super:
+            sync_qs = sync_qs.filter(nha_may_id__isnull=False)
+        sync_data_types = list(
+            sync_qs.order_by('data_type').values_list('data_type', flat=True).distinct()
+        )
+
         return Response({
             'plants': plants,
             'models': available_models,
             'activity_actions': activity_actions,
             'data_change_actions': data_change_actions,
             'user_management_actions': user_management_actions,
+            'sync_statuses': sync_statuses,
+            'sync_sources': sync_sources,
+            'sync_data_types': sync_data_types,
             'user_scope': {
                 'is_superuser': is_super,
                 'is_all_factories': is_all,
@@ -437,6 +510,7 @@ class AuditExportExcelView(APIView):
         required_view_permission = {
             'activity': 'can_view_activity_logs',
             'data': 'can_view_data_audit_logs',
+            'sync': 'can_view_data_audit_logs',
             'user_management': 'can_view_user_management_audit',
         }[tab]
         if not has_profile_permission(user, required_view_permission):
@@ -654,6 +728,72 @@ class AuditExportExcelView(APIView):
                     cell.font = content_font
                     cell.border = thin_border
                     cell.alignment = center_align if c_idx in (1, 2, 6, 7) else left_align
+
+        elif tab == 'sync':
+            ws.title = "Phiên đồng bộ"
+            headers = [
+                "STT", "Bắt đầu", "Kết thúc", "Người thực hiện", "Nguồn",
+                "Loại dữ liệu", "Trạng thái", "Nhà máy", "Đã xử lý",
+                "Tạo mới", "Cập nhật", "Bỏ qua", "Lỗi", "Tên file", "Thông báo lỗi",
+            ]
+            qs = DataSyncAudit.objects.select_related('actor', 'nha_may').order_by('-started_at')
+            if not is_all:
+                qs = qs.filter(nha_may_id=user_plant_id) if user_plant_id else qs.none()
+            else:
+                if not is_super:
+                    qs = qs.filter(nha_may_id__isnull=False)
+                if plant_param:
+                    qs = qs.filter(nha_may_id=plant_param)
+            if action_param:
+                qs = qs.filter(status__iexact=action_param)
+            if filters.get('source'):
+                qs = qs.filter(source__iexact=filters['source'])
+            if filters.get('data_type'):
+                qs = qs.filter(data_type__iexact=filters['data_type'])
+            if from_date:
+                qs = qs.filter(started_at__date__gte=from_date)
+            if to_date:
+                qs = qs.filter(started_at__date__lte=to_date)
+            if search:
+                qs = qs.filter(
+                    Q(actor__username__icontains=search)
+                    | Q(actor__email__icontains=search)
+                    | Q(data_type__icontains=search)
+                    | Q(filename__icontains=search)
+                    | Q(error_summary__icontains=search)
+                )
+            total_records = qs.count()
+            is_truncated = total_records > MAX_EXPORT_ROWS
+            records = list(qs[:MAX_EXPORT_ROWS])
+            start_row = 1
+            if is_truncated:
+                ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+                ws.cell(row=1, column=1, value=f"CẢNH BÁO: Chỉ xuất 5.000/{total_records} bản ghi đầu tiên.")
+                start_row = 3
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=start_row, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_align
+                cell.border = thin_border
+            for idx, item in enumerate(records, 1):
+                row_data = [
+                    idx,
+                    timezone.localtime(item.started_at).strftime('%d/%m/%Y %H:%M:%S'),
+                    timezone.localtime(item.finished_at).strftime('%d/%m/%Y %H:%M:%S'),
+                    sanitize_excel_value(format_user_display(item.actor)),
+                    item.get_source_display(), item.data_type, item.get_status_display(),
+                    item.nha_may.ten_nha_may if item.nha_may else "Toàn cục",
+                    item.processed_count, item.created_count, item.updated_count,
+                    item.skipped_count, item.failed_count,
+                    sanitize_excel_value(item.filename),
+                    sanitize_excel_value(sanitize_text(item.error_summary)),
+                ]
+                for col_idx, value in enumerate(row_data, 1):
+                    cell = ws.cell(row=start_row + idx, column=col_idx, value=value)
+                    cell.font = content_font
+                    cell.border = thin_border
+                    cell.alignment = center_align if col_idx not in (4, 6, 14, 15) else left_align
 
         elif tab == 'user_management':
             ws.title = "Quản trị tài khoản"

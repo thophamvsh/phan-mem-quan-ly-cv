@@ -5,6 +5,7 @@ from unittest.mock import ANY, patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from core.models import DataSyncAudit
 from thongsothuyvan.models import ThongSoThuyVanThucTe
 from thongsothuyvan.tasks import (
     AUTO_SYNC_USER_EMAIL,
@@ -69,4 +70,13 @@ class ThuyVanThucTeTaskTests(TestCase):
             end_date=date(2026, 6, 22),
             user=system_user,
             can_modify=ANY,
+        )
+        audits = DataSyncAudit.objects.filter(
+            source=DataSyncAudit.Source.SCHEDULE,
+            data_type="Thủy văn thực tế",
+        )
+        self.assertEqual(audits.count(), 2)
+        self.assertEqual(
+            set(audits.values_list("status", flat=True)),
+            {DataSyncAudit.Status.SUCCESS},
         )

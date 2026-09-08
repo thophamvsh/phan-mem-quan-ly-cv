@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from core.factory_scope import filter_queryset_by_factory, get_user_factory_name, get_user_factory_code, has_profile_permission, has_all_factory_access
+from core.sync_audit import audit_excel_import
 from .models import ThongSoVanHanh, ThietBi
 
 
@@ -262,6 +263,7 @@ def excel_template(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@audit_excel_import("Thông số vận hành")
 def excel_import(request):
     """
     Import dữ liệu từ file Excel động theo cấu hình nhà máy
@@ -526,7 +528,9 @@ def excel_import(request):
 
         return JsonResponse({
             'message': 'Import thành công',
-            'imported_count': imported_count
+            'imported_count': imported_count,
+            'created': len(to_create),
+            'updated': len(to_update),
         })
 
     except Exception as e:

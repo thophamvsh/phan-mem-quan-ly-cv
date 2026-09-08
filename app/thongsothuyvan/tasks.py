@@ -96,18 +96,71 @@ def sync_missing_thuy_van_thuc_te_daily_task():
         results = {}
 
         for nhamay in ("songhinh", "vinhson"):
+            from core.models import DataSyncAudit
+            from core.sync_audit import record_data_sync, resolve_sync_plant
+
+            started_at = timezone.now()
+            plant = resolve_sync_plant(nhamay)
             date_range = get_missing_thuc_te_sync_range(nhamay, end_date)
             if not date_range:
                 results[nhamay] = {"skipped": True, "reason": "up_to_date"}
+                record_data_sync(
+                    actor=user,
+                    nha_may=plant,
+                    source=DataSyncAudit.Source.SCHEDULE,
+                    data_type="Thủy văn thực tế",
+                    status=DataSyncAudit.Status.SUCCESS,
+                    started_at=started_at,
+                    skipped_count=1,
+                    metadata={"reason": "up_to_date"},
+                )
                 continue
 
             start_date, range_end_date = date_range
-            result = service.sync_thuc_te_range(
-                nhamay=nhamay,
-                start_date=start_date,
-                end_date=range_end_date,
-                user=user,
-                can_modify=can_auto_sync_modify,
+            try:
+                result = service.sync_thuc_te_range(
+                    nhamay=nhamay,
+                    start_date=start_date,
+                    end_date=range_end_date,
+                    user=user,
+                    can_modify=can_auto_sync_modify,
+                )
+            except Exception as exc:
+                record_data_sync(
+                    actor=user,
+                    nha_may=plant,
+                    source=DataSyncAudit.Source.SCHEDULE,
+                    data_type="Thủy văn thực tế",
+                    status=DataSyncAudit.Status.FAILED,
+                    started_at=started_at,
+                    failed_count=1,
+                    date_from=start_date,
+                    date_to=range_end_date,
+                    error_summary=str(exc),
+                )
+                raise
+
+            record_data_sync(
+                actor=user,
+                nha_may=plant,
+                source=DataSyncAudit.Source.SCHEDULE,
+                data_type="Thủy văn thực tế",
+                status=(
+                    DataSyncAudit.Status.PARTIAL
+                    if result.skipped_count or result.warnings
+                    else DataSyncAudit.Status.SUCCESS
+                ),
+                started_at=started_at,
+                processed_count=result.parsed_count,
+                created_count=result.saved_count,
+                updated_count=result.updated_count,
+                skipped_count=result.skipped_count,
+                date_from=start_date,
+                date_to=range_end_date,
+                metadata={
+                    "source_range": result.source_range,
+                    "warnings": result.warnings,
+                },
             )
             results[nhamay] = {
                 "skipped": False,

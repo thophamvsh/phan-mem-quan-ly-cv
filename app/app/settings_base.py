@@ -76,10 +76,13 @@ CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "1800"))
 # Cài đặt thời gian lưu trữ log (theo ngày). Mặc định là 180 ngày. Các log cũ hơn sẽ bị xóa tự động.
 LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "180"))
 ACTIVITY_LOG_RETENTION_DAYS = env_int_range(
-    "ACTIVITY_LOG_RETENTION_DAYS", 180, 1, 36500
+    "ACTIVITY_LOG_RETENTION_DAYS", 90, 1, 36500
 )
 DATA_AUDIT_RETENTION_DAYS = env_int_range(
-    "DATA_AUDIT_RETENTION_DAYS", 365, 1, 36500
+    "DATA_AUDIT_RETENTION_DAYS", 180, 1, 36500
+)
+DATA_SYNC_AUDIT_RETENTION_DAYS = env_int_range(
+    "DATA_SYNC_AUDIT_RETENTION_DAYS", 90, 1, 36500
 )
 USER_MANAGEMENT_AUDIT_RETENTION_DAYS = env_int_range(
     "USER_MANAGEMENT_AUDIT_RETENTION_DAYS", 730, 1, 36500
@@ -88,6 +91,12 @@ AUDIT_ARCHIVE_ENABLED = env_bool("AUDIT_ARCHIVE_ENABLED", False)
 AUDIT_ARCHIVE_DIR = os.environ.get(
     "AUDIT_ARCHIVE_DIR",
     str(BASE_DIR.parent / "vol" / "audit-archives"),
+)
+AUDIT_PURGE_BATCH_SIZE = env_int_range(
+    "AUDIT_PURGE_BATCH_SIZE", 1000, 1, 10000
+)
+AUDIT_PURGE_MAX_RECORDS_PER_RUN = env_int_range(
+    "AUDIT_PURGE_MAX_RECORDS_PER_RUN", 10000, 1, 1000000
 )
 
 # Forwarding headers are security-sensitive. Ignore them unless the immediate

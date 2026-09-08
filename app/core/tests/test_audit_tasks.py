@@ -16,7 +16,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from io import StringIO
 
-from core.models import UserActivityLog, UserManagementAudit
+from core.models import DataSyncAudit, UserActivityLog, UserManagementAudit
 from core.tasks import (
     archive_and_purge_model_logs,
     clear_old_logs_task,
@@ -191,6 +191,36 @@ class AuditTasksAndRetentionTestCase(TestCase):
         self.assertFalse(UserManagementAudit.objects.filter(pk=old_audit.pk).exists())
         self.assertTrue(UserManagementAudit.objects.filter(pk=new_audit.pk).exists())
 
+    def test_archive_and_purge_sync_audit_supports_uuid_and_run_limit(self):
+        cutoff = timezone.now() - timedelta(days=90)
+        for offset in (1, 2):
+            audit = DataSyncAudit.objects.create(
+                actor=self.user,
+                source=DataSyncAudit.Source.EXCEL,
+                data_type=f"Test {offset}",
+                status=DataSyncAudit.Status.SUCCESS,
+                started_at=cutoff - timedelta(days=offset),
+                finished_at=cutoff - timedelta(days=offset),
+            )
+            DataSyncAudit.objects.filter(pk=audit.pk).update(
+                created_at=cutoff - timedelta(days=offset)
+            )
+
+        with override_settings(AUDIT_ARCHIVE_DIR=self.temp_dir):
+            result = archive_and_purge_model_logs(
+                model_class=DataSyncAudit,
+                date_field='started_at',
+                cutoff_date=cutoff,
+                archive_prefix='data_sync_audit_logs',
+                batch_size=1,
+                max_records=1,
+            )
+
+        self.assertEqual(result['archived'], 1)
+        self.assertEqual(result['deleted'], 1)
+        self.assertEqual(result['remaining'], 1)
+        self.assertEqual(DataSyncAudit.objects.count(), 1)
+
     def test_integrity_check_failure_aborts_db_deletion(self):
         """Nếu quá trình archive/đọc lại kiểm tra gặp lỗi, lệnh xóa DB phải bị hủy bỏ hoàn toàn"""
         now = timezone.now()
@@ -254,6 +284,8 @@ class AuditTasksAndRetentionTestCase(TestCase):
             call_command('archive_and_purge_logs', '--batch-size', '0')
         with self.assertRaises(CommandError):
             call_command('archive_and_purge_logs', '--retention-data', '-1')
+        with self.assertRaises(CommandError):
+            call_command('archive_and_purge_logs', '--max-records', '0')
 
     def test_management_command_dry_run(self):
         """Lệnh management archive_and_purge_logs ở chế độ --dry-run không xóa dữ liệu"""

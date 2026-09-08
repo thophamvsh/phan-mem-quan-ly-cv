@@ -2,6 +2,7 @@ from datetime import date
 
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -10,7 +11,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from core.models import User
+from core.models import DataSyncAudit, User
+from core.sync_audit import record_data_sync, uploaded_file_sha256
 from .models import BoPhan, DonViToChuc, NhaMay, NhanSu
 from .permissions import (
     OrganizationDirectoryPermission,
@@ -275,6 +277,10 @@ class NhanSuViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Vui lòng chọn file Excel."}, status=status.HTTP_400_BAD_REQUEST)
         if not uploaded_file.name.lower().endswith(".xlsx"):
             return Response({"detail": "Chỉ hỗ trợ file Excel .xlsx."}, status=status.HTTP_400_BAD_REQUEST)
+        started_at = timezone.now()
+        checksum = uploaded_file_sha256(uploaded_file)
+        audit_plant = getattr(getattr(request.user, "profile", None), "nha_may", None)
+        dataset = None
         try:
             dataset = staff_dataset_from_upload(uploaded_file)
             allowed_units = {
@@ -291,6 +297,14 @@ class NhanSuViewSet(viewsets.ModelViewSet):
                     {"detail": f"Không có quyền hoặc không tồn tại đơn vị: {', '.join(invalid_units)}."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            plant_ids = {
+                unit.nha_may_pham_vi_id
+                for unit in allowed_units.values()
+                if unit.nha_may_pham_vi_id
+                and any(str(row.get("ma_don_vi") or "").strip() == unit.ma_don_vi for row in dataset.dict)
+            }
+            if len(plant_ids) == 1:
+                audit_plant = NhaMay.objects.filter(pk=next(iter(plant_ids))).first()
             usernames = {
                 str(row.get("username") or "").strip()
                 for row in dataset.dict
@@ -320,7 +334,33 @@ class NhanSuViewSet(viewsets.ModelViewSet):
                     use_transactions=True,
                 )
         except Exception as exc:
+            record_data_sync(
+                actor=request.user, nha_may=audit_plant,
+                source=DataSyncAudit.Source.EXCEL,
+                data_type="Danh mục nhân sự", status=DataSyncAudit.Status.FAILED,
+                started_at=started_at,
+                processed_count=dataset.height if dataset is not None else 0,
+                failed_count=dataset.height if dataset is not None else 1,
+                filename=uploaded_file.name, checksum_sha256=checksum,
+                error_summary=str(exc),
+            )
             return Response({"detail": f"Không thể nhập Excel: {exc}"}, status=status.HTTP_400_BAD_REQUEST)
+        sync_status = (
+            DataSyncAudit.Status.PARTIAL
+            if result.totals.get("error", 0) or result.totals.get("invalid", 0)
+            else DataSyncAudit.Status.SUCCESS
+        )
+        record_data_sync(
+            actor=request.user, nha_may=audit_plant,
+            source=DataSyncAudit.Source.EXCEL,
+            data_type="Danh mục nhân sự", status=sync_status,
+            started_at=started_at, processed_count=dataset.height,
+            created_count=result.totals.get("new", 0),
+            updated_count=result.totals.get("update", 0),
+            skipped_count=result.totals.get("skip", 0),
+            failed_count=result.totals.get("error", 0) + result.totals.get("invalid", 0),
+            filename=uploaded_file.name, checksum_sha256=checksum,
+        )
         return Response({
             "message": "Nhập danh mục nhân sự thành công.",
             "total": dataset.height,

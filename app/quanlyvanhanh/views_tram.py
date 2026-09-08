@@ -21,6 +21,7 @@ from core.factory_scope import (
     has_all_factory_access,
     has_profile_permission,
 )
+from core.sync_audit import audit_excel_import
 from quanlyvanhanh.models import ThietBi, ThongSoTram110KV
 from quanlyvanhanh.serializers import (
     ThongSoTram110KVSerializer,
@@ -310,6 +311,7 @@ def excel_template_tram(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@audit_excel_import("Thông số trạm 110 kV")
 def excel_import_tram(request):
     """Import dữ liệu trạm 110kV từ file Excel và thực hiện mapping động dựa theo config"""
     try:
@@ -439,7 +441,9 @@ def excel_import_tram(request):
         return JsonResponse({
             'message': f"Import thành công: tạo {result['created']} bản ghi, cập nhật {result['updated']} bản ghi.",
             'status': 'success',
-            'imported_count': result['created'] + result['updated']
+            'imported_count': result['created'] + result['updated'],
+            'created': result['created'],
+            'updated': result['updated'],
         })
 
     except PermissionDenied as e:

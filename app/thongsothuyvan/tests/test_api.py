@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from core.models import UserProfile
+from core.models import DataSyncAudit, UserProfile
 from tochuc.models import NhaMay
 from ..models import ThongSoThuyVanCaiDat, ThongSoThuyVanThucTe, ThongsoSanxuat, ThongsoGioPhat
 from ..hydrology_services import (
@@ -474,6 +474,12 @@ class ThongSoThuyVanAPITests(APITestCase):
         self.assertEqual(record.qve, 123.4)
         self.assertEqual(record.created_by, self.sh_user)
         self.assertEqual(record.updated_by, self.sh_user)
+        audit = DataSyncAudit.objects.get(data_type="Thủy văn thực tế")
+        self.assertEqual(audit.actor, self.sh_user)
+        self.assertEqual(audit.nha_may, self.nha_may_sh)
+        self.assertEqual(audit.status, DataSyncAudit.Status.SUCCESS)
+        self.assertEqual(audit.processed_count, 1)
+        self.assertEqual(audit.created_count, 1)
 
     def test_thuc_te_viewset_factory_scoping(self):
         url = reverse("thongsothuyvan:thongso-thucte-list")
