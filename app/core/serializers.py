@@ -274,6 +274,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'can_edit_own_shift_handover_logs',
                  'can_delete_own_shift_handover_logs',
                  'can_manage_all_shift_handover_logs',
+                 'can_export_night_shift_report',
                  'can_view_shift_device_templates',
                  'can_create_shift_device_templates',
                  'can_edit_shift_device_templates',

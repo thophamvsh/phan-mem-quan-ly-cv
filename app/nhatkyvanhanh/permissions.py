@@ -97,6 +97,13 @@ class CanDeleteShiftHandoverLogs(AnyUserProfilePermission):
     )
 
 
+class CanExportNightShiftReport(AnyUserProfilePermission):
+    permission_names = (
+        "can_export_night_shift_report",
+        "can_manage_all_shift_handover_logs",
+    )
+
+
 class CanViewAdminShiftHandoverLogs(UserProfilePermission):
     permission_name = "can_view_admin_shift_handover_logs"
 

@@ -458,6 +458,11 @@ class UserProfile(models.Model):
         default=False,
         help_text="Có quyền sửa và xóa tất cả sổ giao nhận ca vận hành khi chưa nhận ca"
     )
+    can_export_night_shift_report = models.BooleanField(
+        default=False,
+        help_text="Có quyền xuất báo cáo ca đêm theo tháng",
+        verbose_name="Có quyền xuất báo cáo ca đêm"
+    )
     can_view_shift_device_templates = models.BooleanField(
         default=True,
         help_text="Có quyền xem mẫu trạng thái thiết bị của sổ giao nhận ca vận hành",

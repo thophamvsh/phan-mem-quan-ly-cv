@@ -155,6 +155,9 @@ class SogiaonhancaVH(TimestampedUUIDModel):
         return "cho_nhan_ca"
 
     def clean(self):
+        if self.loai_thoi_gian_truc == self.LoaiThoiGianTruc.DEM:
+            self.truc_ktvh = ""
+            self.so_giao_nhan_ca_hc_nguon = None
         if self.user_giao_ca_id and self.user_giao_ca_id == self.user_nhan_ca_id:
             raise ValidationError({"user_nhan_ca": "User nhan ca phai khac user giao ca."})
         if self.nguoi_tao_id and self.user_giao_ca_id and self.nguoi_tao_id != self.user_giao_ca_id:
@@ -222,6 +225,20 @@ class NhanSuSoGiaoNhanCaVH(TimestampedUUIDModel):
         on_delete=models.CASCADE,
         related_name="nhan_su_ca",
     )
+    nhan_su = models.ForeignKey(
+        "tochuc.NhanSu",
+        on_delete=models.SET_NULL,
+        related_name="nhan_su_so_giao_nhan_ca_vh",
+        null=True,
+        blank=True,
+        verbose_name="Nhân sự",
+    )
+    ma_nhan_vien = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        verbose_name="Mã nhân viên",
+    )
     vai_tro = models.CharField(max_length=20, choices=VaiTro.choices)
     ten_nhan_su = models.CharField(max_length=255)
     thu_tu = models.PositiveIntegerField(default=1)
@@ -242,8 +259,86 @@ class NhanSuSoGiaoNhanCaVH(TimestampedUUIDModel):
                 fields=["so_giao_nhan_ca"],
                 condition=models.Q(vai_tro="truc_chinh"),
                 name="uq_sogiaonhancavh_mot_truc_chinh",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["so_giao_nhan_ca", "nhan_su"],
+                condition=models.Q(nhan_su__isnull=False),
+                name="uq_sogiaonhancavh_nhan_su_lien_ket",
+            ),
         ]
+
+    def clean(self):
+        super().clean()
+        if self._state.adding and self.so_giao_nhan_ca_id:
+            shift_log = getattr(self, "so_giao_nhan_ca", None)
+            if shift_log and shift_log.user_giao_ca_id and self.vai_tro in (
+                self.VaiTro.TRUC_CHINH,
+                self.VaiTro.TRUC_PHU,
+            ):
+                leader = shift_log.user_giao_ca
+                leader_nhansu = getattr(leader, "nhan_su_ca_truc", None)
+                leader_id = leader_nhansu.id if leader_nhansu else None
+                leader_code = (leader_nhansu.ma_nhan_vien or "").strip() if leader_nhansu else ""
+                leader_name = (
+                    ((leader_nhansu.ho_ten or "").strip() if leader_nhansu else "")
+                    or f"{leader.first_name} {leader.last_name}".strip()
+                    or leader.username
+                ).strip()
+
+                is_same = False
+                if self.nhan_su_id and leader_id and self.nhan_su_id == leader_id:
+                    is_same = True
+                elif self.ma_nhan_vien and leader_code and self.ma_nhan_vien.strip().casefold() == leader_code.casefold():
+                    is_same = True
+                elif self.ten_nhan_su and leader_name and " ".join(self.ten_nhan_su.split()).casefold() == " ".join(leader_name.split()).casefold():
+                    is_same = True
+
+                if is_same:
+                    raise ValidationError(
+                        {"nhan_su": "Người tạo sổ (Trưởng ca) không được trùng với nhân sự Trực chính hoặc Trực phụ trong cùng một ca trực."}
+                    )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        if self.nhan_su_id:
+            original = None
+            if self.pk:
+                original = (
+                    NhanSuSoGiaoNhanCaVH.objects.filter(pk=self.pk)
+                    .values("nhan_su_id", "ten_nhan_su", "ma_nhan_vien")
+                    .first()
+                )
+
+            linked_staff_changed = (
+                original is None
+                or original["nhan_su_id"] != self.nhan_su_id
+            )
+            if linked_staff_changed and getattr(self, "nhan_su", None):
+                self.ten_nhan_su = self.nhan_su.ho_ten
+                self.ma_nhan_vien = self.nhan_su.ma_nhan_vien or ""
+            elif original:
+                # Snapshot của sổ lịch sử không được sửa lệch khỏi nhân sự đã
+                # liên kết. Chỉ bổ sung từ danh mục nếu snapshot cũ còn trống.
+                self.ten_nhan_su = (
+                    original["ten_nhan_su"]
+                    or self.nhan_su.ho_ten
+                )
+                self.ma_nhan_vien = (
+                    original["ma_nhan_vien"]
+                    or self.nhan_su.ma_nhan_vien
+                    or ""
+                )
+            else:
+                self.ten_nhan_su = self.nhan_su.ho_ten
+                self.ma_nhan_vien = self.nhan_su.ma_nhan_vien or ""
+
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {
+                    "ten_nhan_su",
+                    "ma_nhan_vien",
+                }
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.get_vai_tro_display()}: {self.ten_nhan_su}"

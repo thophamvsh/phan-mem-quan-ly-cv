@@ -85,12 +85,16 @@ class LuuYChiDaoSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummar
 class NhanSuSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     nguoi_tao_display = serializers.SerializerMethodField()
     vai_tro_display = serializers.CharField(source="get_vai_tro_display", read_only=True)
+    nhan_su_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = NhanSuSoGiaoNhanCaVH
         fields = [
             "id",
             "so_giao_nhan_ca",
+            "nhan_su",
+            "ma_nhan_vien",
+            "nhan_su_detail",
             "vai_tro",
             "vai_tro_display",
             "ten_nhan_su",
@@ -103,25 +107,78 @@ class NhanSuSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMix
         read_only_fields = [
             "so_giao_nhan_ca",
             "vai_tro_display",
+            "nhan_su_detail",
             "nguoi_tao",
             "nguoi_tao_display",
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {
+            "ten_nhan_su": {"required": False, "allow_blank": True},
+            "ma_nhan_vien": {"required": False, "allow_blank": True},
+            "nhan_su": {"required": False, "allow_null": True},
+        }
 
-    def validate_ten_nhan_su(self, value):
-        value = " ".join(value.split())
-        if not value:
-            raise serializers.ValidationError("Yêu cầu nhập tên nhân sự.")
-        return value
+    def get_nhan_su_detail(self, obj):
+        if not obj.nhan_su_id or not obj.nhan_su:
+            return None
+        return {
+            "id": obj.nhan_su_id,
+            "ho_ten": obj.nhan_su.ho_ten,
+            "ma_nhan_vien": obj.nhan_su.ma_nhan_vien or "",
+            "chuc_danh": obj.nhan_su.chuc_danh or "",
+        }
 
     def validate(self, attrs):
         shift_log = self.context.get("shift_log")
+        nhan_su = attrs.get("nhan_su", getattr(self.instance, "nhan_su", None))
+
+        # 1. Kiểm tra nhà máy: nhân sự phải thuộc nhà máy của sổ trực ca
+        if nhan_su and shift_log:
+            if nhan_su.nha_may_id != shift_log.nha_may_id:
+                raise serializers.ValidationError(
+                    {"nhan_su": f"Nhân sự '{nhan_su.ho_ten}' không thuộc nhà máy của sổ trực ca."}
+                )
+
+        # 2. Xử lý đổi liên kết nhân sự từ A sang B
+        is_changing_nhan_su = (
+            self.instance
+            and "nhan_su" in attrs
+            and attrs["nhan_su"] != self.instance.nhan_su
+        )
+
+        # Có liên kết danh mục thì snapshot chỉ được lấy từ bản ghi NhanSu.
+        # Client không được gửi tên/mã khác với khóa ngoại đã chọn.
+        if nhan_su and (self.instance is None or is_changing_nhan_su):
+            name = nhan_su.ho_ten
+            attrs["ma_nhan_vien"] = nhan_su.ma_nhan_vien or ""
+        elif nhan_su and self.instance:
+            name = self.instance.ten_nhan_su
+            attrs["ma_nhan_vien"] = self.instance.ma_nhan_vien
+        else:
+            name = attrs.get(
+                "ten_nhan_su",
+                getattr(self.instance, "ten_nhan_su", ""),
+            )
+
+        name = " ".join((name or "").split())
+        if not name and nhan_su:
+            name = nhan_su.ho_ten
+        if not name:
+            raise serializers.ValidationError({"ten_nhan_su": "Yêu cầu nhập tên nhân sự."})
+        attrs["ten_nhan_su"] = name
+
+        if is_changing_nhan_su and nhan_su is None:
+            attrs["ma_nhan_vien"] = getattr(
+                self.instance,
+                "ma_nhan_vien",
+                "",
+            )
+
         if not shift_log:
             return attrs
 
         role = attrs.get("vai_tro", getattr(self.instance, "vai_tro", None))
-        name = attrs.get("ten_nhan_su", getattr(self.instance, "ten_nhan_su", ""))
         queryset = shift_log.nhan_su_ca.all()
         if self.instance:
             queryset = queryset.exclude(pk=self.instance.pk)
@@ -132,10 +189,51 @@ class NhanSuSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMix
             raise serializers.ValidationError(
                 {"vai_tro": "Mỗi ca chỉ được có tối đa một trực chính."}
             )
-        if any(person.ten_nhan_su.casefold() == name.casefold() for person in queryset):
-            raise serializers.ValidationError(
-                {"ten_nhan_su": "Nhân sự không được trùng tên trong cùng một ca."}
-            )
+
+        # 3. Kiểm tra trùng lặp:
+        # - Có nhan_su: kiểm tra trùng theo nhan_su_id
+        # - Không có nhan_su (nhập tay/legacy): fallback kiểm tra trùng theo tên chuẩn hóa
+        if nhan_su:
+            if any(person.nhan_su_id == nhan_su.pk for person in queryset):
+                raise serializers.ValidationError(
+                    {"nhan_su": "Nhân sự đã được phân công trong ca trực này."}
+                )
+        else:
+            if any(person.ten_nhan_su.casefold() == name.casefold() for person in queryset):
+                raise serializers.ValidationError(
+                    {"ten_nhan_su": "Nhân sự không được trùng tên trong cùng một ca."}
+                )
+
+        # 4. Kiểm tra trùng Trưởng ca (user_giao_ca):
+        # Người tạo sổ (Trưởng ca) không được trùng với nhân sự Trực chính hoặc Trực phụ.
+        if shift_log.user_giao_ca_id and role in (
+            NhanSuSoGiaoNhanCaVH.VaiTro.TRUC_CHINH,
+            NhanSuSoGiaoNhanCaVH.VaiTro.TRUC_PHU,
+        ):
+            leader = shift_log.user_giao_ca
+            leader_nhansu = getattr(leader, "nhan_su_ca_truc", None)
+            leader_id = leader_nhansu.id if leader_nhansu else None
+            leader_code = (leader_nhansu.ma_nhan_vien or "").strip() if leader_nhansu else ""
+            leader_name = (
+                ((leader_nhansu.ho_ten or "").strip() if leader_nhansu else "")
+                or f"{leader.first_name} {leader.last_name}".strip()
+                or leader.username
+            ).strip()
+
+            code = (attrs.get("ma_nhan_vien") or getattr(self.instance, "ma_nhan_vien", "") or "").strip()
+            is_overlap = False
+            if nhan_su and leader_id and nhan_su.pk == leader_id:
+                is_overlap = True
+            elif code and leader_code and code.casefold() == leader_code.casefold():
+                is_overlap = True
+            elif name and leader_name and " ".join(name.split()).casefold() == " ".join(leader_name.split()).casefold():
+                is_overlap = True
+
+            if is_overlap:
+                raise serializers.ValidationError(
+                    {"nhan_su": "Người tạo sổ (Trưởng ca) không được trùng với nhân sự Trực chính hoặc Trực phụ trong cùng một ca trực."}
+                )
+
         return attrs
 
     def get_nguoi_tao_display(self, obj):
@@ -144,6 +242,8 @@ class NhanSuSoGiaoNhanCaVHSerializer(serializers.ModelSerializer, UserSummaryMix
 
 class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
     user_giao_ca_display = serializers.SerializerMethodField()
+    user_giao_ca_nhan_su_id = serializers.SerializerMethodField()
+    user_giao_ca_ma_nhan_vien = serializers.SerializerMethodField()
     user_nhan_ca_display = serializers.SerializerMethodField()
     nguoi_tao_display = serializers.SerializerMethodField()
     hinh_anh_url = serializers.SerializerMethodField()
@@ -202,6 +302,8 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "chu_ky_user_nhan_ca_url",
             "user_giao_ca",
             "user_giao_ca_display",
+            "user_giao_ca_nhan_su_id",
+            "user_giao_ca_ma_nhan_vien",
             "user_nhan_ca",
             "user_nhan_ca_display",
             "nguoi_tao",
@@ -228,6 +330,8 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
             "chu_ky_user_nhan_ca_url",
             "user_giao_ca",
             "user_giao_ca_display",
+            "user_giao_ca_nhan_su_id",
+            "user_giao_ca_ma_nhan_vien",
             "user_nhan_ca",
             "user_nhan_ca_display",
             "nguoi_tao",
@@ -241,6 +345,14 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
         validators = []
 
     def validate(self, attrs):
+        shift_period = attrs.get(
+            "loai_thoi_gian_truc",
+            getattr(self.instance, "loai_thoi_gian_truc", "ngay"),
+        )
+        if shift_period == SogiaonhancaVH.LoaiThoiGianTruc.DEM:
+            attrs["truc_ktvh"] = ""
+            attrs["so_giao_nhan_ca_hc_nguon"] = None
+
         start = attrs.get(
             "thoi_gian_bat_dau_ca",
             getattr(self.instance, "thoi_gian_bat_dau_ca", None),
@@ -373,7 +485,23 @@ class SogiaonhancaVHSerializer(serializers.ModelSerializer, UserSummaryMixin):
         ).data
 
     def get_user_giao_ca_display(self, obj):
+        if obj.user_giao_ca_id:
+            nhan_su = getattr(obj.user_giao_ca, "nhan_su_ca_truc", None)
+            if nhan_su and nhan_su.ho_ten:
+                return nhan_su.ho_ten.strip()
         return self._get_user_display(obj.user_giao_ca)
+
+    def get_user_giao_ca_nhan_su_id(self, obj):
+        if not obj.user_giao_ca_id:
+            return None
+        nhan_su = getattr(obj.user_giao_ca, "nhan_su_ca_truc", None)
+        return nhan_su.id if nhan_su else None
+
+    def get_user_giao_ca_ma_nhan_vien(self, obj):
+        if not obj.user_giao_ca_id:
+            return ""
+        nhan_su = getattr(obj.user_giao_ca, "nhan_su_ca_truc", None)
+        return nhan_su.ma_nhan_vien if nhan_su and nhan_su.ma_nhan_vien else ""
 
     def get_user_nhan_ca_display(self, obj):
         return self._get_user_display(obj.user_nhan_ca)
