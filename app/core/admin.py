@@ -60,12 +60,33 @@ OPEN_PROFILE_FIELDSETS = {
     'Hình ảnh',
 }
 
+ACCOUNT_PERMISSION_FIELDSET_TITLE = 'Quyền quản lý tài khoản (cấp riêng)'
+ACCOUNT_PERMISSION_FIELDS = (
+    'can_view_users',
+    'can_create_users',
+    'can_edit_users',
+    'can_assign_user_roles',
+    'can_manage_user_status',
+)
+
 
 def make_profile_fieldsets_collapsible(fieldsets):
-    collapsible_fieldsets = [('Quản lý tài khoản', {'classes': ('collapse',), 'fields': (
-        'can_view_users', 'can_create_users', 'can_edit_users',
-        'can_assign_user_roles', 'can_manage_user_status',
-    )})] if not any(title == 'Quản lý tài khoản' for title, _ in fieldsets) else []
+    account_titles = {
+        'Quản lý tài khoản',
+        ACCOUNT_PERMISSION_FIELDSET_TITLE,
+    }
+    collapsible_fieldsets = [(
+        ACCOUNT_PERMISSION_FIELDSET_TITLE,
+        {
+            'classes': ('collapse',),
+            'fields': ACCOUNT_PERMISSION_FIELDS,
+            'description': (
+                'Các ô này là quyền cấp thêm riêng cho cá nhân. Nếu tài khoản đã có '
+                'vai trò, quyền kế thừa từ vai trò được ghi trong phần trợ giúp của '
+                'từng ô và không cần tích lại.'
+            ),
+        },
+    )] if not any(title in account_titles for title, _ in fieldsets) else []
     for title, options in fieldsets:
         if title in OPEN_PROFILE_FIELDSETS:
             collapsible_fieldsets.append((title, options))
@@ -421,6 +442,37 @@ class UserProfileInline(admin.StackedInline):
     fieldsets = make_profile_fieldsets_collapsible(fieldsets)
 
 
+class UserRoleDelegationInline(admin.TabularInline):
+    """Configure the roles a delegated account may assign at each plant."""
+
+    model = UserRoleDelegation
+    fk_name = 'delegate'
+    extra = 0
+    fields = ('nha_may', 'assignable_role', 'is_active', 'created_by', 'created_at', 'updated_at')
+    readonly_fields = ('created_by', 'created_at', 'updated_at')
+    verbose_name = 'Vai trò được phép cấp'
+    verbose_name_plural = (
+        'Ủy quyền cấp vai trò — bắt buộc nếu tài khoản không phải superuser '
+        'cần tạo tài khoản mới hoặc đổi vai trò'
+    )
+
+    @staticmethod
+    def _is_superuser(request):
+        return request.user.is_active and request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return self._is_superuser(request)
+
+    def has_add_permission(self, request, obj=None):
+        return self._is_superuser(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._is_superuser(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._is_superuser(request)
+
+
 # Định nghĩa UserRoleForm bằng type() động để các trường can_ được khai báo dưới dạng class attributes.
 # Điều này giúp các trường được lưu vào declared_fields và kế thừa chính xác khi Django modelform_factory tạo subclass.
 form_fields = {
@@ -507,7 +559,20 @@ class UserAdmin(BaseUserAdmin):
     list_filter = ('is_active', 'is_staff', 'is_superuser')
     search_fields = ('email', 'username', 'first_name', 'last_name')
     ordering = ('email',)
-    inlines = [UserProfileInline]
+    inlines = [UserProfileInline, UserRoleDelegationInline]
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for deleted_object in formset.deleted_objects:
+            deleted_object.delete()
+        for instance in instances:
+            if (
+                isinstance(instance, UserRoleDelegation)
+                and not instance.created_by_id
+            ):
+                instance.created_by = request.user
+            instance.save()
+        formset.save_m2m()
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),

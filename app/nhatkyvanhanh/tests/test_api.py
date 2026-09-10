@@ -19,6 +19,8 @@ from nhatkyvanhanh.models import (
     SonhatkyvanhanhDiesel,
     SogiaonhancaHC,
     SogiaonhancaVH,
+    ChiTietSoGiaoNhanCaHC,
+    ChiTietSoGiaoNhanCaVH,
     LuuYChiDaoSoGiaoNhanCaVH,
     AnhTruocSuCo,
     SuKien,
@@ -983,6 +985,101 @@ class NhatKyVanHanhAPITests(APITestCase):
             detail_url, {"dia_diem": "Trung tâm vận hành"}, format="json"
         )
         self.assertEqual(manager_response.status_code, status.HTTP_200_OK)
+
+    def test_shift_log_owner_can_delete_detail_created_by_manager(self):
+        now = timezone.now()
+        vh_log = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=now.date(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=now,
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        vh_detail = ChiTietSoGiaoNhanCaVH.objects.create(
+            so_giao_nhan_ca=vh_log,
+            noi_dung="Nội dung do quản lý bổ sung",
+            nguoi_tao=self.manager,
+        )
+        vh_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-cap-nhat-noi-dung-chi-tiet",
+            kwargs={"pk": vh_log.pk, "chi_tiet_id": vh_detail.pk},
+        )
+
+        hc_log = SogiaonhancaHC.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=now.date(),
+            thoi_gian_giao_ca=now,
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        hc_detail = ChiTietSoGiaoNhanCaHC.objects.create(
+            so_giao_nhan_ca=hc_log,
+            noi_dung="Nội dung HC do quản lý bổ sung",
+            nguoi_tao=self.manager,
+        )
+        hc_url = reverse(
+            "nhatkyvanhanh:sogiaonhancahc-cap-nhat-noi-dung-chi-tiet",
+            kwargs={"pk": hc_log.pk, "chi_tiet_id": hc_detail.pk},
+        )
+
+        self.client.force_authenticate(user=self.creator)
+        self.assertEqual(self.client.delete(vh_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.delete(hc_url).status_code, status.HTTP_200_OK)
+        self.assertFalse(ChiTietSoGiaoNhanCaVH.objects.filter(pk=vh_detail.pk).exists())
+        self.assertFalse(ChiTietSoGiaoNhanCaHC.objects.filter(pk=hc_detail.pk).exists())
+
+    def test_shift_log_manager_can_delete_other_users_details(self):
+        now = timezone.now()
+        vh_log = SogiaonhancaVH.objects.create(
+            nha_may=self.nha_may,
+            ngay_truc=now.date(),
+            ca_truc=SogiaonhancaVH.CaTruc.A,
+            thoi_gian_giao_ca=now,
+            user_giao_ca=self.creator,
+            nguoi_tao=self.creator,
+        )
+        detail = ChiTietSoGiaoNhanCaVH.objects.create(
+            so_giao_nhan_ca=vh_log,
+            noi_dung="Nội dung của trưởng ca",
+            nguoi_tao=self.creator,
+        )
+        url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-cap-nhat-noi-dung-chi-tiet",
+            kwargs={"pk": vh_log.pk, "chi_tiet_id": detail.pk},
+        )
+
+        self.client.force_authenticate(user=self.manager)
+        self.assertEqual(self.client.delete(url).status_code, status.HTTP_200_OK)
+        self.assertFalse(ChiTietSoGiaoNhanCaVH.objects.filter(pk=detail.pk).exists())
+
+        protected_detail = ChiTietSoGiaoNhanCaVH.objects.create(
+            so_giao_nhan_ca=vh_log,
+            noi_dung="Nội dung cần bảo vệ",
+            nguoi_tao=self.creator,
+        )
+        protected_url = reverse(
+            "nhatkyvanhanh:sogiaonhancavh-cap-nhat-noi-dung-chi-tiet",
+            kwargs={"pk": vh_log.pk, "chi_tiet_id": protected_detail.pk},
+        )
+
+        self.client.force_authenticate(user=self.viewer)
+        self.assertEqual(
+            self.client.delete(protected_url).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        vh_log.user_nhan_ca = self.receiver
+        vh_log.nhan_ca_ky_at = timezone.now()
+        vh_log.save()
+        self.client.force_authenticate(user=self.manager)
+        self.assertEqual(
+            self.client.delete(protected_url).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertTrue(
+            ChiTietSoGiaoNhanCaVH.objects.filter(pk=protected_detail.pk).exists()
+        )
 
     def test_sogiaonhancavh_is_locked_immediately_after_receive(self):
         so = SogiaonhancaVH.objects.create(

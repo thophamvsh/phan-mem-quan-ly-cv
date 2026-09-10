@@ -256,6 +256,53 @@ class ManagedUsersTests(TestCase):
         self.actor.is_superuser = True
         self.assertTrue(model_admin.has_change_permission(request))
 
+    def test_account_permissions_are_visible_as_individual_grants_in_admin(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+        from core.admin import (
+            ACCOUNT_PERMISSION_FIELDS,
+            ACCOUNT_PERMISSION_FIELDSET_TITLE,
+            UserProfileAdmin,
+            UserRoleAdmin,
+        )
+
+        request = RequestFactory().get('/admin/')
+        request.user = self.actor
+        site = AdminSite()
+
+        for model_admin in (
+            UserProfileAdmin(UserProfile, site),
+            UserRoleAdmin(UserRole, site),
+        ):
+            fieldsets = model_admin.get_fieldsets(request)
+            account_fieldset = next(
+                options
+                for title, options in fieldsets
+                if title == ACCOUNT_PERMISSION_FIELDSET_TITLE
+            )
+            self.assertEqual(account_fieldset['fields'], ACCOUNT_PERMISSION_FIELDS)
+            self.assertIn('cấp thêm riêng cho cá nhân', account_fieldset['description'])
+
+    def test_user_admin_exposes_superuser_only_role_delegation_inline(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+        from core.admin import UserAdmin, UserRoleDelegationInline
+
+        site = AdminSite()
+        model_admin = UserAdmin(User, site)
+        self.assertIn(UserRoleDelegationInline, model_admin.inlines)
+
+        inline = UserRoleDelegationInline(User, site)
+        request = RequestFactory().get('/admin/')
+        request.user = self.actor
+        self.actor.is_staff = True
+        self.assertFalse(inline.has_view_permission(request))
+        self.assertFalse(inline.has_add_permission(request))
+
+        self.actor.is_superuser = True
+        self.assertTrue(inline.has_view_permission(request))
+        self.assertTrue(inline.has_add_permission(request))
+
     def test_created_user_can_login_and_receive_management_flags(self):
         response = self.post()
         self.assertEqual(response.status_code, 201)

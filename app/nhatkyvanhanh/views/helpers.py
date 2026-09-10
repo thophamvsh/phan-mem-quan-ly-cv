@@ -579,14 +579,22 @@ def _is_creator_of_shift_log(user, so):
 
 
 def _can_create_shift_detail(user, so):
-    return bool(user and user.is_authenticated and so.user_giao_ca_id == user.id)
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            user.is_superuser
+            or has_profile_permission(user, "can_manage_all_shift_handover_logs")
+            or so.user_giao_ca_id == user.id
+            or so.nguoi_tao_id == user.id
+        )
+    )
 
 
 def _can_update_shift_detail(user, so, chi_tiet):
-    return bool(
-        _can_create_shift_detail(user, so)
-        and chi_tiet.nguoi_tao_id == user.id
-    )
+    # Quyền quản lý dòng đi theo quyền quản lý sổ. Điều này cho phép Trưởng ca
+    # tạo sổ xử lý cả dòng do người quản lý thêm, đồng thời vẫn chặn người ngoài.
+    return _can_create_shift_detail(user, so)
 
 
 def _can_edit_shift_log(user, so):
