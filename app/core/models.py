@@ -503,6 +503,32 @@ class UserProfile(models.Model):
         default=False,
         help_text="Có quyền kích hoạt phiên bản mẫu tóm lược",
     )
+    # Phân quyền mẫu nội dung vận hành (lệnh điều độ)
+    can_view_shift_command_templates = models.BooleanField(
+        default=False,
+        verbose_name="Xem mẫu nội dung vận hành",
+        help_text="Có quyền xem danh sách mẫu nội dung vận hành của sổ giao nhận ca vận hành",
+    )
+    can_create_shift_command_templates = models.BooleanField(
+        default=False,
+        verbose_name="Tạo mẫu nội dung vận hành",
+        help_text="Có quyền tạo mẫu và phiên bản mẫu nội dung vận hành",
+    )
+    can_edit_shift_command_templates = models.BooleanField(
+        default=False,
+        verbose_name="Sửa mẫu nội dung vận hành",
+        help_text="Có quyền sửa tiêu đề, cú pháp và cấu hình mẫu nội dung vận hành",
+    )
+    can_delete_shift_command_templates = models.BooleanField(
+        default=False,
+        verbose_name="Xóa mẫu nội dung vận hành",
+        help_text="Có quyền xóa mẫu nội dung vận hành",
+    )
+    can_activate_shift_command_templates = models.BooleanField(
+        default=False,
+        verbose_name="Kích hoạt mẫu nội dung vận hành",
+        help_text="Có quyền kích hoạt phiên bản mẫu nội dung vận hành",
+    )
     can_view_shift_handover_directives = models.BooleanField(
         default=False,
         help_text="Có quyền xem lưu ý chỉ đạo sổ giao nhận ca vận hành"
