@@ -45,6 +45,7 @@ from .models import (
     ChiTietMauTrangThaiThietBiCa,
     MauTomLuocGiaoCaVH,
     HangMucMauTomLuocGiaoCaVH,
+    MauNoiDungVanHanh,
 )
 
 
@@ -835,4 +836,17 @@ class MauTomLuocGiaoCaVHAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if not obj.nguoi_tao_id:
             obj.nguoi_tao = request.user
+        super().save_model(request, obj, form, change)
+
+@admin.register(MauNoiDungVanHanh)
+class MauNoiDungVanHanhAdmin(admin.ModelAdmin):
+    list_display = ("thu_tu", "ma_mau", "ten_mau", "nhom_mau", "nha_may", "phien_ban", "dang_ap_dung", "la_mau_he_thong", "updated_at")
+    list_filter = ("nhom_mau", "dang_ap_dung", "la_mau_he_thong", "nha_may")
+    search_fields = ("ma_mau", "ten_mau", "dinh_dang_tieu_de", "dinh_dang_mau")
+    readonly_fields = ("nguoi_tao", "nguoi_cap_nhat", "created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        if not obj.nguoi_tao_id:
+            obj.nguoi_tao = request.user
+        obj.nguoi_cap_nhat = request.user
         super().save_model(request, obj, form, change)

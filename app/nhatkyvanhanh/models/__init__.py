@@ -27,3 +27,4 @@ from .device_template import (
     ChiTietMauTrangThaiThietBiCa,
 )
 from .summary_template import MauTomLuocGiaoCaVH, HangMucMauTomLuocGiaoCaVH
+from .command_template import MauNoiDungVanHanh

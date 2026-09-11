@@ -46,6 +46,7 @@ from .phan_cong_nhiem_vu_hc import (
 )
 from .device_template import MauTrangThaiThietBiCaSerializer
 from .summary_template import MauTomLuocGiaoCaVHSerializer
+from .command_template import MauNoiDungVanHanhSerializer
 
 __all__ = [
     "user_can_edit_chi_dao",
@@ -76,4 +77,5 @@ __all__ = [
     "ChiTietNhiemVuThuTrongTuanSerializer",
     "MauTrangThaiThietBiCaSerializer",
     "MauTomLuocGiaoCaVHSerializer",
+    "MauNoiDungVanHanhSerializer",
 ]
