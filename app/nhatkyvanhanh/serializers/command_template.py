@@ -119,7 +119,7 @@ class MauNoiDungVanHanhSerializer(serializers.ModelSerializer):
     def validate_danh_sach_tham_so(self, value):
         if not isinstance(value, list):
             raise serializers.ValidationError("Danh sách tham số phải là một mảng (list).")
-        
+
         # DoS guard: Giới hạn số lượng tham số
         if len(value) > MAX_PARAMS_COUNT:
             raise serializers.ValidationError(
@@ -135,13 +135,13 @@ class MauNoiDungVanHanhSerializer(serializers.ModelSerializer):
         for idx, param in enumerate(value):
             if not isinstance(param, dict):
                 raise serializers.ValidationError(f"Tham số thứ {idx + 1} phải là một đối tượng (dict).")
-            
+
             key = str(param.get("key") or "").strip()
             if not key:
                 raise serializers.ValidationError(f"Tham số thứ {idx + 1} thiếu trường 'key'.")
             if not re.match(r"^[a-zA-Z0-9_]+$", key):
                 raise serializers.ValidationError(f"Mã tham số '{key}' không hợp lệ (chỉ chấp nhận a-z, 0-9, _).")
-            
+
             if key in param_keys:
                 raise serializers.ValidationError(f"Mã tham số '{key}' bị lặp lại trong danh sách.")
             param_keys.append(key)
