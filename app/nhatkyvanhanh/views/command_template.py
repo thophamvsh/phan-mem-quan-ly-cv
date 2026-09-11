@@ -85,7 +85,11 @@ class MauNoiDungVanHanhViewSet(viewsets.ModelViewSet):
         if getattr(self, "action", None) in ("list", "dang_ap_dung"):
             plant_id = self.request.query_params.get("nha_may")
             if plant_id:
-                queryset = queryset.filter(Q(nha_may_id=plant_id) | Q(nha_may__isnull=True))
+                if str(plant_id).isdigit():
+                    plant_filter = Q(nha_may_id=plant_id)
+                else:
+                    plant_filter = Q(nha_may__ma_nha_may__iexact=str(plant_id).strip())
+                queryset = queryset.filter(plant_filter | Q(nha_may__isnull=True))
             elif not user.is_superuser and hasattr(user, "profile") and not user.profile.is_all_factories:
                 user_plant_id = user.profile.nha_may_id
                 if user_plant_id:
@@ -173,11 +177,12 @@ class MauNoiDungVanHanhViewSet(viewsets.ModelViewSet):
 
         # 2. Nếu có nhà máy, lấy mẫu của nhà máy đang áp dụng để ghi đè (Plant precedence)
         if plant_id:
-            plant_templates = list(
-                MauNoiDungVanHanh.objects.filter(nha_may_id=plant_id, dang_ap_dung=True)
-                .select_related("nha_may", "nguoi_tao", "nguoi_cap_nhat")
-                .order_by("thu_tu", "ma_mau")
-            )
+            plant_qs = MauNoiDungVanHanh.objects.filter(dang_ap_dung=True).select_related("nha_may", "nguoi_tao", "nguoi_cap_nhat")
+            if str(plant_id).isdigit():
+                plant_qs = plant_qs.filter(nha_may_id=plant_id)
+            else:
+                plant_qs = plant_qs.filter(nha_may__ma_nha_may__iexact=str(plant_id).strip())
+            plant_templates = list(plant_qs.order_by("thu_tu", "ma_mau"))
             for pt in plant_templates:
                 result_map[pt.ma_mau] = pt
 
@@ -287,10 +292,22 @@ class MauNoiDungVanHanhViewSet(viewsets.ModelViewSet):
         # Kiểm tra quyền nhà máy
         if not request.user.is_superuser:
             profile = getattr(request.user, "profile", None)
-            if not getattr(profile, "is_all_factories", False) and str(profile.nha_may_id) != str(plant_id):
-                raise PermissionDenied("Không có quyền khôi phục mẫu của nhà máy khác.")
+            user_plant = getattr(profile, "nha_may", None)
+            is_all = getattr(profile, "is_all_factories", False)
+            if not is_all:
+                if str(plant_id).isdigit():
+                    if str(getattr(profile, "nha_may_id", "")) != str(plant_id):
+                        raise PermissionDenied("Không có quyền khôi phục mẫu của nhà máy khác.")
+                else:
+                    if not user_plant or user_plant.ma_nha_may.upper() != str(plant_id).strip().upper():
+                        raise PermissionDenied("Không có quyền khôi phục mẫu của nhà máy khác.")
 
-        deleted_count, _ = MauNoiDungVanHanh.objects.filter(nha_may_id=plant_id).delete()
+        qs = MauNoiDungVanHanh.objects.filter(la_mau_he_thong=False)
+        if str(plant_id).isdigit():
+            qs = qs.filter(nha_may_id=plant_id)
+        else:
+            qs = qs.filter(nha_may__ma_nha_may__iexact=str(plant_id).strip())
+        deleted_count, _ = qs.delete()
         return Response({
             "detail": f"Đã khôi phục thành công danh mục mẫu mặc định. Đã xóa {deleted_count} bản ghi tùy biến riêng.",
             "deleted_count": deleted_count,
