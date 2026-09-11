@@ -73,6 +73,7 @@ class MauNoiDungVanHanhPermission(permissions.DjangoModelPermissions):
 class MauNoiDungVanHanhViewSet(viewsets.ModelViewSet):
     serializer_class = MauNoiDungVanHanhSerializer
     permission_classes = [MauNoiDungVanHanhPermission]
+    pagination_class = None  # <-- Trả về toàn bộ danh mục mẫu lệnh cho Modal
     queryset = MauNoiDungVanHanh.objects.select_related("nha_may", "nguoi_tao", "nguoi_cap_nhat")
 
     def get_queryset(self):
