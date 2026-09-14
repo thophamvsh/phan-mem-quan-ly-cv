@@ -5,6 +5,46 @@ from django.db import models
 from django.utils import timezone
 from .base import TimestampedUUIDModel, _current_year, _lay_chu_ky_profile
 
+
+class KhuVucChuyenDoiThietBi(TimestampedUUIDModel):
+    nha_may = models.ForeignKey(
+        "tochuc.NhaMay",
+        on_delete=models.PROTECT,
+        related_name="khu_vuc_chuyen_doi_thiet_bi",
+        verbose_name="Nhà máy",
+    )
+    ma_khu_vuc = models.CharField(max_length=50, verbose_name="Mã khu vực")
+    ten_khu_vuc = models.CharField(max_length=255, verbose_name="Tên khu vực")
+    thu_tu = models.PositiveIntegerField(default=0, verbose_name="Thứ tự hiển thị")
+    dang_su_dung = models.BooleanField(default=True, verbose_name="Đang sử dụng")
+
+    class Meta:
+        ordering = ["nha_may", "thu_tu", "ten_khu_vuc"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nha_may", "ma_khu_vuc"],
+                name="uq_khu_vuc_chuyen_doi_nha_may_ma",
+            )
+        ]
+        verbose_name = "Khu vực chuyển đổi thiết bị"
+        verbose_name_plural = "Khu vực chuyển đổi thiết bị"
+
+    def clean(self):
+        self.ma_khu_vuc = (self.ma_khu_vuc or "").strip().upper()
+        self.ten_khu_vuc = (self.ten_khu_vuc or "").strip()
+        if not self.ma_khu_vuc:
+            raise ValidationError({"ma_khu_vuc": "Mã khu vực là bắt buộc."})
+        if not self.ten_khu_vuc:
+            raise ValidationError({"ten_khu_vuc": "Tên khu vực là bắt buộc."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.ten_khu_vuc} ({self.nha_may})"
+
+
 class MauChuyenDoiThietBi(TimestampedUUIDModel):
     class ToMay(models.TextChoices):
         H1 = "H1", "Tổ máy H1"
@@ -19,7 +59,15 @@ class MauChuyenDoiThietBi(TimestampedUUIDModel):
         blank=True,
         verbose_name="Nhà máy",
     )
-    to_may = models.CharField(max_length=20, choices=ToMay.choices, verbose_name="Tổ máy")
+    khu_vuc = models.ForeignKey(
+        KhuVucChuyenDoiThietBi,
+        on_delete=models.PROTECT,
+        related_name="mau_thiet_bi",
+        null=True,
+        blank=True,
+        verbose_name="Tổ máy / Khu vực",
+    )
+    to_may = models.CharField(max_length=50, verbose_name="Mã tổ máy / Khu vực")
     nhom_thiet_bi = models.CharField(max_length=255, blank=True, verbose_name="Nhóm thiết bị")
     thiet_bi = models.ForeignKey(
         "quanlyvanhanh.ThietBi",
@@ -34,15 +82,20 @@ class MauChuyenDoiThietBi(TimestampedUUIDModel):
         ordering = ["to_may", "thu_tu", "created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["nha_may", "to_may", "thiet_bi"],
-                name="uq_mau_chuyen_doi_thiet_bi_nha_may_to_may_tb",
+                fields=["nha_may", "khu_vuc", "thiet_bi"],
+                name="uq_mau_chuyen_doi_thiet_bi_nha_may_khu_vuc_tb",
             )
         ]
         verbose_name = "Mẫu chuyển đổi thiết bị tuần"
         verbose_name_plural = "Mẫu chuyển đổi thiết bị tuần"
 
     def __str__(self):
-        return f"{self.get_to_may_display()} - {self.thiet_bi}"
+        return f"{self.khu_vuc.ten_khu_vuc if self.khu_vuc_id else self.to_may} - {self.thiet_bi}"
+
+    def get_to_may_display(self):
+        if self.khu_vuc_id:
+            return self.khu_vuc.ten_khu_vuc
+        return dict(self.ToMay.choices).get(self.to_may, self.to_may)
 
 
 class SoChuyenDoiThietBiTuan(TimestampedUUIDModel):
@@ -224,7 +277,20 @@ class ChiTietChuyenDoiThietBi(TimestampedUUIDModel):
         related_name="chi_tiet_chuyen_doi_thiet_bi",
         verbose_name="Thiết bị",
     )
-    to_may = models.CharField(max_length=20, choices=MauChuyenDoiThietBi.ToMay.choices, verbose_name="Tổ máy")
+    khu_vuc = models.ForeignKey(
+        KhuVucChuyenDoiThietBi,
+        on_delete=models.PROTECT,
+        related_name="chi_tiet_lich_su",
+        null=True,
+        blank=True,
+        verbose_name="Tổ máy / Khu vực",
+    )
+    to_may = models.CharField(max_length=50, verbose_name="Mã tổ máy / Khu vực")
+    ten_khu_vuc_snapshot = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Tên khu vực tại thời điểm tạo sổ",
+    )
     nhom_thiet_bi = models.CharField(max_length=255, blank=True, verbose_name="Nhóm thiết bị")
     trang_thai = models.CharField(
         max_length=20,

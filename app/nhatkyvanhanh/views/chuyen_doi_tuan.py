@@ -17,8 +17,15 @@ from core.factory_scope import (
     get_user_factory,
     has_all_factory_access,
 )
-from nhatkyvanhanh.models import MauChuyenDoiThietBi, SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi
+from nhatkyvanhanh.models import (
+    ChiTietChuyenDoiThietBi,
+    KhuVucChuyenDoiThietBi,
+    LanChuyenDoiThietBi,
+    MauChuyenDoiThietBi,
+    SoChuyenDoiThietBiTuan,
+)
 from nhatkyvanhanh.serializers import (
+    KhuVucChuyenDoiThietBiSerializer,
     MauChuyenDoiThietBiSerializer,
     SoChuyenDoiThietBiTuanSerializer,
     LanChuyenDoiThietBiSerializer,
@@ -52,10 +59,65 @@ from .helpers import (
 )
 
 
+class KhuVucChuyenDoiThietBiFilterSet(django_filters.FilterSet):
+    class Meta:
+        model = KhuVucChuyenDoiThietBi
+        fields = ["nha_may", "dang_su_dung"]
+
+
+class KhuVucChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
+    serializer_class = KhuVucChuyenDoiThietBiSerializer
+    pagination_class = None
+    parser_classes = [JSONParser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = KhuVucChuyenDoiThietBiFilterSet
+    search_fields = ["ma_khu_vuc", "ten_khu_vuc", "nha_may__ma_nha_may", "nha_may__ten_nha_may"]
+    ordering_fields = ["thu_tu", "ma_khu_vuc", "ten_khu_vuc", "created_at"]
+    ordering = ["thu_tu", "ten_khu_vuc"]
+
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    def _allowed(self, action_name):
+        checks = {
+            "list": _can_view_weekly_equipment_switch_template,
+            "retrieve": _can_view_weekly_equipment_switch_template,
+            "create": _can_create_weekly_equipment_switch_template,
+            "update": _can_edit_weekly_equipment_switch_template,
+            "partial_update": _can_edit_weekly_equipment_switch_template,
+            "destroy": _can_delete_weekly_equipment_switch_template,
+        }
+        check = checks.get(action_name)
+        return True if check is None else check(self.request.user)
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not self._allowed(self.action):
+            raise PermissionDenied("Bạn không có quyền quản lý tổ máy/khu vực chuyển đổi thiết bị.")
+
+    def get_queryset(self):
+        queryset = KhuVucChuyenDoiThietBi.objects.select_related("nha_may").all()
+        return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
+
+    def perform_create(self, serializer):
+        serializer.save(**apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk"))
+
+    def perform_update(self, serializer):
+        instance = serializer.save(**apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk"))
+        instance.mau_thiet_bi.exclude(to_may=instance.ma_khu_vuc).update(to_may=instance.ma_khu_vuc)
+
+    def perform_destroy(self, instance):
+        if instance.mau_thiet_bi.exists() or instance.chi_tiet_lich_su.exists():
+            raise DRFValidationError({
+                "detail": "Khu vực đã được sử dụng; hãy chuyển sang trạng thái ngừng sử dụng thay vì xóa."
+            })
+        instance.delete()
+
+
 class MauChuyenDoiThietBiFilterSet(django_filters.FilterSet):
     class Meta:
         model = MauChuyenDoiThietBi
-        fields = ["nha_may", "to_may", "dang_su_dung", "thiet_bi"]
+        fields = ["nha_may", "khu_vuc", "to_may", "dang_su_dung", "thiet_bi"]
 
 
 class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
@@ -71,8 +133,8 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
         "nha_may__ma_nha_may",
         "nha_may__ten_nha_may",
     ]
-    ordering_fields = ["to_may", "thu_tu", "created_at", "updated_at"]
-    ordering = ["to_may", "thu_tu", "created_at"]
+    ordering_fields = ["khu_vuc__thu_tu", "to_may", "thu_tu", "created_at", "updated_at"]
+    ordering = ["khu_vuc__thu_tu", "to_may", "thu_tu", "created_at"]
 
     def get_permissions(self):
         return [IsAuthenticated()]
@@ -130,11 +192,12 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
 
         for factory in NhaMay.objects.all():
             if _is_song_hinh_factory(factory) or (factory.ma_nha_may and factory.ma_nha_may.upper() == "SH"):
-                if MauChuyenDoiThietBi.objects.filter(nha_may=factory).count() < 22:
+                if not MauChuyenDoiThietBi.objects.filter(nha_may=factory).exists():
                     _create_default_switch_templates(factory)
 
         queryset = MauChuyenDoiThietBi.objects.select_related(
             "nha_may",
+            "khu_vuc",
             "thiet_bi",
         ).all()
         return filter_queryset_by_factory(queryset, self.request.user, "nha_may", "fk")
@@ -325,18 +388,18 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         templates = list(
-            MauChuyenDoiThietBi.objects.select_related("thiet_bi")
+            MauChuyenDoiThietBi.objects.select_related("thiet_bi", "khu_vuc")
             .filter(dang_su_dung=True)
             .filter(nha_may=target_nha_may)
-            .order_by("to_may", "thu_tu", "created_at")
+            .order_by("khu_vuc__thu_tu", "to_may", "thu_tu", "created_at")
         )
         if not templates:
             _create_default_switch_templates(target_nha_may)
             templates = list(
-                MauChuyenDoiThietBi.objects.select_related("thiet_bi")
+                MauChuyenDoiThietBi.objects.select_related("thiet_bi", "khu_vuc")
                 .filter(dang_su_dung=True)
                 .filter(nha_may=target_nha_may)
-                .order_by("to_may", "thu_tu", "created_at")
+                .order_by("khu_vuc__thu_tu", "to_may", "thu_tu", "created_at")
             )
         if not templates:
             return Response(
@@ -361,7 +424,11 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                     ChiTietChuyenDoiThietBi(
                         lan_chuyen_doi=lan,
                         thiet_bi=template.thiet_bi,
+                        khu_vuc=template.khu_vuc,
                         to_may=template.to_may,
+                        ten_khu_vuc_snapshot=(
+                            template.khu_vuc.ten_khu_vuc if template.khu_vuc_id else template.get_to_may_display()
+                        ),
                         nhom_thiet_bi=template.nhom_thiet_bi,
                         thu_tu=template.thu_tu,
                         trang_thai=(

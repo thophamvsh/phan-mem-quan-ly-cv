@@ -25,6 +25,7 @@ from .models import (
     LanChuyenDoiThietBi,
     LuuYChiDaoSoGiaoNhanCaVH,
     AnhSoGiaoNhanCaVH,
+    KhuVucChuyenDoiThietBi,
     MauChuyenDoiThietBi,
     MauChuyenDoiTBThang,
     NguoiTrucSoGiaoNhanCaHC,
@@ -50,6 +51,17 @@ from .models import (
 
 
 User = get_user_model()
+
+
+@admin.register(KhuVucChuyenDoiThietBi)
+class KhuVucChuyenDoiThietBiAdmin(admin.ModelAdmin):
+    list_display = ("nha_may", "ma_khu_vuc", "ten_khu_vuc", "thu_tu", "dang_su_dung")
+    list_filter = ("nha_may", "dang_su_dung")
+    search_fields = (
+        "ma_khu_vuc", "ten_khu_vuc", "nha_may__ma_nha_may", "nha_may__ten_nha_may",
+    )
+    ordering = ("nha_may", "thu_tu", "ten_khu_vuc")
+    readonly_fields = ("created_at", "updated_at")
 
 
 class SafeExportChangeListMixin:
@@ -644,13 +656,13 @@ class MauChuyenDoiThietBiAdmin(
     resource_class = MauChuyenDoiThietBiResource
     list_display = (
         "nha_may",
-        "to_may",
+        "khu_vuc",
         "nhom_thiet_bi",
         "thiet_bi",
         "thu_tu",
         "dang_su_dung",
     )
-    list_filter = ("nha_may", "to_may", "dang_su_dung")
+    list_filter = ("nha_may", "khu_vuc", "dang_su_dung")
     search_fields = (
         "nhom_thiet_bi",
         "thiet_bi__ten",
@@ -658,7 +670,7 @@ class MauChuyenDoiThietBiAdmin(
         "nha_may__ma_nha_may",
         "nha_may__ten_nha_may",
     )
-    autocomplete_fields = ("thiet_bi",)
+    autocomplete_fields = ("khu_vuc", "thiet_bi")
     readonly_fields = ("created_at", "updated_at")
 
 

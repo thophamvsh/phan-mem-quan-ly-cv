@@ -18,7 +18,13 @@ from .giao_ca_hc import SogiaonhancaHC, NguoiTrucSoGiaoNhanCaHC, ChiTietSoGiaoNh
 from .nhat_ky_vh import Sonhatkyvanhanh, SonhatkyvanhanhDiesel
 from .bchc_sh import SoBCHCSongHinh
 from .an_toan_dg import SoAnToanDauGio
-from .chuyen_doi_tuan import MauChuyenDoiThietBi, SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi
+from .chuyen_doi_tuan import (
+    KhuVucChuyenDoiThietBi,
+    MauChuyenDoiThietBi,
+    SoChuyenDoiThietBiTuan,
+    LanChuyenDoiThietBi,
+    ChiTietChuyenDoiThietBi,
+)
 from .chuyen_doi_thang import MauChuyenDoiTBThang, SoChuyenDoiTBThang, ChiTietChuyenDoiTBThang
 from .phan_cong_nhiem_vu_hc import BangPhanCongNhiemVuHC, ChiTietNhiemVuThuTrongTuan
 from .device_template import (

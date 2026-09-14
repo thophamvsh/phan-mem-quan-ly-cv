@@ -30,6 +30,7 @@ from .an_toan_dg import (
     SoAnToanSerializer,
 )
 from .chuyen_doi_tuan import (
+    KhuVucChuyenDoiThietBiSerializer,
     MauChuyenDoiThietBiSerializer,
     ChiTietChuyenDoiThietBiSerializer,
     LanChuyenDoiThietBiSerializer,
@@ -67,6 +68,7 @@ __all__ = [
     "SoBCHCSongHinhSerializer",
     "SoAnToanSerializer",
     "MauChuyenDoiThietBiSerializer",
+    "KhuVucChuyenDoiThietBiSerializer",
     "ChiTietChuyenDoiThietBiSerializer",
     "LanChuyenDoiThietBiSerializer",
     "SoChuyenDoiThietBiTuanSerializer",

@@ -9,6 +9,7 @@ from core.models import UserProfile
 from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
 from nhatkyvanhanh.models import (
+    KhuVucChuyenDoiThietBi,
     MauChuyenDoiThietBi,
     SoChuyenDoiThietBiTuan,
     LanChuyenDoiThietBi,
@@ -102,9 +103,17 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
             can_view_weekly_equipment_switch_logs=False,
         )
 
+        self.khu_vuc_h1 = KhuVucChuyenDoiThietBi.objects.create(
+            nha_may=self.nha_may,
+            ma_khu_vuc="H1",
+            ten_khu_vuc="Tổ máy H1",
+            thu_tu=1,
+        )
+
         # 4. Tao Mau thiet bi tuan
         self.mau1 = MauChuyenDoiThietBi.objects.create(
             nha_may=self.nha_may,
+            khu_vuc=self.khu_vuc_h1,
             thiet_bi=self.tb1,
             to_may="H1",
             nhom_thiet_bi="Bom nuoc ky thuat",
@@ -113,6 +122,7 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
         )
         self.mau2 = MauChuyenDoiThietBi.objects.create(
             nha_may=self.nha_may,
+            khu_vuc=self.khu_vuc_h1,
             thiet_bi=self.tb2,
             to_may="H1",
             nhom_thiet_bi="Bom nuoc ky thuat",
@@ -153,6 +163,62 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
             format="json",
         )
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+
+    def test_dynamic_area_crud_and_factory_validation(self):
+        url = reverse("nhatkyvanhanh:khuvucchuyendoithietbi-list")
+        self.client.force_authenticate(user=self.manager)
+
+        options_response = self.client.options(url)
+        self.assertEqual(options_response.status_code, status.HTTP_200_OK)
+
+        response = self.client.post(
+            url,
+            {
+                "nha_may": self.nha_may.id,
+                "ma_khu_vuc": "  tram-110kv ",
+                "ten_khu_vuc": "Trạm 110 kV",
+                "thu_tu": 4,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["ma_khu_vuc"], "TRAM-110KV")
+
+        area_id = response.data["id"]
+        response = self.client.patch(
+            reverse("nhatkyvanhanh:khuvucchuyendoithietbi-detail", args=[area_id]),
+            {"ten_khu_vuc": "Trạm phân phối 110 kV"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["ten_khu_vuc"], "Trạm phân phối 110 kV")
+
+        other_factory = NhaMay.objects.create(ma_nha_may="VS", ten_nha_may="Vĩnh Sơn")
+        foreign_area = KhuVucChuyenDoiThietBi.objects.create(
+            nha_may=other_factory, ma_khu_vuc="H3", ten_khu_vuc="Tổ máy H3"
+        )
+        response = self.client.post(
+            reverse("nhatkyvanhanh:mauchuyendoithietbi-list"),
+            {
+                "nha_may": self.nha_may.id,
+                "khu_vuc": foreign_area.id,
+                "thiet_bi": self.tb1.id,
+                "nhom_thiet_bi": "Kiểm tra",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Khu vực không thuộc nhà máy", str(response.data))
+
+    def test_used_area_cannot_be_deleted(self):
+        self.client.force_authenticate(user=self.manager)
+        url = reverse(
+            "nhatkyvanhanh:khuvucchuyendoithietbi-detail",
+            args=[self.khu_vuc_h1.id],
+        )
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(KhuVucChuyenDoiThietBi.objects.filter(id=self.khu_vuc_h1.id).exists())
 
     def test_create_duplicate_weekly_log_returns_clear_validation_error(self):
         self.client.force_authenticate(user=self.creator)

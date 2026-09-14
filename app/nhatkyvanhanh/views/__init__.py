@@ -1,5 +1,9 @@
 from .sukien import NhatKySuKienViewSet
-from .chuyen_doi_tuan import MauChuyenDoiThietBiViewSet, SoChuyenDoiThietBiTuanViewSet
+from .chuyen_doi_tuan import (
+    KhuVucChuyenDoiThietBiViewSet,
+    MauChuyenDoiThietBiViewSet,
+    SoChuyenDoiThietBiTuanViewSet,
+)
 from .chuyen_doi_thang import MauChuyenDoiTBThangViewSet, SoChuyenDoiTBThangViewSet
 from .bchc_sh import SoBCHCSongHinhViewSet
 from .nhat_ky_vh import SonhatkyvanhanhDieselViewSet, SonhatkyvanhanhViewSet
@@ -14,6 +18,7 @@ from .command_template import MauNoiDungVanHanhViewSet
 __all__ = [
     "NhatKySuKienViewSet",
     "MauChuyenDoiThietBiViewSet",
+    "KhuVucChuyenDoiThietBiViewSet",
     "MauChuyenDoiTBThangViewSet",
     "SoBCHCSongHinhViewSet",
     "SoChuyenDoiTBThangViewSet",

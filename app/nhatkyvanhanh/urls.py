@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     NhatKySuKienViewSet,
+    KhuVucChuyenDoiThietBiViewSet,
     MauChuyenDoiThietBiViewSet,
     MauChuyenDoiTBThangViewSet,
     SoBCHCSongHinhViewSet,
@@ -31,6 +32,7 @@ router.register(r"so-giao-nhan-ca-hc", SogiaonhancaHCViewSet, basename="sogiaonh
 router.register(r"phan-cong-nhiem-vu-hc", BangPhanCongNhiemVuHCViewSet, basename="phancongnhiemvuhc")
 router.register(r"so-an-toan-dau-gio", SoAnToanViewSet, basename="soantoadaugio")
 router.register(r"mau-chuyen-doi-thiet-bi", MauChuyenDoiThietBiViewSet, basename="mauchuyendoithietbi")
+router.register(r"khu-vuc-chuyen-doi-thiet-bi", KhuVucChuyenDoiThietBiViewSet, basename="khuvucchuyendoithietbi")
 router.register(r"so-chuyen-doi-thiet-bi-tuan", SoChuyenDoiThietBiTuanViewSet, basename="sochuyendoithietbituan")
 router.register(r"mau-chuyen-doi-tb-thang", MauChuyenDoiTBThangViewSet, basename="mauchuyendoitbthang")
 router.register(r"so-chuyen-doi-tb-thang", SoChuyenDoiTBThangViewSet, basename="sochuyendoitbthang")

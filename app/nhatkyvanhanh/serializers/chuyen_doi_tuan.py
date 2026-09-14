@@ -2,8 +2,53 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
-from nhatkyvanhanh.models import SoChuyenDoiThietBiTuan, LanChuyenDoiThietBi, ChiTietChuyenDoiThietBi, MauChuyenDoiThietBi
+from nhatkyvanhanh.models import (
+    ChiTietChuyenDoiThietBi,
+    KhuVucChuyenDoiThietBi,
+    LanChuyenDoiThietBi,
+    MauChuyenDoiThietBi,
+    SoChuyenDoiThietBiTuan,
+)
 from .mixins import UserSummaryMixin, FlexibleNhaMayRelatedField
+
+
+LEGACY_AREA_NAMES = {
+    "H1": "Tổ máy H1",
+    "H2": "Tổ máy H2",
+    "tu_dung": "Tự dùng",
+}
+
+
+class KhuVucChuyenDoiThietBiSerializer(serializers.ModelSerializer):
+    nha_may = FlexibleNhaMayRelatedField(queryset=NhaMay.objects.all())
+    nha_may_code = serializers.CharField(source="nha_may.ma_nha_may", read_only=True)
+    nha_may_name = serializers.CharField(source="nha_may.ten_nha_may", read_only=True)
+
+    class Meta:
+        model = KhuVucChuyenDoiThietBi
+        fields = [
+            "id", "nha_may", "nha_may_code", "nha_may_name",
+            "ma_khu_vuc", "ten_khu_vuc", "thu_tu", "dang_su_dung",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["nha_may_code", "nha_may_name", "created_at", "updated_at"]
+
+    def validate_ma_khu_vuc(self, value):
+        value = (value or "").strip().upper()
+        if not value or any(not (char.isalnum() or char in "_-") for char in value):
+            raise serializers.ValidationError("Mã khu vực chỉ gồm chữ, số, dấu gạch ngang hoặc gạch dưới.")
+        return value
+
+    def validate_ten_khu_vuc(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Tên khu vực là bắt buộc.")
+        return value
+
+    def validate(self, attrs):
+        if self.instance and "nha_may" in attrs and attrs["nha_may"].id != self.instance.nha_may_id:
+            raise serializers.ValidationError({"nha_may": "Không thể chuyển khu vực sang nhà máy khác."})
+        return attrs
 
 class MauChuyenDoiThietBiSerializer(serializers.ModelSerializer):
     nha_may = FlexibleNhaMayRelatedField(queryset=NhaMay.objects.all(), required=False, allow_null=True)
@@ -12,6 +57,8 @@ class MauChuyenDoiThietBiSerializer(serializers.ModelSerializer):
     thiet_bi_ten = serializers.CharField(source="thiet_bi.ten", read_only=True)
     thiet_bi_ma_day_du = serializers.CharField(source="thiet_bi.ma_day_du", read_only=True)
     to_may_display = serializers.SerializerMethodField()
+    khu_vuc_code = serializers.CharField(source="khu_vuc.ma_khu_vuc", read_only=True)
+    khu_vuc_name = serializers.CharField(source="khu_vuc.ten_khu_vuc", read_only=True)
 
     class Meta:
         model = MauChuyenDoiThietBi
@@ -20,6 +67,9 @@ class MauChuyenDoiThietBiSerializer(serializers.ModelSerializer):
             "nha_may",
             "nha_may_code",
             "nha_may_name",
+            "khu_vuc",
+            "khu_vuc_code",
+            "khu_vuc_name",
             "to_may",
             "to_may_display",
             "nhom_thiet_bi",
@@ -31,7 +81,33 @@ class MauChuyenDoiThietBiSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["nha_may_code", "nha_may_name", "thiet_bi_ten", "thiet_bi_ma_day_du", "to_may_display", "created_at", "updated_at"]
+        read_only_fields = ["nha_may_code", "nha_may_name", "khu_vuc_code", "khu_vuc_name", "thiet_bi_ten", "thiet_bi_ma_day_du", "to_may_display", "created_at", "updated_at"]
+        extra_kwargs = {"to_may": {"required": False}}
+
+    def validate(self, attrs):
+        nha_may = attrs.get("nha_may", getattr(self.instance, "nha_may", None))
+        if nha_may is None:
+            request = self.context.get("request")
+            if request:
+                from core.factory_scope import get_user_factory
+                nha_may = get_user_factory(request.user)
+        khu_vuc = attrs.get("khu_vuc", getattr(self.instance, "khu_vuc", None))
+        if khu_vuc is None:
+            code = attrs.get("to_may") or getattr(self.instance, "to_may", "")
+            if nha_may and code:
+                khu_vuc = KhuVucChuyenDoiThietBi.objects.filter(
+                    nha_may=nha_may, ma_khu_vuc__iexact=code
+                ).first()
+                if khu_vuc:
+                    attrs["khu_vuc"] = khu_vuc
+        if not khu_vuc:
+            raise serializers.ValidationError({"khu_vuc": "Vui lòng chọn tổ máy hoặc khu vực."})
+        if nha_may and khu_vuc.nha_may_id != nha_may.id:
+            raise serializers.ValidationError({"khu_vuc": "Khu vực không thuộc nhà máy đã chọn."})
+        if not khu_vuc.dang_su_dung and (not self.instance or self.instance.khu_vuc_id != khu_vuc.id):
+            raise serializers.ValidationError({"khu_vuc": "Khu vực này đã ngừng sử dụng."})
+        attrs["to_may"] = khu_vuc.ma_khu_vuc
+        return attrs
 
     def get_nha_may_code(self, obj):
         return obj.nha_may.ma_nha_may if obj.nha_may else None
@@ -40,7 +116,9 @@ class MauChuyenDoiThietBiSerializer(serializers.ModelSerializer):
         return obj.nha_may.ten_nha_may if obj.nha_may else None
 
     def get_to_may_display(self, obj):
-        return obj.get_to_may_display()
+        if obj.khu_vuc_id:
+            return obj.khu_vuc.ten_khu_vuc
+        return LEGACY_AREA_NAMES.get(obj.to_may, obj.to_may)
 
 
 class ChiTietChuyenDoiThietBiSerializer(serializers.ModelSerializer):
@@ -50,6 +128,8 @@ class ChiTietChuyenDoiThietBiSerializer(serializers.ModelSerializer):
     trang_thai_display = serializers.SerializerMethodField()
     trang_thai_tuan_truoc = serializers.SerializerMethodField()
     trang_thai_tuan_truoc_display = serializers.SerializerMethodField()
+    khu_vuc_code = serializers.CharField(source="khu_vuc.ma_khu_vuc", read_only=True)
+    khu_vuc_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ChiTietChuyenDoiThietBi
@@ -59,6 +139,9 @@ class ChiTietChuyenDoiThietBiSerializer(serializers.ModelSerializer):
             "thiet_bi",
             "thiet_bi_ten",
             "thiet_bi_ma_day_du",
+            "khu_vuc",
+            "khu_vuc_code",
+            "khu_vuc_name",
             "to_may",
             "to_may_display",
             "nhom_thiet_bi",
@@ -77,6 +160,9 @@ class ChiTietChuyenDoiThietBiSerializer(serializers.ModelSerializer):
             "thiet_bi_ten",
             "thiet_bi_ma_day_du",
             "to_may",
+            "khu_vuc",
+            "khu_vuc_code",
+            "khu_vuc_name",
             "to_may_display",
             "nhom_thiet_bi",
             "thu_tu",
@@ -114,7 +200,14 @@ class ChiTietChuyenDoiThietBiSerializer(serializers.ModelSerializer):
         return getattr(lan, "_cached_prev_status_map", {}).get(str(obj.thiet_bi_id), {})
 
     def get_to_may_display(self, obj):
-        return obj.get_to_may_display()
+        return self.get_khu_vuc_name(obj)
+
+    def get_khu_vuc_name(self, obj):
+        if obj.ten_khu_vuc_snapshot:
+            return obj.ten_khu_vuc_snapshot
+        if obj.khu_vuc_id:
+            return obj.khu_vuc.ten_khu_vuc
+        return LEGACY_AREA_NAMES.get(obj.to_may, obj.to_may)
 
     def get_trang_thai_display(self, obj):
         return obj.get_trang_thai_display() if obj.trang_thai else ""

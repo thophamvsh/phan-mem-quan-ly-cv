@@ -161,6 +161,16 @@ def _create_default_switch_templates(nha_may):
         return 0
 
     factory_code = nha_may.ma_nha_may.upper()
+    from nhatkyvanhanh.models import KhuVucChuyenDoiThietBi
+
+    area_names = {"H1": "Tổ máy H1", "H2": "Tổ máy H2", "tu_dung": "Tự dùng"}
+    areas = {}
+    for area_order, (area_code, area_name) in enumerate(area_names.items(), start=1):
+        areas[area_code], _ = KhuVucChuyenDoiThietBi.objects.get_or_create(
+            nha_may=nha_may,
+            ma_khu_vuc=area_code.upper(),
+            defaults={"ten_khu_vuc": area_name, "thu_tu": area_order},
+        )
     unit_codes = ["H1", "H2"]
     rows = []
     order = 1
@@ -210,16 +220,20 @@ def _create_default_switch_templates(nha_may):
             nha_may=nha_may,
             thiet_bi=row["thiet_bi"],
             defaults={
+                "khu_vuc": areas[row["to_may"]],
                 "to_may": row["to_may"],
                 "nhom_thiet_bi": row["nhom_thiet_bi"],
                 "thu_tu": row["thu_tu"],
                 "dang_su_dung": True,
             },
         )
-        if not was_created and obj.to_may != row["to_may"]:
+        if not was_created and (
+            obj.to_may != row["to_may"] or obj.khu_vuc_id != areas[row["to_may"]].id
+        ):
+            obj.khu_vuc = areas[row["to_may"]]
             obj.to_may = row["to_may"]
             obj.nhom_thiet_bi = row["nhom_thiet_bi"]
-            obj.save(update_fields=["to_may", "nhom_thiet_bi"])
+            obj.save(update_fields=["khu_vuc", "to_may", "nhom_thiet_bi"])
         created += int(was_created)
     return created
 
