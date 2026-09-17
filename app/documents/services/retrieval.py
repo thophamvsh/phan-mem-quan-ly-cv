@@ -4,6 +4,7 @@ import re
 
 import numpy as np
 from django.conf import settings
+from core.factory_scope import has_all_factory_access
 
 try:
     permissions = importlib.import_module("ai_tools.permissions")
@@ -15,7 +16,7 @@ AI_TOOL_SCOPE_VINHSON = permissions.AI_TOOL_SCOPE_VINHSON
 get_ai_tool_scopes_for_user = permissions.get_ai_tool_scopes_for_user
 
 from pgvector.django import CosineDistance
-from ..models import Document, DocumentChunk
+from ..models import Document, DocumentChunk, ModuleGuide
 from .embeddings import get_embedding
 from .normalization import normalize_doc_type, normalize_text
 from .query_parser import parse_query
@@ -43,12 +44,44 @@ def get_allowed_factories_for_user(user):
     }
 
 
+def _get_module_guide_factories_for_user(user):
+    all_factories = get_allowed_factories_for_user(user)
+    if has_all_factory_access(user):
+        return all_factories
+
+    plant_code = str(
+        getattr(
+            getattr(getattr(user, "profile", None), "nha_may", None),
+            "ma_nha_may",
+            "",
+        )
+    ).upper()
+    mapping = {
+        "SH": Document.FACTORY_SONGHINH,
+        "VS": Document.FACTORY_VINHSON,
+        "TKT": Document.FACTORY_THUONGKONTUM,
+    }
+    factory = mapping.get(plant_code)
+    return {Document.FACTORY_GENERAL, factory} if factory else {Document.FACTORY_GENERAL}
+
+
 def filter_documents_for_user(user, queryset=None):
     queryset = queryset or Document.objects.all()
-    return queryset.filter(factory__in=get_allowed_factories_for_user(user))
+    return queryset.filter(
+        factory__in=get_allowed_factories_for_user(user),
+        is_active=True,
+    )
 
 
-def search_documents(user, query, factory="", document_type="", folder_id=None, limit=5):
+def search_documents(
+    user,
+    query,
+    factory="",
+    document_type="",
+    folder_id=None,
+    limit=5,
+    module_code="",
+):
     parsed_query = parse_query(query)
     query = (query or "").strip()
     if not query:
@@ -61,9 +94,22 @@ def search_documents(user, query, factory="", document_type="", folder_id=None, 
     base_queryset = (
         DocumentChunk.objects.select_related("document")
         .defer("document__markdown_text")
-        .filter(document__status=Document.STATUS_READY, document__factory__in=allowed_factories)
+        .filter(
+            document__status=Document.STATUS_READY,
+            document__is_active=True,
+            document__factory__in=allowed_factories,
+        )
         .filter(embedding__isnull=False)
     )
+
+    if module_code:
+        valid_codes = {value for value, _label in ModuleGuide.MODULE_CHOICES}
+        if module_code not in valid_codes:
+            return []
+        base_queryset = base_queryset.filter(
+            metadata__module_code=module_code,
+            document__factory__in=_get_module_guide_factories_for_user(user),
+        )
 
     if folder_id:
         base_queryset = base_queryset.filter(document__folders__id=folder_id)
@@ -316,6 +362,9 @@ def _format_result(item, parsed_query):
         "page_num": page_num,
         "file_url": file_url,
         "matched_metadata": _matched_metadata(parsed_query, metadata),
+        "module_code": metadata.get("module_code", ""),
+        "guide_id": metadata.get("guide_id"),
+        "version_label": metadata.get("version_label", ""),
     }
 
 

@@ -36,3 +36,27 @@ class AiConversationMessage(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.session_id} {self.role}"
+
+
+class AuditAiQuery(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audited_ai_queries",
+    )
+    query = models.TextField()
+    answer = models.TextField(blank=True)
+    module_code = models.CharField(max_length=50, blank=True, db_index=True)
+    document_ids = models.JSONField(default=list, blank=True)
+    guide_ids = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        verbose_name = "Nhật ký truy vấn AI tài liệu"
+        verbose_name_plural = "Nhật ký truy vấn AI tài liệu"
+
+    def __str__(self):
+        return f"{self.user_id or '-'} - {self.module_code or 'all'} - {self.created_at}"

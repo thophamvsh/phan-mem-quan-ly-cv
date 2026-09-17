@@ -73,6 +73,7 @@ if not AUTH_COOKIE_SECURE:
 
 STATIC_ROOT = '/vol/web/static'
 MEDIA_ROOT = '/vol/web/media'
+USE_X_ACCEL_REDIRECT = env_bool('USE_X_ACCEL_REDIRECT', True)
 
 STORAGES = {
     'default': {

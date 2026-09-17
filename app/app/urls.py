@@ -53,6 +53,7 @@ urlpatterns = [
     path("api/v1/tochuc/", include(("tochuc.urls", "tochuc"), namespace="v1-tochuc")),
     path("api/v1/ai/", include("ai_tools.urls")),
     path("api/v1/documents/", include("documents.urls")),
+    path("api/v1/module-guides/", include("documents.module_guide_urls")),
     path("api/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="legacy-thongsothuyvan")),
     path("api/v1/thongsothuyvan/", include(("thongsothuyvan.urls", "thongsothuyvan"), namespace="v1-thongsothuyvan")),
 ]

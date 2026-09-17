@@ -200,6 +200,21 @@ class UserProfile(models.Model):
     can_view_data_audit_logs = models.BooleanField(default=False, verbose_name='Có quyền xem vết thay đổi dữ liệu')
     can_view_user_management_audit = models.BooleanField(default=False, verbose_name='Có quyền xem lịch sử quản lý tài khoản')
     can_export_audit_logs = models.BooleanField(default=False, verbose_name='Có quyền xuất báo cáo kiểm toán')
+    can_view_module_guides = models.BooleanField(
+        default=False, verbose_name='Có quyền xem hướng dẫn module'
+    )
+    can_view_module_guide_history = models.BooleanField(
+        default=False, verbose_name='Có quyền xem lịch sử hướng dẫn module'
+    )
+    can_manage_module_guides = models.BooleanField(
+        default=False, verbose_name='Có quyền quản lý hướng dẫn module'
+    )
+    can_publish_module_guides = models.BooleanField(
+        default=False, verbose_name='Có quyền phê duyệt hướng dẫn module'
+    )
+    can_download_module_guides = models.BooleanField(
+        default=False, verbose_name='Có quyền tải hướng dẫn module'
+    )
 
     user = models.OneToOneField(
         User,

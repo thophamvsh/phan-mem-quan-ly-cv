@@ -24,7 +24,20 @@ def process_document(document):
         contents = [chunk["content"] for chunk in chunks]
         embeddings = get_embeddings_batch(contents)
         prepared_chunks = []
+        guide = document.module_guide if document.module_guide_id else None
+        guide_metadata = (
+            {
+                "module_code": guide.module_code,
+                "is_primary": guide.is_primary,
+                "guide_id": guide.id,
+                "version_label": guide.version_label,
+                "checksum": guide.checksum,
+            }
+            if guide
+            else {}
+        )
         for index, chunk in enumerate(chunks):
+            metadata = {**chunk.get("metadata", {}), **guide_metadata}
             prepared_chunks.append(
                 {
                     "chunk_index": index,
@@ -33,7 +46,7 @@ def process_document(document):
                     "token_count": chunk.get("token_count", 0),
                     "page_from": chunk.get("page_from"),
                     "page_to": chunk.get("page_to"),
-                    "metadata": chunk.get("metadata", {}),
+                    "metadata": metadata,
                     "embedding": embeddings[index],
                 }
             )

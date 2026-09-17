@@ -100,7 +100,7 @@ class DocumentTaskAndToolTests(TestCase):
     @patch("documents.ai_tools.has_ai_documents_permission", return_value=True)
     def test_document_tool_handles_no_results(self, _permission, search):
         result = handle_document_tool_call(Mock(), self._tool_call({"query": "test", "limit": 2}))
-        self.assertIn("Khong tim thay", result["content"])
+        self.assertIn("không tìm thấy căn cứ", result["content"].lower())
         search.assert_called_once()
 
     @patch("documents.ai_tools.search_documents")

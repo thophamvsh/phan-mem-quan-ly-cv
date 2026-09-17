@@ -1,8 +1,9 @@
 from pathlib import Path
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from documents.models import Document, DocumentChunk, DocumentFolder
+from documents.models import Document, DocumentChunk, DocumentFolder, ModuleGuide
 from documents.services.normalization import canonicalize_doc_type
 
 
@@ -132,3 +133,100 @@ class DocumentChunkResultSerializer(serializers.Serializer):
     heading_path = serializers.CharField(allow_blank=True)
     chunk_index = serializers.IntegerField()
     content = serializers.CharField()
+
+
+class ModuleGuideSerializer(serializers.ModelSerializer):
+    nha_may_name = serializers.CharField(source="nha_may.ten_nha_may", read_only=True)
+    module_name = serializers.CharField(source="get_module_code_display", read_only=True)
+    document_kind_name = serializers.CharField(
+        source="get_document_kind_display", read_only=True
+    )
+    created_by_name = serializers.CharField(
+        source="created_by.get_full_name", read_only=True
+    )
+    approved_by_name = serializers.CharField(
+        source="approved_by.get_full_name", read_only=True
+    )
+    is_expired = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ModuleGuide
+        fields = (
+            "id",
+            "module_code",
+            "module_name",
+            "nha_may",
+            "nha_may_name",
+            "title",
+            "document_kind",
+            "document_kind_name",
+            "is_primary",
+            "order",
+            "version_label",
+            "status",
+            "effective_from",
+            "effective_to",
+            "is_expired",
+            "quick_guide",
+            "file",
+            "original_filename",
+            "mime_type",
+            "file_size",
+            "checksum",
+            "created_by",
+            "created_by_name",
+            "approved_by",
+            "approved_by_name",
+            "published_at",
+            "retired_by",
+            "retired_at",
+            "retire_reason",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "original_filename",
+            "mime_type",
+            "file_size",
+            "checksum",
+            "created_by",
+            "approved_by",
+            "published_at",
+            "retired_by",
+            "retired_at",
+            "retire_reason",
+            "created_at",
+            "updated_at",
+        )
+        extra_kwargs = {"file": {"write_only": True, "required": True}}
+
+    def validate(self, attrs):
+        if self.instance and self.instance.status != ModuleGuide.STATUS_DRAFT:
+            raise serializers.ValidationError(
+                "Chỉ có thể chỉnh sửa tài liệu đang ở trạng thái dự thảo."
+            )
+        return attrs
+
+    @staticmethod
+    def _validation_detail(exc):
+        if hasattr(exc, "message_dict"):
+            return exc.message_dict
+        return {"detail": exc.messages}
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(self._validation_detail(exc)) from exc
+
+    def update(self, instance, validated_data):
+        try:
+            return super().update(instance, validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(self._validation_detail(exc)) from exc
+
+
+class ModuleGuideDetailSerializer(ModuleGuideSerializer):
+    pass

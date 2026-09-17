@@ -276,7 +276,20 @@ server {
     }
 
     location /media/ {
-        alias /var/www/ats-backend/phan-mem-quan-ly-cv/vol/web/media/;
+        alias /var/www/backend/phan-mem-quan-ly-cv/vol/web/media/;
+    }
+
+    # Không cho truy cập trực tiếp tài liệu hướng dẫn có phân quyền.
+    location ^~ /media/module_guides/ {
+        return 404;
+    }
+
+    # Chỉ Django sau khi kiểm tra JWT/RBAC mới cấp X-Accel-Redirect tới đây.
+    location ^~ /protected_media/ {
+        internal;
+        alias /var/www/backend/phan-mem-quan-ly-cv/vol/web/media/;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Cache-Control "private, no-cache, no-store, must-revalidate" always;
     }
 
     location / {

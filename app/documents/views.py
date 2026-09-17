@@ -2,29 +2,53 @@ import logging
 import mimetypes
 import os
 import threading
+from urllib.parse import quote
 
 from django.conf import settings
-from django.db import close_old_connections
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, close_old_connections, models, transaction
 from django.shortcuts import get_object_or_404
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, permissions, status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError as DRFValidationError
+from core.factory_scope import has_all_factory_access
+from core.models import UserActivityLog
+from core.signals import get_client_ip
 from core.account_auth import AccountJWTAuthentication as JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
-from documents.models import Document, DocumentFolder
-from documents.permissions import CanUseAiDocuments, has_ai_documents_permission
+from documents.models import Document, DocumentFolder, ModuleGuide
+from documents.permissions import (
+    CanAccessModuleGuideContent,
+    CanManageModuleGuides,
+    CanPublishModuleGuides,
+    CanUseAiDocuments,
+    CanViewModuleGuideHistory,
+    CanViewModuleGuides,
+    can_download_module_guides,
+    can_review_module_guides,
+    can_view_module_guide_history,
+    has_ai_documents_permission,
+)
 from documents.serializers import (
     DocumentSearchSerializer,
     DocumentSerializer,
     DocumentUploadSerializer,
     DocumentFolderSerializer,
     DocumentUpdateSerializer,
+    ModuleGuideDetailSerializer,
+    ModuleGuideSerializer,
+)
+from documents.services.module_guide_service import (
+    ModuleGuideConflict,
+    create_next_version,
+    publish_module_guide,
+    retire_module_guide,
 )
 from documents.services.ingest import process_document
 from documents.services.retrieval import (
@@ -204,3 +228,290 @@ class DocumentFolderViewSet(viewsets.ModelViewSet):
     permission_classes = [CanUseAiDocuments]
     serializer_class = DocumentFolderSerializer
     queryset = DocumentFolder.objects.all().order_by("name")
+
+
+def _scoped_guide_or_404(user, pk):
+    guide = get_object_or_404(ModuleGuide.objects.select_related("nha_may"), pk=pk)
+    if guide.nha_may_id and not has_all_factory_access(user):
+        user_plant_id = getattr(getattr(user, "profile", None), "nha_may_id", None)
+        if user_plant_id != guide.nha_may_id:
+            raise PermissionDenied("Bạn không có quyền truy cập tài liệu của nhà máy khác.")
+    return guide
+
+
+def _enforce_guide_mutation_scope(user, guide):
+    if has_all_factory_access(user):
+        return
+    user_plant_id = getattr(getattr(user, "profile", None), "nha_may_id", None)
+    if guide.nha_may_id is None or guide.nha_may_id != user_plant_id:
+        raise PermissionDenied(
+            "Bạn không có quyền thay đổi tài liệu chung hoặc tài liệu của nhà máy khác."
+        )
+
+
+def _raise_drf_validation(exc):
+    detail = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+    raise DRFValidationError(detail) from exc
+
+
+def _log_guide_action(request, guide, action, extra=None):
+    details = {
+        "guide_id": guide.id,
+        "module_code": guide.module_code,
+        "version_label": guide.version_label,
+        "checksum": guide.checksum,
+    }
+    if extra:
+        details.update(extra)
+    UserActivityLog.objects.create(
+        user=request.user,
+        action_type=f"GUIDE_{action.upper()}",
+        description=" | ".join(f"{key}={value}" for key, value in details.items()),
+        ip_address=get_client_ip(request),
+        user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000],
+        nha_may=guide.nha_may,
+    )
+
+
+class ModuleGuideListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = ModuleGuideSerializer
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get_permissions(self):
+        permission_classes = (
+            (permissions.IsAuthenticated, CanManageModuleGuides)
+            if self.request.method == "POST"
+            else (permissions.IsAuthenticated, CanViewModuleGuides)
+        )
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        user = self.request.user
+        can_review = can_review_module_guides(user)
+        queryset = ModuleGuide.objects.select_related(
+            "nha_may", "created_by", "approved_by"
+        )
+        requested_status = self.request.query_params.get("status")
+        if not can_review:
+            queryset = queryset.filter(status=ModuleGuide.STATUS_PUBLISHED)
+        elif requested_status:
+            valid_statuses = {choice[0] for choice in ModuleGuide.STATUS_CHOICES}
+            if requested_status not in valid_statuses:
+                raise DRFValidationError({"status": "Trạng thái tài liệu không hợp lệ."})
+            queryset = queryset.filter(status=requested_status)
+
+        module_code = self.request.query_params.get("module_code")
+        if module_code:
+            queryset = queryset.filter(module_code=module_code)
+
+        if has_all_factory_access(user):
+            requested_plant = self.request.query_params.get("nha_may")
+            management_mode = self.request.query_params.get("is_management") == "1"
+            if not requested_plant and not (can_review and management_mode):
+                raise DRFValidationError(
+                    {"nha_may": "Vui lòng chọn nhà máy cần tra cứu."}
+                )
+            if requested_plant:
+                queryset = queryset.filter(
+                    models.Q(nha_may_id=requested_plant)
+                    | models.Q(nha_may__isnull=True)
+                )
+        else:
+            user_plant_id = getattr(getattr(user, "profile", None), "nha_may_id", None)
+            if user_plant_id:
+                queryset = queryset.filter(
+                    models.Q(nha_may_id=user_plant_id)
+                    | models.Q(nha_may__isnull=True)
+                )
+            else:
+                queryset = queryset.filter(nha_may__isnull=True)
+
+        return queryset.annotate(
+            is_plant_specific=models.Case(
+                models.When(nha_may__isnull=False, then=models.Value(1)),
+                default=models.Value(0),
+                output_field=models.IntegerField(),
+            )
+        ).order_by("-is_primary", "-is_plant_specific", "order", "-published_at")
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        requested_plant = serializer.validated_data.get("nha_may")
+        if has_all_factory_access(user):
+            serializer.save(created_by=user, status=ModuleGuide.STATUS_DRAFT)
+            return
+        profile = getattr(user, "profile", None)
+        user_plant = getattr(profile, "nha_may", None)
+        if not user_plant or not requested_plant or requested_plant.pk != user_plant.pk:
+            raise PermissionDenied("Bạn chỉ được tạo tài liệu cho nhà máy được phân công.")
+        serializer.save(
+            created_by=user,
+            nha_may=user_plant,
+            status=ModuleGuide.STATUS_DRAFT,
+        )
+
+
+class ModuleGuideDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ModuleGuideDetailSerializer
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get_permissions(self):
+        permission_classes = (
+            (permissions.IsAuthenticated, CanManageModuleGuides)
+            if self.request.method in ("PUT", "PATCH", "DELETE")
+            else (permissions.IsAuthenticated, CanAccessModuleGuideContent)
+        )
+        return [permission() for permission in permission_classes]
+
+    def get_object(self):
+        guide = _scoped_guide_or_404(self.request.user, self.kwargs["pk"])
+        if self.request.method in ("PUT", "PATCH", "DELETE"):
+            _enforce_guide_mutation_scope(self.request.user, guide)
+            if guide.status != ModuleGuide.STATUS_DRAFT:
+                raise ModuleGuideConflict("Chỉ được thay đổi tài liệu dự thảo.")
+        elif guide.status == ModuleGuide.STATUS_DRAFT:
+            if not can_review_module_guides(self.request.user):
+                raise PermissionDenied("Bạn không có quyền xem tài liệu dự thảo.")
+        elif guide.status == ModuleGuide.STATUS_RETIRED:
+            if not can_view_module_guide_history(self.request.user):
+                raise PermissionDenied("Bạn không có quyền xem tài liệu đã thu hồi.")
+        self.check_object_permissions(self.request, guide)
+        return guide
+
+    def perform_update(self, serializer):
+        requested_plant = serializer.validated_data.get(
+            "nha_may", serializer.instance.nha_may
+        )
+        if not has_all_factory_access(self.request.user):
+            user_plant_id = getattr(
+                getattr(self.request.user, "profile", None), "nha_may_id", None
+            )
+            if not requested_plant or requested_plant.pk != user_plant_id:
+                raise PermissionDenied("Bạn không được chuyển tài liệu sang phạm vi khác.")
+        serializer.save()
+
+
+class ModuleGuideContentAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated, CanAccessModuleGuideContent)
+
+    def get(self, request, pk):
+        guide = _scoped_guide_or_404(request.user, pk)
+        if guide.status == ModuleGuide.STATUS_DRAFT and not can_review_module_guides(request.user):
+            raise PermissionDenied("Bạn không có quyền mở tài liệu dự thảo.")
+        if guide.status == ModuleGuide.STATUS_RETIRED and not can_view_module_guide_history(
+            request.user
+        ):
+            raise PermissionDenied("Bạn không có quyền mở tài liệu đã thu hồi.")
+
+        is_download = request.query_params.get("download") == "1"
+        if is_download and not can_download_module_guides(request.user):
+            raise PermissionDenied("Bạn không có quyền tải tài liệu.")
+        if not guide.file:
+            raise Http404("Tài liệu không có file đính kèm.")
+
+        _log_guide_action(
+            request,
+            guide,
+            "download" if is_download else "view",
+            {"status": guide.status},
+        )
+        disposition = "attachment" if is_download else "inline"
+        encoded_filename = quote(guide.original_filename or "document", safe="")
+        content_disposition = f"{disposition}; filename*=UTF-8''{encoded_filename}"
+
+        if getattr(settings, "USE_X_ACCEL_REDIRECT", False) and not settings.DEBUG:
+            response = HttpResponse()
+            response["Content-Type"] = guide.mime_type
+            response["Content-Disposition"] = content_disposition
+            response["X-Accel-Redirect"] = f"/protected_media/{quote(guide.file.name, safe='/')}"
+        else:
+            response = FileResponse(
+                guide.file.open("rb"),
+                content_type=guide.mime_type,
+                as_attachment=is_download,
+                filename=guide.original_filename,
+            )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+        return response
+
+
+class ModuleGuidePublishAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated, CanPublishModuleGuides)
+
+    def post(self, request, pk):
+        target = _scoped_guide_or_404(request.user, pk)
+        _enforce_guide_mutation_scope(request.user, target)
+        try:
+            with transaction.atomic():
+                guide = publish_module_guide(target.id, request.user)
+        except IntegrityError as exc:
+            raise ModuleGuideConflict() from exc
+        except DjangoValidationError as exc:
+            _raise_drf_validation(exc)
+        _log_guide_action(request, guide, "publish")
+        return Response(ModuleGuideDetailSerializer(guide).data)
+
+
+class ModuleGuideRetireAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated, CanPublishModuleGuides)
+
+    def post(self, request, pk):
+        target = _scoped_guide_or_404(request.user, pk)
+        _enforce_guide_mutation_scope(request.user, target)
+        reason = str(request.data.get("reason", "")).strip()
+        if not reason:
+            raise DRFValidationError({"reason": "Vui lòng nhập lý do thu hồi."})
+        try:
+            guide = retire_module_guide(target.id, request.user, reason)
+        except DjangoValidationError as exc:
+            _raise_drf_validation(exc)
+        _log_guide_action(request, guide, "retire", {"reason": reason})
+        return Response(ModuleGuideDetailSerializer(guide).data)
+
+
+class ModuleGuideCreateNextVersionAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated, CanManageModuleGuides)
+
+    def post(self, request, pk):
+        target = _scoped_guide_or_404(request.user, pk)
+        _enforce_guide_mutation_scope(request.user, target)
+        version_label = str(request.data.get("version_label", "")).strip()
+        try:
+            guide = create_next_version(target.id, version_label, request.user)
+        except IntegrityError as exc:
+            raise ModuleGuideConflict("Phiên bản này vừa được tạo.") from exc
+        except DjangoValidationError as exc:
+            _raise_drf_validation(exc)
+        _log_guide_action(request, guide, "create_version")
+        return Response(ModuleGuideDetailSerializer(guide).data, status=status.HTTP_201_CREATED)
+
+
+class ModuleGuideHistoryAPIView(generics.ListAPIView):
+    serializer_class = ModuleGuideSerializer
+    permission_classes = (permissions.IsAuthenticated, CanViewModuleGuideHistory)
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = ModuleGuide.objects.select_related("nha_may", "created_by").filter(
+            status=ModuleGuide.STATUS_RETIRED
+        )
+        module_code = self.request.query_params.get("module_code")
+        if module_code:
+            queryset = queryset.filter(module_code=module_code)
+        if has_all_factory_access(user):
+            plant = self.request.query_params.get("nha_may")
+            if plant:
+                queryset = queryset.filter(
+                    models.Q(nha_may_id=plant) | models.Q(nha_may__isnull=True)
+                )
+        else:
+            plant_id = getattr(getattr(user, "profile", None), "nha_may_id", None)
+            queryset = (
+                queryset.filter(
+                    models.Q(nha_may_id=plant_id) | models.Q(nha_may__isnull=True)
+                )
+                if plant_id
+                else queryset.filter(nha_may__isnull=True)
+            )
+        return queryset.order_by("-published_at", "-created_at")

@@ -199,6 +199,16 @@ class UserProfileInline(admin.StackedInline):
         ('Thông tin hồ sơ', {
             'fields': ('role', 'full_name', 'ho_ten', 'ho', 'ten', 'phone', 'chuc_danh', 'is_mobile_user')
         }),
+        ('Quyền hướng dẫn / quy trình module', {
+            'fields': (
+                'can_view_module_guides',
+                'can_view_module_guide_history',
+                'can_manage_module_guides',
+                'can_publish_module_guides',
+                'can_download_module_guides',
+            ),
+            'description': 'Quyền xem, tải, soạn thảo, phê duyệt và tra cứu lịch sử tài liệu hướng dẫn.'
+        }),
         ('Quyền nhật ký sự kiện vận hành', {
             'fields': (
                 'can_view_operation_events',
@@ -612,6 +622,16 @@ class UserProfileAdmin(admin.ModelAdmin):
         ('Phân quyền nhà máy', {
             'fields': ('nha_may', 'is_all_factories'),
             'description': 'Gán nhà máy cho user. Nếu chọn "Tất cả nhà máy" thì user có quyền truy cập mọi nhà máy.'
+        }),
+        ('Quyền hướng dẫn / quy trình module', {
+            'fields': (
+                'can_view_module_guides',
+                'can_view_module_guide_history',
+                'can_manage_module_guides',
+                'can_publish_module_guides',
+                'can_download_module_guides',
+            ),
+            'description': 'Quyền xem, tải, soạn thảo, phê duyệt và tra cứu lịch sử tài liệu hướng dẫn.'
         }),
         ('Quyền xem dữ liệu', {
             'fields': ('can_view_materials', 'can_view_inventory', 'can_view_reports'),

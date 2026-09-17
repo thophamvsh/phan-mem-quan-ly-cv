@@ -26,6 +26,8 @@ services:
       - .env.staging
     ports:
       - "${APP_PORT:-18000}:8000"
+    environment:
+      USE_X_ACCEL_REDIRECT: "false"
     volumes:
       - ./vol/staging/media:/vol/web/media
       - ./vol/staging/static:/vol/web/static
