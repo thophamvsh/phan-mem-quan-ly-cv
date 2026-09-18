@@ -273,6 +273,13 @@ def _log_guide_action(request, guide, action, extra=None):
     )
 
 
+class ModuleGuideOptionsAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        return Response(ModuleGuide.get_module_options())
+
+
 class ModuleGuideListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = ModuleGuideSerializer
     parser_classes = (MultiPartParser, FormParser)
@@ -301,22 +308,40 @@ class ModuleGuideListCreateAPIView(generics.ListCreateAPIView):
             queryset = queryset.filter(status=requested_status)
 
         module_code = self.request.query_params.get("module_code")
+        module_scope = None
         if module_code:
+            module_scope = ModuleGuide.get_module_scope(module_code)
+            if module_scope is None:
+                raise DRFValidationError(
+                    {"module_code": "Module hướng dẫn không hợp lệ."}
+                )
             queryset = queryset.filter(module_code=module_code)
 
+        requested_plant = self.request.query_params.get("nha_may")
+        management_mode = self.request.query_params.get("is_management") == "1"
+        can_view_all_for_management = (
+            can_review and management_mode and not requested_plant
+        )
+
+        if can_view_all_for_management:
+            pass
+        elif module_scope == ModuleGuide.SCOPE_GLOBAL:
+            queryset = queryset.filter(nha_may__isnull=True)
         if has_all_factory_access(user):
-            requested_plant = self.request.query_params.get("nha_may")
-            management_mode = self.request.query_params.get("is_management") == "1"
-            if not requested_plant and not (can_review and management_mode):
+            if can_view_all_for_management or module_scope == ModuleGuide.SCOPE_GLOBAL:
+                pass
+            elif not requested_plant and module_scope == ModuleGuide.SCOPE_PLANT_OPTIONAL:
+                queryset = queryset.filter(nha_may__isnull=True)
+            elif not requested_plant:
                 raise DRFValidationError(
                     {"nha_may": "Vui lòng chọn nhà máy cần tra cứu."}
                 )
-            if requested_plant:
+            else:
                 queryset = queryset.filter(
                     models.Q(nha_may_id=requested_plant)
                     | models.Q(nha_may__isnull=True)
                 )
-        else:
+        elif module_scope != ModuleGuide.SCOPE_GLOBAL:
             user_plant_id = getattr(getattr(user, "profile", None), "nha_may_id", None)
             if user_plant_id:
                 queryset = queryset.filter(

@@ -6,6 +6,7 @@ from documents.views import (
     ModuleGuideDetailAPIView,
     ModuleGuideHistoryAPIView,
     ModuleGuideListCreateAPIView,
+    ModuleGuideOptionsAPIView,
     ModuleGuidePublishAPIView,
     ModuleGuideRetireAPIView,
 )
@@ -13,6 +14,7 @@ from documents.views import (
 
 urlpatterns = [
     path("", ModuleGuideListCreateAPIView.as_view(), name="module-guide-list"),
+    path("module-options/", ModuleGuideOptionsAPIView.as_view(), name="module-guide-options"),
     path("history/", ModuleGuideHistoryAPIView.as_view(), name="module-guide-history"),
     path("<int:pk>/", ModuleGuideDetailAPIView.as_view(), name="module-guide-detail"),
     path("<int:pk>/content/", ModuleGuideContentAPIView.as_view(), name="module-guide-content"),

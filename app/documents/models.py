@@ -200,6 +200,15 @@ class DocumentChunk(models.Model):
 
 
 class ModuleGuide(models.Model):
+    SCOPE_PLANT = "plant"
+    SCOPE_GLOBAL = "global"
+    SCOPE_PLANT_OPTIONAL = "plant_optional"
+    SCOPE_CHOICES = (
+        (SCOPE_PLANT, "Theo nhà máy"),
+        (SCOPE_GLOBAL, "Toàn cục"),
+        (SCOPE_PLANT_OPTIONAL, "Toàn cục hoặc theo nhà máy"),
+    )
+
     MODULE_CHOICES = (
         ("so_giao_nhan_ca_vh", "Sổ giao nhận ca vận hành"),
         ("so_giao_nhan_ca_hc", "Sổ giao nhận ca hành chính"),
@@ -212,7 +221,32 @@ class ModuleGuide(models.Model):
         ("nhat_ky_su_kien", "Nhật ký sự kiện"),
         ("quan_ly_thiet_bi", "Quản lý thiết bị"),
         ("thong_so_van_hanh", "Thông số vận hành"),
+        ("dashboard_nha_may", "Dashboard nhà máy"),
+        ("cai_dat_he_thong", "Cài đặt hệ thống"),
+        ("quan_ly_tai_khoan", "Quản lý tài khoản"),
+        ("quan_ly_ca_truc", "Quản lý ca trực"),
+        ("nhat_ky_kiem_toan", "Nhật ký kiểm toán"),
+        ("quan_ly_tai_lieu", "Quản lý tài liệu"),
     )
+    MODULE_SCOPES = {
+        "so_giao_nhan_ca_vh": SCOPE_PLANT,
+        "so_giao_nhan_ca_hc": SCOPE_PLANT,
+        "so_chuyen_doi_tuan": SCOPE_PLANT,
+        "so_chuyen_doi_thang": SCOPE_PLANT,
+        "so_an_toan_dau_gio": SCOPE_PLANT,
+        "so_bchc_song_hinh": SCOPE_PLANT,
+        "so_nhat_ky_diesel": SCOPE_PLANT,
+        "so_nhat_ky_van_hanh": SCOPE_PLANT,
+        "nhat_ky_su_kien": SCOPE_PLANT,
+        "quan_ly_thiet_bi": SCOPE_PLANT,
+        "thong_so_van_hanh": SCOPE_PLANT,
+        "dashboard_nha_may": SCOPE_PLANT,
+        "cai_dat_he_thong": SCOPE_PLANT_OPTIONAL,
+        "quan_ly_tai_khoan": SCOPE_GLOBAL,
+        "quan_ly_ca_truc": SCOPE_PLANT,
+        "nhat_ky_kiem_toan": SCOPE_GLOBAL,
+        "quan_ly_tai_lieu": SCOPE_GLOBAL,
+    }
     KIND_CHOICES = (
         ("procedure", "Quy trình tiêu chuẩn (SOP)"),
         ("instruction", "Hướng dẫn thao tác"),
@@ -227,6 +261,21 @@ class ModuleGuide(models.Model):
         (STATUS_PUBLISHED, "Đang áp dụng"),
         (STATUS_RETIRED, "Đã thu hồi / Lưu trữ"),
     )
+
+    @classmethod
+    def get_module_scope(cls, module_code):
+        return cls.MODULE_SCOPES.get(module_code)
+
+    @classmethod
+    def get_module_options(cls):
+        return [
+            {
+                "value": value,
+                "label": label,
+                "scope": cls.get_module_scope(value),
+            }
+            for value, label in cls.MODULE_CHOICES
+        ]
 
     module_code = models.CharField(max_length=50, choices=MODULE_CHOICES, db_index=True)
     nha_may = models.ForeignKey(

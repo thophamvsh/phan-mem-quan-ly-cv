@@ -106,6 +106,7 @@ class ModuleGuideApiTests(APITestCase):
     def create_guide(
         self,
         *,
+        module_code="so_giao_nhan_ca_vh",
         plant=None,
         creator=None,
         version="v1.0",
@@ -117,7 +118,7 @@ class ModuleGuideApiTests(APITestCase):
         order=0,
     ):
         return ModuleGuide.objects.create(
-            module_code="so_giao_nhan_ca_vh",
+            module_code=module_code,
             nha_may=plant,
             title=title,
             document_kind=kind,
@@ -129,6 +130,127 @@ class ModuleGuideApiTests(APITestCase):
             file=pdf_upload(f"guide-{version}.pdf", marker),
             created_by=creator or self.manager,
         )
+
+    def test_module_options_require_authentication_and_return_scoped_catalog(self):
+        options_endpoint = f"{self.endpoint}module-options/"
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get(options_endpoint).status_code, 401)
+
+        self.client.force_authenticate(self.viewer)
+        response = self.client.get(options_endpoint)
+        self.assertEqual(response.status_code, 200, response.data)
+        options = response.data
+        values = [item["value"] for item in options]
+        self.assertEqual(len(values), len(set(values)))
+        self.assertEqual(set(values), {value for value, _ in ModuleGuide.MODULE_CHOICES})
+        scopes = {item["value"]: item["scope"] for item in options}
+        self.assertEqual(scopes["dashboard_nha_may"], ModuleGuide.SCOPE_PLANT)
+        self.assertEqual(scopes["cai_dat_he_thong"], ModuleGuide.SCOPE_PLANT_OPTIONAL)
+        self.assertEqual(scopes["quan_ly_tai_khoan"], ModuleGuide.SCOPE_GLOBAL)
+
+    def test_new_module_choices_validate_and_global_module_rejects_plant(self):
+        required_codes = {
+            "dashboard_nha_may",
+            "cai_dat_he_thong",
+            "quan_ly_tai_khoan",
+            "quan_ly_ca_truc",
+            "nhat_ky_kiem_toan",
+            "quan_ly_tai_lieu",
+        }
+        self.assertTrue(required_codes.issubset(dict(ModuleGuide.MODULE_CHOICES)))
+
+        self.client.force_authenticate(self.all_factory_manager)
+        base_payload = {
+            "title": "Hướng dẫn kiểm thử",
+            "document_kind": "procedure",
+            "is_primary": True,
+            "order": 0,
+            "version_label": "scope-v1",
+        }
+        invalid_code = self.client.post(
+            self.endpoint,
+            {
+                **base_payload,
+                "module_code": "module_khong_ton_tai",
+                "file": pdf_upload("invalid-code.pdf"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(invalid_code.status_code, 400, invalid_code.data)
+
+        invalid_scope = self.client.post(
+            self.endpoint,
+            {
+                **base_payload,
+                "module_code": "quan_ly_tai_khoan",
+                "nha_may": self.sh.id,
+                "file": pdf_upload("invalid-scope.pdf"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(invalid_scope.status_code, 400, invalid_scope.data)
+        self.assertIn("nha_may", invalid_scope.data)
+
+        valid_global = self.client.post(
+            self.endpoint,
+            {
+                **base_payload,
+                "module_code": "quan_ly_tai_khoan",
+                "file": pdf_upload("valid-global.pdf"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(valid_global.status_code, 201, valid_global.data)
+        self.assertIsNone(valid_global.data["nha_may"])
+
+    def test_all_factory_scope_rules_allow_global_and_optional_without_plant(self):
+        viewer = self.make_user(
+            "all-factory-scope-viewer",
+            None,
+            is_all_factories=True,
+            can_view_module_guides=True,
+        )
+        global_guide = self.create_guide(
+            module_code="quan_ly_tai_khoan",
+            plant=None,
+            creator=self.all_factory_manager,
+            status=ModuleGuide.STATUS_PUBLISHED,
+            version="accounts-global",
+        )
+        optional_global = self.create_guide(
+            module_code="cai_dat_he_thong",
+            plant=None,
+            creator=self.all_factory_manager,
+            status=ModuleGuide.STATUS_PUBLISHED,
+            version="settings-global",
+        )
+        self.create_guide(
+            module_code="cai_dat_he_thong",
+            plant=self.sh,
+            creator=self.all_factory_manager,
+            status=ModuleGuide.STATUS_PUBLISHED,
+            version="settings-sh",
+        )
+
+        self.client.force_authenticate(viewer)
+        global_response = self.client.get(
+            f"{self.endpoint}?module_code=quan_ly_tai_khoan"
+        )
+        self.assertEqual(global_response.status_code, 200, global_response.data)
+        global_items = global_response.data.get("results", global_response.data)
+        self.assertEqual([item["id"] for item in global_items], [global_guide.id])
+
+        optional_response = self.client.get(
+            f"{self.endpoint}?module_code=cai_dat_he_thong"
+        )
+        self.assertEqual(optional_response.status_code, 200, optional_response.data)
+        optional_items = optional_response.data.get("results", optional_response.data)
+        self.assertEqual([item["id"] for item in optional_items], [optional_global.id])
+
+        plant_response = self.client.get(
+            f"{self.endpoint}?module_code=nhat_ky_su_kien"
+        )
+        self.assertEqual(plant_response.status_code, 400, plant_response.data)
 
     def test_file_validation_is_fail_closed_for_fake_pdf_and_broken_docx(self):
         with self.assertRaises(ValidationError):

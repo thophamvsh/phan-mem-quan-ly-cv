@@ -207,6 +207,26 @@ class ModuleGuideSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Chỉ có thể chỉnh sửa tài liệu đang ở trạng thái dự thảo."
             )
+
+        module_code = attrs.get(
+            "module_code",
+            getattr(self.instance, "module_code", None),
+        )
+        nha_may = attrs.get(
+            "nha_may",
+            getattr(self.instance, "nha_may", None),
+        )
+        if (
+            ModuleGuide.get_module_scope(module_code) == ModuleGuide.SCOPE_GLOBAL
+            and nha_may is not None
+        ):
+            raise serializers.ValidationError(
+                {
+                    "nha_may": (
+                        "Module toàn cục không được gắn với một nhà máy cụ thể."
+                    )
+                }
+            )
         return attrs
 
     @staticmethod
