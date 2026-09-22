@@ -328,22 +328,58 @@ def _create_default_monthly_switch_templates(nha_may):
     created = 0
     for ma_nhom, ten_nhom, don_vi_nhom, device_name, don_vi, thu_tu_nhom, thu_tu in MONTHLY_SWITCH_TEMPLATE_ROWS:
         device = _find_monthly_switch_template_device(nha_may, device_name)
-        if not device:
-            continue
-        _, was_created = MauChuyenDoiTBThang.objects.get_or_create(
-            nha_may=nha_may,
-            thiet_bi=device,
-            defaults={
-                "ma_nhom": ma_nhom,
-                "ten_nhom": ten_nhom,
-                "don_vi_nhom": don_vi_nhom,
-                "don_vi": don_vi,
-                "thu_tu_nhom": thu_tu_nhom,
-                "thu_tu": thu_tu,
-                "dang_su_dung": True,
-            },
-        )
-        created += int(was_created)
+        display_code = (
+            (device.ma_day_du or device.ma)
+            if device
+            else device_name.replace(" ", "_")
+        ).strip().upper()
+        defaults = {
+            "ma_nhom": ma_nhom,
+            "ten_nhom": ten_nhom,
+            "don_vi_nhom": don_vi_nhom,
+            "don_vi": don_vi,
+            "thu_tu_nhom": thu_tu_nhom,
+            "thu_tu": thu_tu,
+            "dang_su_dung": True,
+            "ten_hien_thi": device.ten if device else device_name,
+        }
+        with transaction.atomic():
+            manual = (
+                MauChuyenDoiTBThang.objects.select_for_update()
+                .filter(
+                    nha_may=nha_may,
+                    thiet_bi__isnull=True,
+                    ma_hien_thi=display_code,
+                    pha="",
+                )
+                .first()
+            )
+            linked = (
+                MauChuyenDoiTBThang.objects.select_for_update()
+                .filter(nha_may=nha_may, thiet_bi=device, pha="")
+                .first()
+                if device
+                else None
+            )
+            if manual and device and not linked:
+                manual.thiet_bi = device
+                for field, value in defaults.items():
+                    setattr(manual, field, value)
+                manual.save()
+                continue
+            if linked or manual:
+                template = linked or manual
+                if not template.dang_su_dung:
+                    template.dang_su_dung = True
+                    template.save(update_fields=["dang_su_dung", "updated_at"])
+                continue
+            MauChuyenDoiTBThang.objects.create(
+                nha_may=nha_may,
+                thiet_bi=device,
+                ma_hien_thi=display_code,
+                **defaults,
+            )
+            created += 1
     return created
 
 
@@ -383,8 +419,14 @@ def _previous_month_values_by_device(so):
     if not previous_so:
         return {}
     return {
-        item.thiet_bi_id: item.cuoi_thang
-        for item in previous_so.chi_tiets.only("thiet_bi_id", "cuoi_thang")
+        item.ma_dinh_danh: {
+            "cuoi_thang": item.cuoi_thang,
+            "dau_nam": item.dau_nam,
+            "luy_ke_nam": item.luy_ke_nam,
+        }
+        for item in previous_so.chi_tiets.only(
+            "ma_dinh_danh", "cuoi_thang", "dau_nam", "luy_ke_nam"
+        )
     }
 
 

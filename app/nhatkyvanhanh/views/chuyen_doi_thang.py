@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from django.utils import timezone
@@ -31,6 +31,7 @@ from nhatkyvanhanh.permissions import (
     CanEditMonthlyEquipmentSwitchLogs,
     CanDeleteMonthlyEquipmentSwitchLogs,
 )
+from nhatkyvanhanh.services import MonthlySwitchCalculationService
 from .helpers import (
     _get_song_hinh_factory,
     _create_default_monthly_switch_templates,
@@ -60,6 +61,8 @@ class MauChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         "ten_nhom",
         "thiet_bi__ten",
         "thiet_bi__ma_day_du",
+        "ma_hien_thi",
+        "ten_hien_thi",
         "nha_may__ma_nha_may",
         "nha_may__ten_nha_may",
     ]
@@ -68,7 +71,7 @@ class MauChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         permission_classes = [CanViewMonthlyEquipmentSwitchTemplates]
-        if self.action == "create":
+        if self.action in ["create", "tao_ba_pha"]:
             permission_classes = [CanCreateMonthlyEquipmentSwitchTemplates]
         elif self.action in ["update", "partial_update"]:
             permission_classes = [CanEditMonthlyEquipmentSwitchTemplates]
@@ -92,6 +95,79 @@ class MauChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         serializer.save(
             **apply_request_factory_to_serializer(self.request.user, serializer, "nha_may", "fk")
         )
+
+    def create(self, request, *args, **kwargs):
+        try:
+            with transaction.atomic():
+                return super().create(request, *args, **kwargs)
+        except IntegrityError as exc:
+            constraint_names = (
+                "uq_mau_thang_linked_device_phase",
+                "uq_mau_thang_manual_device_phase",
+            )
+            if any(name in str(exc) for name in constraint_names):
+                return Response(
+                    {
+                        "code": "monthly_template_conflict",
+                        "detail": "Dòng mẫu này đã được tạo bởi một phiên làm việc khác. Vui lòng tải lại danh sách.",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            raise
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        has_history = ChiTietChuyenDoiTBThang.objects.filter(
+            ma_dinh_danh=instance.ma_dinh_danh
+        ).exists()
+        if not has_history:
+            return super().destroy(request, *args, **kwargs)
+        instance.dang_su_dung = False
+        instance.save(update_fields=["dang_su_dung", "updated_at"])
+        return Response(
+            {
+                "soft_deleted": True,
+                "detail": "Dòng mẫu đã từng sinh sổ lịch sử nên được tạm ẩn để bảo toàn dữ liệu đồng bộ.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="tao-ba-pha")
+    def tao_ba_pha(self, request):
+        payload = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        payload.pop("pha", None)
+        created = []
+        try:
+            with transaction.atomic():
+                for offset, phase in enumerate(("A", "B", "C")):
+                    phase_payload = payload.copy()
+                    phase_payload["pha"] = phase
+                    phase_payload["thu_tu"] = int(payload.get("thu_tu") or 1) + offset
+                    serializer = self.get_serializer(data=phase_payload)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save(
+                        **apply_request_factory_to_serializer(
+                            request.user, serializer, "nha_may", "fk"
+                        )
+                    )
+                    created.append(serializer.data)
+        except IntegrityError as exc:
+            if any(
+                name in str(exc)
+                for name in (
+                    "uq_mau_thang_linked_device_phase",
+                    "uq_mau_thang_manual_device_phase",
+                )
+            ):
+                return Response(
+                    {
+                        "code": "monthly_template_conflict",
+                        "detail": "Dòng mẫu này đã được tạo bởi một phiên làm việc khác. Vui lòng tải lại danh sách.",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            raise
+        return Response(created, status=status.HTTP_201_CREATED)
 
 
 class SoChuyenDoiTBThangFilterSet(django_filters.FilterSet):
@@ -168,23 +244,43 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
             return False
 
         previous_values = _previous_month_values_by_device(so)
-        existing_ids = set(so.chi_tiets.values_list("thiet_bi_id", flat=True))
+        existing_ids = set(so.chi_tiets.values_list("ma_dinh_danh", flat=True))
         ChiTietChuyenDoiTBThang.objects.bulk_create(
             [
                 ChiTietChuyenDoiTBThang(
                     so=so,
+                    ma_dinh_danh=template.ma_dinh_danh,
                     thiet_bi=template.thiet_bi,
+                    ma_hien_thi=template.ma_hien_thi,
+                    ten_hien_thi=template.ten_hien_thi,
                     ma_nhom=template.ma_nhom,
                     ten_nhom=template.ten_nhom,
                     don_vi_nhom=template.don_vi_nhom,
                     don_vi=template.don_vi,
-                    dau_thang=previous_values.get(template.thiet_bi_id, 0),
-                    cuoi_thang=previous_values.get(template.thiet_bi_id, 0),
+                    pha=template.pha,
+                    loai_tinh_toan=template.loai_tinh_toan,
+                    dau_nam=(
+                        previous_values.get(template.ma_dinh_danh, {}).get("cuoi_thang", 0)
+                        if so.thang == 1
+                        else previous_values.get(template.ma_dinh_danh, {}).get("dau_nam", 0)
+                    ),
+                    dau_thang=previous_values.get(template.ma_dinh_danh, {}).get("cuoi_thang", 0),
+                    cuoi_thang=previous_values.get(template.ma_dinh_danh, {}).get("cuoi_thang", 0),
+                    luy_ke_nam=(
+                        0
+                        if so.thang == 1
+                        else previous_values.get(template.ma_dinh_danh, {}).get("luy_ke_nam", 0)
+                    ),
+                    luy_ke_truoc_so_hoa=(
+                        0
+                        if so.thang == 1
+                        else previous_values.get(template.ma_dinh_danh, {}).get("luy_ke_nam", 0)
+                    ),
                     thu_tu_nhom=template.thu_tu_nhom,
                     thu_tu=template.thu_tu,
                 )
                 for template in templates
-                if template.thiet_bi_id not in existing_ids
+                if template.ma_dinh_danh not in existing_ids
             ]
         )
         return True
@@ -227,7 +323,7 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         so = serializer.instance
-        if _monthly_switch_log_locked(so) and not self.request.user.is_superuser:
+        if _monthly_switch_log_locked(so):
             raise PermissionDenied("Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể chỉnh sửa.")
         if not _can_edit_monthly_equipment_switch_log(self.request.user, serializer.instance):
             raise PermissionDenied("Ban khong co quyen cap nhat so chuyen doi TB thang nay.")
@@ -236,7 +332,7 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
-        if _monthly_switch_log_locked(instance) and not self.request.user.is_superuser:
+        if _monthly_switch_log_locked(instance):
             raise PermissionDenied("Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể xóa.")
         if not _can_delete_monthly_equipment_switch_log(self.request.user, instance):
             raise PermissionDenied("Ban khong co quyen xoa so chuyen doi TB thang nay.")
@@ -312,7 +408,7 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
     )
     def cap_nhat_chi_tiet(self, request, pk=None, chi_tiet_id=None):
         so = self.get_object()
-        if _monthly_switch_log_locked(so) and not request.user.is_superuser:
+        if _monthly_switch_log_locked(so):
             return Response(
                 {"detail": "Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể cập nhật chi tiết."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -330,22 +426,49 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = ChiTietChuyenDoiTBThangSerializer(
-            chi_tiet,
-            data=request.data,
-            partial=True,
-            context=self.get_serializer_context(),
+        propagation = MonthlySwitchCalculationService.update_rows_and_propagate(
+            so,
+            [{"id": chi_tiet.id, **request.data}],
+            serializer_context=self.get_serializer_context(),
         )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
 
         response_serializer = self.get_serializer(self.get_object())
-        return Response(response_serializer.data, status=status.HTTP_200_OK)
+        response_data = dict(response_serializer.data)
+        response_data["propagation"] = propagation
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["patch"], url_path="cap-nhat-chi-tiet-hang-loat")
+    def cap_nhat_chi_tiet_hang_loat(self, request, pk=None):
+        so = self.get_object()
+        if _monthly_switch_log_locked(so):
+            return Response(
+                {"detail": "Sổ chuyển đổi TB tháng đã được duyệt và khóa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not _can_edit_monthly_equipment_switch_log(request.user, so):
+            return Response(
+                {"detail": "Bạn không có quyền cập nhật chi tiết sổ tháng này."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        rows = request.data.get("rows")
+        if not isinstance(rows, list) or not rows:
+            raise DRFValidationError({"rows": "Danh sách cập nhật không được để trống."})
+
+        propagation = MonthlySwitchCalculationService.update_rows_and_propagate(
+            so,
+            rows,
+            serializer_context=self.get_serializer_context(),
+        )
+        response_serializer = self.get_serializer(self.get_object())
+        return Response(
+            {"data": response_serializer.data, **propagation},
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=True, methods=["post"], url_path="dong-bo-dau-thang")
     def dong_bo_dau_thang(self, request, pk=None):
         so = self.get_object()
-        if _monthly_switch_log_locked(so) and not request.user.is_superuser:
+        if _monthly_switch_log_locked(so):
             return Response(
                 {"detail": "Sổ chuyển đổi TB tháng đã được duyệt và khóa, không thể đồng bộ chỉ số."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -363,13 +486,18 @@ class SoChuyenDoiTBThangViewSet(viewsets.ModelViewSet):
             )
         with transaction.atomic():
             for ct in so.chi_tiets.all():
-                if ct.thiet_bi_id in previous_values:
-                    new_dau = previous_values[ct.thiet_bi_id]
+                if ct.ma_dinh_danh in previous_values:
+                    previous = previous_values[ct.ma_dinh_danh]
+                    new_dau = previous["cuoi_thang"]
                     ct.dau_thang = new_dau
                     if ct.cuoi_thang < new_dau:
                         ct.cuoi_thang = new_dau
-                    ct.thuc_hien = ct.cuoi_thang - ct.dau_thang
-                    ct.save(update_fields=["dau_thang", "cuoi_thang", "thuc_hien"])
+                    ct.dau_nam = new_dau if so.thang == 1 else previous["dau_nam"]
+                    ct.luy_ke_truoc_so_hoa = 0 if so.thang == 1 else previous["luy_ke_nam"]
+                    ct.save()
+            propagation = MonthlySwitchCalculationService.propagate_from(so)
 
         response_serializer = self.get_serializer(self.get_object())
-        return Response(response_serializer.data, status=status.HTTP_200_OK)
+        response_data = dict(response_serializer.data)
+        response_data["propagation"] = propagation
+        return Response(response_data, status=status.HTTP_200_OK)

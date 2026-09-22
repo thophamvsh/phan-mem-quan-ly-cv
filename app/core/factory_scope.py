@@ -65,6 +65,23 @@ def ensure_factory_allowed(user, factory):
     ensure_factory_code_allowed(user, code)
 
 
+def is_device_belong_to_factory(device, factory):
+    """Return whether a legacy string-scoped device belongs to a NhaMay."""
+    if not device or not factory:
+        return False
+
+    factory_code = str(getattr(factory, "ma_nha_may", "") or "").strip().casefold()
+    factory_name = str(getattr(factory, "ten_nha_may", "") or "").strip().casefold()
+    device_factory = str(getattr(device, "nha_may", "") or "").strip().casefold()
+    full_code = str(getattr(device, "ma_day_du", "") or "").strip().casefold()
+
+    if factory_code and (
+        device_factory == factory_code or full_code.startswith(f"{factory_code}.")
+    ):
+        return True
+    return bool(factory_name and (device_factory == factory_name or factory_name in device_factory))
+
+
 def _factory_string_query(field_name, factory):
     code = factory.ma_nha_may
     name = factory.ten_nha_may

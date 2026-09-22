@@ -154,10 +154,15 @@ class MauChuyenDoiTBThangResource(resources.ModelResource):
         import_id_fields = ("nha_may", "thiet_bi")
         fields = (
             "nha_may",
+            "ma_dinh_danh",
             "ma_nhom",
             "ten_nhom",
             "don_vi_nhom",
             "thiet_bi",
+            "ma_hien_thi",
+            "ten_hien_thi",
+            "pha",
+            "loai_tinh_toan",
             "don_vi",
             "thu_tu_nhom",
             "thu_tu",
@@ -214,14 +219,23 @@ class ChiTietChuyenDoiTBThangResource(resources.ModelResource):
         import_id_fields = ("so", "thiet_bi")
         fields = (
             "so",
+            "ma_dinh_danh",
             "thiet_bi",
+            "ma_hien_thi",
+            "ten_hien_thi",
+            "pha",
+            "loai_tinh_toan",
             "ma_nhom",
             "ten_nhom",
             "don_vi_nhom",
             "don_vi",
+            "dau_nam",
             "dau_thang",
+            "nhap_trong_thang",
             "cuoi_thang",
             "thuc_hien",
+            "luy_ke_nam",
+            "luy_ke_truoc_so_hoa",
             "ghi_chu",
             "thu_tu_nhom",
             "thu_tu",
@@ -715,17 +729,23 @@ class MauChuyenDoiTBThangAdmin(
         "ten_nhom",
         "don_vi_nhom",
         "thiet_bi",
+        "ma_hien_thi",
+        "ten_hien_thi",
+        "pha",
+        "loai_tinh_toan",
         "don_vi",
         "thu_tu_nhom",
         "thu_tu",
         "dang_su_dung",
     )
-    list_filter = ("nha_may", "ma_nhom", "dang_su_dung")
+    list_filter = ("nha_may", "ma_nhom", "pha", "loai_tinh_toan", "dang_su_dung")
     search_fields = (
         "ma_nhom",
         "ten_nhom",
         "thiet_bi__ten",
         "thiet_bi__ma_day_du",
+        "ma_hien_thi",
+        "ten_hien_thi",
         "nha_may__ma_nha_may",
         "nha_may__ten_nha_may",
     )
@@ -743,12 +763,18 @@ class ChiTietChuyenDoiTBThangAdmin(
     list_display = (
         "so",
         "thiet_bi",
+        "ma_hien_thi",
+        "ten_hien_thi",
+        "pha",
+        "loai_tinh_toan",
         "ma_nhom",
         "ten_nhom",
         "don_vi",
         "dau_thang",
+        "nhap_trong_thang",
         "cuoi_thang",
         "thuc_hien",
+        "luy_ke_nam",
         "thu_tu",
     )
     list_filter = ("so__nam", "so__thang", "so__ca_truc", "so__nha_may", "ma_nhom")

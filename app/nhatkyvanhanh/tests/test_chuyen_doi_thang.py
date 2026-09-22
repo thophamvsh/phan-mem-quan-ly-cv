@@ -1,10 +1,15 @@
 from datetime import date
+from decimal import Decimal
+import uuid
+
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
+from core.factory_scope import is_device_belong_to_factory
 from tochuc.models import NhaMay
 from quanlyvanhanh.models import ThietBi
 from nhatkyvanhanh.models import (
@@ -12,6 +17,7 @@ from nhatkyvanhanh.models import (
     SoChuyenDoiTBThang,
     ChiTietChuyenDoiTBThang,
 )
+from nhatkyvanhanh.services import MonthlySwitchCalculationService
 
 User = get_user_model()
 
@@ -284,6 +290,20 @@ class ChuyenDoiTBThangTests(APITestCase):
         )
         self.assertEqual(edit_ct_locked_res.status_code, status.HTTP_403_FORBIDDEN)
 
+        # Sổ đã duyệt là bất biến; superuser cũng phải mở khóa trước khi sửa.
+        superuser = User.objects.create_superuser(
+            email="root_month@example.com",
+            password="testpassword123!",
+            username="root_month",
+        )
+        self.client.force_authenticate(user=superuser)
+        edit_ct_as_superuser = self.client.patch(
+            url_update_ct,
+            {"cuoi_thang": 20},
+            format="json",
+        )
+        self.assertEqual(edit_ct_as_superuser.status_code, status.HTTP_403_FORBIDDEN)
+
         # 7. Manager / Superuser unlocks the logbook
         self.client.force_authenticate(user=self.manager)
         url_huy_xac_nhan = reverse("nhatkyvanhanh:sochuyendoitbthang-huy-xac-nhan", kwargs={"pk": so_id})
@@ -386,3 +406,193 @@ class ChuyenDoiTBThangTests(APITestCase):
         self.assertEqual(ct1_m8.dau_thang, 105)
         self.assertEqual(ct1_m8.cuoi_thang, 120)
         self.assertEqual(ct1_m8.thuc_hien, 15)
+
+    def test_linked_template_populates_immutable_snapshots(self):
+        device = ThietBi.objects.create(
+            nha_may="SH",
+            ma="MC171",
+            ma_day_du="SH.MC171",
+            ten="Máy cắt 171",
+        )
+        template = MauChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            thiet_bi=device,
+            ten_nhom="Máy cắt",
+        )
+        self.assertEqual(template.ma_hien_thi, device.ma_day_du)
+        self.assertEqual(template.ten_hien_thi, "Máy cắt 171")
+
+    def test_manual_template_requires_code_and_name(self):
+        with self.assertRaises(ValidationError):
+            MauChuyenDoiTBThang.objects.create(
+                nha_may=self.nha_may,
+                thiet_bi=None,
+                ten_nhom="Dầu Diesel",
+                ma_hien_thi="",
+                ten_hien_thi="",
+            )
+
+    def test_fuel_and_counter_calculations(self):
+        so = SoChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            thang=10,
+            ca_truc="A",
+            thang_bat_dau=date(2026, 10, 1),
+            thang_ket_thuc=date(2026, 10, 31),
+        )
+        fuel = ChiTietChuyenDoiTBThang.objects.create(
+            so=so,
+            ma_dinh_danh=uuid.uuid4(),
+            ma_hien_thi="BON-CHINH",
+            ten_hien_thi="Bồn dầu chính",
+            ten_nhom="Dầu Diesel",
+            loai_tinh_toan="fuel",
+            dau_thang=Decimal("6300"),
+            nhap_trong_thang=Decimal("500"),
+            cuoi_thang=Decimal("5900"),
+            luy_ke_truoc_so_hoa=Decimal("120"),
+        )
+        self.assertEqual(fuel.thuc_hien, Decimal("900"))
+        self.assertEqual(fuel.luy_ke_nam, Decimal("1020"))
+
+        fuel.cuoi_thang = Decimal("7000")
+        with self.assertRaises(ValidationError):
+            fuel.save()
+
+    def test_factory_device_scope_supports_code_name_and_rejects_other_factory(self):
+        self.assertTrue(is_device_belong_to_factory(self.tb1, self.nha_may))
+        name_only = ThietBi(nha_may="Song Hinh", ma="X", ma_day_du="X", ten="X")
+        self.assertTrue(is_device_belong_to_factory(name_only, self.nha_may))
+        other = ThietBi(nha_may="Vĩnh Sơn", ma="VS.X", ma_day_du="VS.X", ten="X")
+        self.assertFalse(is_device_belong_to_factory(other, self.nha_may))
+        self.assertFalse(is_device_belong_to_factory(None, self.nha_may))
+
+    def test_create_three_phases_is_atomic(self):
+        self.client.force_authenticate(user=self.manager)
+        url = reverse("nhatkyvanhanh:mauchuyendoitbthang-tao-ba-pha")
+        payload = {
+            "nha_may": self.nha_may.id,
+            "thiet_bi": None,
+            "ma_hien_thi": "CS-NEW",
+            "ten_hien_thi": "Chống sét van mới",
+            "ma_nhom": "VI",
+            "ten_nhom": "Chống sét van",
+            "thu_tu": 10,
+        }
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            set(
+                MauChuyenDoiTBThang.objects.filter(ma_hien_thi="CS-NEW").values_list(
+                    "pha", flat=True
+                )
+            ),
+            {"A", "B", "C"},
+        )
+
+        MauChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            thiet_bi=None,
+            ma_hien_thi="CS-CONFLICT",
+            ten_hien_thi="Xung đột",
+            pha="C",
+            ten_nhom="Chống sét van",
+        )
+        conflict_payload = {**payload, "ma_hien_thi": "CS-CONFLICT"}
+        conflict_response = self.client.post(url, conflict_payload, format="json")
+        self.assertEqual(conflict_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            MauChuyenDoiTBThang.objects.filter(
+                ma_hien_thi="CS-CONFLICT", pha__in=["A", "B"]
+            ).exists()
+        )
+
+    def test_soft_delete_and_reactivate_template_preserves_identity(self):
+        self.client.force_authenticate(user=self.manager)
+        template = MauChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            thiet_bi=None,
+            ma_hien_thi="BON-PHU",
+            ten_hien_thi="Bồn dầu phụ",
+            ten_nhom="Dầu Diesel",
+        )
+        so = SoChuyenDoiTBThang.objects.create(
+            nha_may=self.nha_may,
+            nam=2027,
+            thang=1,
+            ca_truc="A",
+            thang_bat_dau=date(2027, 1, 1),
+            thang_ket_thuc=date(2027, 1, 31),
+        )
+        ChiTietChuyenDoiTBThang.objects.create(
+            so=so,
+            ma_dinh_danh=template.ma_dinh_danh,
+            ma_hien_thi=template.ma_hien_thi,
+            ten_hien_thi=template.ten_hien_thi,
+            ten_nhom=template.ten_nhom,
+        )
+        detail_url = reverse(
+            "nhatkyvanhanh:mauchuyendoitbthang-detail", kwargs={"pk": template.pk}
+        )
+        delete_response = self.client.delete(detail_url)
+        self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
+        template.refresh_from_db()
+        self.assertFalse(template.dang_su_dung)
+
+        list_url = reverse("nhatkyvanhanh:mauchuyendoitbthang-list")
+        create_response = self.client.post(
+            list_url,
+            {
+                "nha_may": self.nha_may.id,
+                "thiet_bi": None,
+                "ma_hien_thi": "bon-phu",
+                "ten_hien_thi": "Bồn dầu phụ cập nhật",
+                "ten_nhom": "Dầu Diesel",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        template.refresh_from_db()
+        self.assertTrue(template.dang_su_dung)
+        self.assertEqual(str(template.ma_dinh_danh), create_response.data["ma_dinh_danh"])
+
+    def test_propagation_stops_before_approved_month(self):
+        identity = self.mau1.ma_dinh_danh
+
+        def make_log(month, start, end, locked=False):
+            log = SoChuyenDoiTBThang.objects.create(
+                nha_may=self.nha_may,
+                nam=2028,
+                thang=month,
+                ca_truc="A",
+                thang_bat_dau=date(2028, month, 1),
+                thang_ket_thuc=date(2028, month, 28),
+                trang_thai=("da_duyet" if locked else "cho_duyet"),
+            )
+            row = ChiTietChuyenDoiTBThang.objects.create(
+                so=log,
+                ma_dinh_danh=identity,
+                thiet_bi=self.tb1,
+                ma_hien_thi=self.tb1.ma_day_du,
+                ten_hien_thi=self.tb1.ten,
+                ten_nhom="Bộ đếm",
+                dau_nam=0,
+                dau_thang=start,
+                cuoi_thang=end,
+            )
+            return log, row
+
+        july, july_row = make_log(7, 0, 100)
+        _, august_row = make_log(8, 100, 120)
+        _, september_row = make_log(9, 120, 130, locked=True)
+        result = MonthlySwitchCalculationService.update_rows_and_propagate(
+            july,
+            [{"id": july_row.id, "cuoi_thang": 105}],
+        )
+        august_row.refresh_from_db()
+        september_row.refresh_from_db()
+        self.assertEqual(august_row.dau_thang, 105)
+        self.assertEqual(august_row.thuc_hien, 15)
+        self.assertEqual(september_row.dau_thang, 120)
+        self.assertEqual(result["blocked_month"], {"nam": 2028, "thang": 9})
