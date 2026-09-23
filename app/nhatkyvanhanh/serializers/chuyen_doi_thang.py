@@ -255,6 +255,20 @@ class ChiTietChuyenDoiTBThangSerializer(serializers.ModelSerializer):
         nhap = decimal_value("nhap_trong_thang")
         cuoi_thang = decimal_value("cuoi_thang")
         loai = getattr(instance, "loai_tinh_toan", "counter") if instance else "counter"
+        if loai != "fuel":
+            integer_errors = {}
+            for field in (
+                "dau_nam",
+                "dau_thang",
+                "nhap_trong_thang",
+                "cuoi_thang",
+                "luy_ke_truoc_so_hoa",
+            ):
+                value = decimal_value(field)
+                if value != value.to_integral_value():
+                    integer_errors[field] = "Số lần vận hành phải là số nguyên."
+            if integer_errors:
+                raise serializers.ValidationError(integer_errors)
         if loai == "fuel" and dau_thang + nhap - cuoi_thang < 0:
             raise serializers.ValidationError(
                 {"cuoi_thang": "Tồn cuối không được lớn hơn tồn đầu cộng lượng nhập."}

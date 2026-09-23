@@ -14,6 +14,7 @@ from .phan_cong_nhiem_vu_hc import BangPhanCongNhiemVuHCViewSet
 from .device_template import MauTrangThaiThietBiCaViewSet
 from .summary_template import MauTomLuocGiaoCaVHViewSet
 from .command_template import MauNoiDungVanHanhViewSet
+from .monthly_switch_qr import MonthlySwitchQuickEntryViewSet
 
 __all__ = [
     "NhatKySuKienViewSet",
@@ -32,4 +33,5 @@ __all__ = [
     "MauTrangThaiThietBiCaViewSet",
     "MauTomLuocGiaoCaVHViewSet",
     "MauNoiDungVanHanhViewSet",
+    "MonthlySwitchQuickEntryViewSet",
 ]

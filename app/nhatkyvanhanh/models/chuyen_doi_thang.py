@@ -294,6 +294,20 @@ class ChiTietChuyenDoiTBThang(TimestampedUUIDModel):
         self.ten_hien_thi = (self.ten_hien_thi or "").strip()
         if not self.ma_hien_thi or not self.ten_hien_thi:
             raise ValidationError("Chi tiết thiết bị bắt buộc phải có mã và tên hiển thị.")
+        if self.loai_tinh_toan == MauChuyenDoiTBThang.LoaiTinhToan.COUNTER:
+            integer_errors = {}
+            for field in (
+                "dau_nam",
+                "dau_thang",
+                "nhap_trong_thang",
+                "cuoi_thang",
+                "luy_ke_truoc_so_hoa",
+            ):
+                value = getattr(self, field, Decimal("0")) or Decimal("0")
+                if value != value.to_integral_value():
+                    integer_errors[field] = "Số lần vận hành phải là số nguyên."
+            if integer_errors:
+                raise ValidationError(integer_errors)
         MonthlySwitchCalculationService.apply(self)
 
     def save(self, *args, **kwargs):

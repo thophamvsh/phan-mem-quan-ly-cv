@@ -277,6 +277,12 @@ REST_FRAMEWORK = {
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '5/minute'),
         'token': os.environ.get('THROTTLE_TOKEN_RATE', '20/minute'),
         'ai': os.environ.get('THROTTLE_AI_RATE', '20/hour'),
+        'monthly_switch_qr_resolve': os.environ.get(
+            'THROTTLE_MONTHLY_SWITCH_QR_RESOLVE_RATE', '60/minute'
+        ),
+        'monthly_switch_qr_save': os.environ.get(
+            'THROTTLE_MONTHLY_SWITCH_QR_SAVE_RATE', '30/minute'
+        ),
     },
 }
 

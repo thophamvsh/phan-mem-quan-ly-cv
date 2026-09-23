@@ -48,6 +48,10 @@ from .phan_cong_nhiem_vu_hc import (
 from .device_template import MauTrangThaiThietBiCaSerializer
 from .summary_template import MauTomLuocGiaoCaVHSerializer
 from .command_template import MauNoiDungVanHanhSerializer
+from .monthly_switch_qr import (
+    MonthlySwitchQRResolveQuerySerializer,
+    MonthlySwitchQRSaveSerializer,
+)
 
 __all__ = [
     "user_can_edit_chi_dao",
@@ -80,4 +84,6 @@ __all__ = [
     "MauTrangThaiThietBiCaSerializer",
     "MauTomLuocGiaoCaVHSerializer",
     "MauNoiDungVanHanhSerializer",
+    "MonthlySwitchQRResolveQuerySerializer",
+    "MonthlySwitchQRSaveSerializer",
 ]

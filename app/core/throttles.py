@@ -20,3 +20,11 @@ class AiRateThrottle(UserRateThrottle):
 class AuditExportRateThrottle(UserRateThrottle):
     scope = "audit_export"
     rate = "10/minute"
+
+
+class MonthlySwitchQRResolveRateThrottle(UserRateThrottle):
+    scope = "monthly_switch_qr_resolve"
+
+
+class MonthlySwitchQRSaveRateThrottle(UserRateThrottle):
+    scope = "monthly_switch_qr_save"

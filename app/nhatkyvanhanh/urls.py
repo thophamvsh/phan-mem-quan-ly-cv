@@ -18,6 +18,7 @@ from .views import (
     MauTrangThaiThietBiCaViewSet,
     MauTomLuocGiaoCaVHViewSet,
     MauNoiDungVanHanhViewSet,
+    MonthlySwitchQuickEntryViewSet,
 )
 
 app_name = "nhatkyvanhanh"
@@ -39,6 +40,11 @@ router.register(r"so-chuyen-doi-tb-thang", SoChuyenDoiTBThangViewSet, basename="
 router.register(r"mau-trang-thai-thiet-bi", MauTrangThaiThietBiCaViewSet, basename="mautrangthaithietbi")
 router.register(r"mau-tom-luoc-giao-ca-vh", MauTomLuocGiaoCaVHViewSet, basename="mautomluocgiaocavh")
 router.register(r"mau-noi-dung-vh", MauNoiDungVanHanhViewSet, basename="maunoidungvh")
+router.register(
+    r"monthly-switch-quick-entry",
+    MonthlySwitchQuickEntryViewSet,
+    basename="monthly-switch-quick-entry",
+)
 
 urlpatterns = [
     path("", include(router.urls)),
