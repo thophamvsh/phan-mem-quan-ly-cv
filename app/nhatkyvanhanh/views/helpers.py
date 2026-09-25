@@ -244,7 +244,10 @@ def _get_previous_weekly_switch_log(so):
     from nhatkyvanhanh.models import SoChuyenDoiThietBiTuan
 
     factory = getattr(so, "nha_may", None) or _get_song_hinh_factory()
-    qs = SoChuyenDoiThietBiTuan.objects.filter(nha_may=factory).exclude(id=so.id)
+    qs = SoChuyenDoiThietBiTuan.objects.filter(
+        nha_may=factory,
+        ca_truc=getattr(so, "ca_truc", None),
+    ).exclude(id=so.id)
 
     current_nam = getattr(so, "nam", None)
     current_tuan = getattr(so, "tuan", None)

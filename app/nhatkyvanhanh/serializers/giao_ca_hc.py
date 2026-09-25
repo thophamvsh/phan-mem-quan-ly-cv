@@ -94,13 +94,6 @@ class NguoiTrucSoGiaoNhanCaHCSerializer(serializers.ModelSerializer, UserSummary
             self.instance, "so_giao_nhan_ca", None
         )
         if shift_log and start and end:
-            if (
-                shift_log.thoi_gian_bat_dau_ca
-                and start < shift_log.thoi_gian_bat_dau_ca
-            ) or (shift_log.thoi_gian_giao_ca and end > shift_log.thoi_gian_giao_ca):
-                raise serializers.ValidationError(
-                    {"thoi_gian_ket_thuc": "Khoảng trực phải nằm trong thời gian của sổ."}
-                )
             name = attrs.get(
                 "ten_nguoi_truc",
                 getattr(self.instance, "ten_nguoi_truc", ""),

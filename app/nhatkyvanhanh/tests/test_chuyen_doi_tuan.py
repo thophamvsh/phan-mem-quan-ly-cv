@@ -377,3 +377,88 @@ class ChuyenDoiThietBiTuanTests(APITestCase):
         self.assertEqual(edit_again_res.status_code, status.HTTP_200_OK)
         so.refresh_from_db()
         self.assertEqual(so.ca_truc, "B")
+
+    def test_complementary_pump_pair_rejects_duplicate_statuses(self):
+        so = SoChuyenDoiThietBiTuan.objects.create(
+            nha_may=self.nha_may,
+            nam=2026,
+            tuan=36,
+            ca_truc="A",
+            nguoi_tao=self.creator,
+        )
+        lan = LanChuyenDoiThietBi.objects.create(
+            so=so,
+            thoi_gian=timezone.make_aware(
+                datetime.combine(so.tuan_bat_dau, time(hour=8))
+            ),
+            nguoi_thuc_hien=self.creator,
+        )
+        rows = [
+            ChiTietChuyenDoiThietBi.objects.create(
+                lan_chuyen_doi=lan,
+                thiet_bi=device,
+                khu_vuc=self.khu_vuc_h1,
+                to_may="H1",
+                ten_khu_vuc_snapshot="Tổ máy H1",
+                nhom_thiet_bi="Bơm nước làm mát",
+            )
+            for device in (self.tb1, self.tb2)
+        ]
+        url = reverse(
+            "nhatkyvanhanh:sochuyendoithietbituan-cap-nhat-lan-chuyen-doi",
+            kwargs={"pk": so.pk, "lan_id": lan.pk},
+        )
+        self.client.force_authenticate(user=self.creator)
+
+        invalid_response = self.client.patch(
+            url,
+            {
+                "chi_tiets": [
+                    {"id": str(row.pk), "trang_thai": "lam_viec"}
+                    for row in rows
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(invalid_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            invalid_response.data["code"],
+            "invalid_complementary_pair",
+        )
+        self.assertIn("một thiết bị Làm việc", invalid_response.data["detail"])
+
+        self.client.force_authenticate(user=self.shift_leader)
+        approve_response = self.client.post(
+            reverse(
+                "nhatkyvanhanh:sochuyendoithietbituan-xac-nhan",
+                kwargs={"pk": so.pk},
+            ),
+            {},
+            format="json",
+        )
+        self.assertEqual(approve_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            approve_response.data["code"],
+            "invalid_complementary_pair",
+        )
+
+        self.client.force_authenticate(user=self.creator)
+        valid_response = self.client.patch(
+            url,
+            {
+                "chi_tiets": [
+                    {"id": str(rows[0].pk), "trang_thai": "lam_viec"},
+                    {"id": str(rows[1].pk), "trang_thai": "du_phong"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(valid_response.status_code, status.HTTP_200_OK)
+        rows[0].refresh_from_db()
+        rows[1].refresh_from_db()
+        self.assertEqual(
+            {rows[0].trang_thai, rows[1].trang_thai},
+            {"lam_viec", "du_phong"},
+        )

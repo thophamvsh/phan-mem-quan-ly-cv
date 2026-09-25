@@ -8,7 +8,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from core.models import UserActivityLog, UserProfile
 from tochuc.models import NhaMay, DonViToChuc, BoPhan, NhanSu
-from nhatkyvanhanh.models import SogiaonhancaVH, NhanSuSoGiaoNhanCaVH
+from nhatkyvanhanh.models import (
+    NhanSuSoGiaoNhanCaVH,
+    SogiaonhancaHC,
+    SogiaonhancaVH,
+)
 from nhatkyvanhanh.serializers import (
     ChiTietSoGiaoNhanCaHCSerializer,
     NguoiTrucSoGiaoNhanCaHCSerializer,
@@ -21,6 +25,11 @@ from nhatkyvanhanh.views.giao_ca_vh import SogiaonhancaVHFilterSet
 
 class ShiftHandoverSerializerTimeTests(TestCase):
     def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="hc_shift_creator",
+            email="hc-shift-creator@example.com",
+            password="VshSecure@2026Test#!",
+        )
         self.plant = NhaMay.objects.create(
             ma_nha_may="TEST-SHIFT",
             ten_nha_may="Nhà máy kiểm thử giao nhận ca",
@@ -76,6 +85,43 @@ class ShiftHandoverSerializerTimeTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn("thoi_gian_ket_thuc", serializer.errors)
+
+    def _create_hc_shift(self):
+        start = timezone.now()
+        return SogiaonhancaHC.objects.create(
+            ngay_truc=start.date(),
+            nha_may=self.plant,
+            thoi_gian_bat_dau_ca=start,
+            thoi_gian_giao_ca=start + timedelta(days=6),
+            user_giao_ca=self.user,
+            nguoi_tao=self.user,
+        )
+
+    def test_hc_duty_person_allows_omitted_time_range(self):
+        shift = self._create_hc_shift()
+        serializer = NguoiTrucSoGiaoNhanCaHCSerializer(
+            data={"ten_nguoi_truc": "Nhân viên hỗ trợ"},
+            context={"shift_log": shift},
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_hc_duty_person_range_is_not_limited_by_shift_range(self):
+        shift = self._create_hc_shift()
+        serializer = NguoiTrucSoGiaoNhanCaHCSerializer(
+            data={
+                "ten_nguoi_truc": "Nhân viên hỗ trợ",
+                "thoi_gian_bat_dau": (
+                    shift.thoi_gian_bat_dau_ca - timedelta(hours=1)
+                ).isoformat(),
+                "thoi_gian_ket_thuc": (
+                    shift.thoi_gian_giao_ca + timedelta(hours=1)
+                ).isoformat(),
+            },
+            context={"shift_log": shift},
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
 class NhanSuSoGiaoNhanCaVHPhase2Tests(TestCase):

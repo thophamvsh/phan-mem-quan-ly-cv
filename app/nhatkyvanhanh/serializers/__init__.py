@@ -52,6 +52,12 @@ from .monthly_switch_qr import (
     MonthlySwitchQRResolveQuerySerializer,
     MonthlySwitchQRSaveSerializer,
 )
+from .weekly_switch_qr import (
+    WeeklySwitchQRCreateLanSerializer,
+    WeeklySwitchQRLookupQuerySerializer,
+    WeeklySwitchQRResolveQuerySerializer,
+    WeeklySwitchQRSaveSerializer,
+)
 
 __all__ = [
     "user_can_edit_chi_dao",
@@ -86,4 +92,8 @@ __all__ = [
     "MauNoiDungVanHanhSerializer",
     "MonthlySwitchQRResolveQuerySerializer",
     "MonthlySwitchQRSaveSerializer",
+    "WeeklySwitchQRCreateLanSerializer",
+    "WeeklySwitchQRLookupQuerySerializer",
+    "WeeklySwitchQRResolveQuerySerializer",
+    "WeeklySwitchQRSaveSerializer",
 ]
