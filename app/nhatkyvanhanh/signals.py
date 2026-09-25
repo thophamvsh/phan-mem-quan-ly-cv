@@ -5,13 +5,34 @@ import requests
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models.signals import post_save
+from django.db.models.deletion import ProtectedError
+from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
-from .models import SuKien, ChiDaoSuKien
+from quanlyvanhanh.models import ThietBi
+
+from .models import ChiDaoSuKien, MauChuyenDoiThietBi, SuKien
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(pre_delete, sender=MauChuyenDoiThietBi)
+def protect_weekly_switch_template_identity(sender, instance, **kwargs):
+    raise ProtectedError(
+        "Mẫu chuyển đổi tuần chỉ được vô hiệu hóa để bảo toàn mã QR.",
+        {instance},
+    )
+
+
+@receiver(pre_delete, sender=ThietBi)
+def protect_device_with_weekly_switch_template(sender, instance, **kwargs):
+    templates = instance.mau_chuyen_doi_thiet_bi.all()
+    if templates.exists():
+        raise ProtectedError(
+            "Không thể xóa thiết bị đang có mẫu chuyển đổi tuần.",
+            set(templates),
+        )
 
 
 def escape_html(text):

@@ -19,6 +19,7 @@ from .views import (
     MauTomLuocGiaoCaVHViewSet,
     MauNoiDungVanHanhViewSet,
     MonthlySwitchQuickEntryViewSet,
+    WeeklySwitchQuickEntryViewSet,
 )
 
 app_name = "nhatkyvanhanh"
@@ -44,6 +45,11 @@ router.register(
     r"monthly-switch-quick-entry",
     MonthlySwitchQuickEntryViewSet,
     basename="monthly-switch-quick-entry",
+)
+router.register(
+    r"weekly-switch-quick-entry",
+    WeeklySwitchQuickEntryViewSet,
+    basename="weekly-switch-quick-entry",
 )
 
 urlpatterns = [

@@ -283,6 +283,12 @@ REST_FRAMEWORK = {
         'monthly_switch_qr_save': os.environ.get(
             'THROTTLE_MONTHLY_SWITCH_QR_SAVE_RATE', '30/minute'
         ),
+        'weekly_switch_qr_read': os.environ.get(
+            'THROTTLE_WEEKLY_SWITCH_QR_READ_RATE', '60/minute'
+        ),
+        'weekly_switch_qr_write': os.environ.get(
+            'THROTTLE_WEEKLY_SWITCH_QR_WRITE_RATE', '30/minute'
+        ),
     },
 }
 

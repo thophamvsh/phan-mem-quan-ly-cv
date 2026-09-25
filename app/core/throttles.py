@@ -28,3 +28,11 @@ class MonthlySwitchQRResolveRateThrottle(UserRateThrottle):
 
 class MonthlySwitchQRSaveRateThrottle(UserRateThrottle):
     scope = "monthly_switch_qr_save"
+
+
+class WeeklySwitchQRReadRateThrottle(UserRateThrottle):
+    scope = "weekly_switch_qr_read"
+
+
+class WeeklySwitchQRWriteRateThrottle(UserRateThrottle):
+    scope = "weekly_switch_qr_write"

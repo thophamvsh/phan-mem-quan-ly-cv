@@ -106,6 +106,28 @@ class MauChuyenDoiThietBiSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"khu_vuc": "Khu vực không thuộc nhà máy đã chọn."})
         if not khu_vuc.dang_su_dung and (not self.instance or self.instance.khu_vuc_id != khu_vuc.id):
             raise serializers.ValidationError({"khu_vuc": "Khu vực này đã ngừng sử dụng."})
+        thiet_bi = attrs.get("thiet_bi", getattr(self.instance, "thiet_bi", None))
+        dang_su_dung = attrs.get(
+            "dang_su_dung",
+            getattr(self.instance, "dang_su_dung", True),
+        )
+        if nha_may and thiet_bi and dang_su_dung:
+            duplicate = MauChuyenDoiThietBi.objects.filter(
+                nha_may=nha_may,
+                thiet_bi=thiet_bi,
+                dang_su_dung=True,
+            )
+            if self.instance:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError(
+                    {
+                        "thiet_bi": (
+                            "Thiết bị này đã có một mẫu chuyển đổi tuần đang hoạt động "
+                            "trong nhà máy."
+                        )
+                    }
+                )
         attrs["to_may"] = khu_vuc.ma_khu_vuc
         return attrs
 

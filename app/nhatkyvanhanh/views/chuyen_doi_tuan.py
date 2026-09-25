@@ -30,6 +30,8 @@ from nhatkyvanhanh.serializers import (
     SoChuyenDoiThietBiTuanSerializer,
     LanChuyenDoiThietBiSerializer,
 )
+from nhatkyvanhanh.weekly_switch_pairs import validate_weekly_pairs
+from quanlyvanhanh.models import ThietBi
 from nhatkyvanhanh.permissions import (
     CanViewOperationLogbooks,
     CanCreateOperationLogbooks,
@@ -161,7 +163,11 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
                 {"detail": "Bạn không có quyền thêm thiết bị vào mẫu chuyển đổi thiết bị tuần."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().create(request, *args, **kwargs)
+        with transaction.atomic():
+            device_id = request.data.get("thiet_bi")
+            if device_id:
+                ThietBi.objects.select_for_update().get(pk=device_id)
+            return super().create(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
         if not _can_edit_weekly_equipment_switch_template(request.user):
@@ -169,7 +175,11 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
                 {"detail": "Bạn không có quyền sửa mẫu chuyển đổi thiết bị tuần."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().update(request, *args, **kwargs)
+        with transaction.atomic():
+            instance = self.get_object()
+            device_id = request.data.get("thiet_bi") or instance.thiet_bi_id
+            ThietBi.objects.select_for_update().get(pk=device_id)
+            return super().update(request, *args, **kwargs)
 
     def partial_update(self, request, *args, **kwargs):
         if not _can_edit_weekly_equipment_switch_template(request.user):
@@ -177,7 +187,11 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
                 {"detail": "Bạn không có quyền sửa mẫu chuyển đổi thiết bị tuần."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().partial_update(request, *args, **kwargs)
+        with transaction.atomic():
+            instance = self.get_object()
+            device_id = request.data.get("thiet_bi") or instance.thiet_bi_id
+            ThietBi.objects.select_for_update().get(pk=device_id)
+            return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         if not _can_delete_weekly_equipment_switch_template(request.user):
@@ -185,7 +199,11 @@ class MauChuyenDoiThietBiViewSet(viewsets.ModelViewSet):
                 {"detail": "Bạn không có quyền xóa thiết bị khỏi mẫu chuyển đổi thiết bị tuần."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().destroy(request, *args, **kwargs)
+        instance = self.get_object()
+        if instance.dang_su_dung:
+            instance.dang_su_dung = False
+            instance.save(update_fields=["dang_su_dung", "updated_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_queryset(self):
         from tochuc.models import NhaMay
@@ -335,6 +353,20 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                 {"detail": "Người tạo sổ không được tự ký duyệt sổ của chính mình."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        latest_run = so.lan_chuyen_dois.order_by("-thoi_gian", "-created_at").first()
+        if latest_run:
+            pair_rows = list(
+                latest_run.chi_tiets.select_related("thiet_bi", "khu_vuc").all()
+            )
+            pairs_valid, pair_error = validate_weekly_pairs(
+                pair_rows,
+                require_complete=True,
+            )
+            if not pairs_valid:
+                return Response(
+                    {"detail": pair_error, "code": "invalid_complementary_pair"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         so.nguoi_duyet = request.user
         so.duyet_at = timezone.now()
         so.trang_thai = SoChuyenDoiThietBiTuan.TrangThai.DA_DUYET
@@ -494,7 +526,6 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
         lan_serializer.is_valid(raise_exception=True)
 
         chi_tiets = request.data.get("chi_tiets", [])
-        chi_tiet_map = {str(item.id): item for item in lan.chi_tiets.all()}
         allowed_statuses = {choice[0] for choice in ChiTietChuyenDoiThietBi.TrangThai.choices}
         for payload in chi_tiets:
             trang_thai_value = payload.get("trang_thai")
@@ -505,7 +536,13 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                 )
 
         with transaction.atomic():
-            lan_serializer.save()
+            locked_details = list(
+                ChiTietChuyenDoiThietBi.objects.select_for_update(of=("self",))
+                .select_related("thiet_bi", "khu_vuc")
+                .filter(lan_chuyen_doi=lan)
+            )
+            chi_tiet_map = {str(item.id): item for item in locked_details}
+            updated_details = []
             for payload in chi_tiets:
                 chi_tiet = chi_tiet_map.get(str(payload.get("id")))
                 if not chi_tiet:
@@ -513,6 +550,17 @@ class SoChuyenDoiThietBiTuanViewSet(viewsets.ModelViewSet):
                 trang_thai_value = payload.get("trang_thai", chi_tiet.trang_thai)
                 chi_tiet.trang_thai = trang_thai_value or ""
                 chi_tiet.ghi_chu = payload.get("ghi_chu", chi_tiet.ghi_chu)
+                updated_details.append(chi_tiet)
+
+            pairs_valid, pair_error = validate_weekly_pairs(locked_details)
+            if not pairs_valid:
+                return Response(
+                    {"detail": pair_error, "code": "invalid_complementary_pair"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            lan_serializer.save()
+            for chi_tiet in updated_details:
                 chi_tiet.save(update_fields=["trang_thai", "ghi_chu", "updated_at"])
 
         response_serializer = self.get_serializer(self.get_object())
