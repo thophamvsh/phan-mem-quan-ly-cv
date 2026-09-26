@@ -2,7 +2,7 @@ import io
 from datetime import datetime
 
 import qrcode
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
@@ -120,7 +120,9 @@ class ThietBiViewSet(viewsets.ModelViewSet):
         return ThietBiSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().annotate(
+            con_count=Count("con", distinct=True),
+        )
         queryset = filter_queryset_by_factory(
             queryset,
             self.request.user,

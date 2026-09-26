@@ -68,13 +68,24 @@ class ThietBiSerializer(serializers.ModelSerializer):
 class ThietBiListSerializer(serializers.ModelSerializer):
     """Serializer đơn giản cho danh sách thiết bị"""
     cha_ten = serializers.CharField(source='cha.ten', read_only=True)
+    con_count = serializers.SerializerMethodField()
     hinh_anh_url = serializers.SerializerMethodField()
     ma_qr = serializers.SerializerMethodField()
     qr_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ThietBi
-        fields = ['id', 'ten', 'ma', 'ma_day_du', 'cha_ten', 'loai', 'trang_thai', 'cap', 'hinh_anh_url', 'nha_may', 'ma_qr', 'qr_url']
+        fields = [
+            'id', 'ten', 'ma', 'ma_day_du', 'cha_ten', 'loai',
+            'trang_thai', 'cap', 'con_count', 'hinh_anh_url', 'nha_may',
+            'ma_qr', 'qr_url',
+        ]
+
+    def get_con_count(self, obj):
+        annotated_count = getattr(obj, 'con_count', None)
+        if annotated_count is not None:
+            return annotated_count
+        return obj.con.count()
 
     def get_hinh_anh_url(self, obj):
         if obj.hinh_anh:

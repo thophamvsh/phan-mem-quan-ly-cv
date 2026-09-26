@@ -74,6 +74,23 @@ class ThietBiQRTests(APITestCase):
         results = response.data.get("results", response.data)
         self.assertIn(self.device.id, {item["id"] for item in results})
 
+    def test_list_returns_exact_child_count_for_drill_down(self):
+        child = ThietBi.objects.create(
+            ten="Thiết bị con",
+            ma="CHILD",
+            cha=self.device,
+            nha_may="Vinh Son",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/v1/quanlyvanhanh/thiet-bi/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        rows_by_id = {item["id"]: item for item in results}
+        self.assertEqual(rows_by_id[self.device.id]["con_count"], 1)
+        self.assertEqual(rows_by_id[child.id]["con_count"], 0)
+
     @patch('qrcode.QRCode.add_data')
     def test_qr_view_encodes_correct_url(self, mock_add_data):
         self.client.force_authenticate(user=self.user)
