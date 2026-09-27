@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from core.models import UserProfile
 from tochuc.models import NhaMay
@@ -29,7 +29,8 @@ class OwnershipPermissionTests(APITestCase):
             nha_may=self.sh_factory,
             can_edit_operation_parameters=True,
             can_delete_operation_parameters=True,
-            can_import_excel=True
+            can_import_excel=True,
+            can_export_excel=True,
         )
 
         self.user_b = get_user_model().objects.create_user(
@@ -42,7 +43,8 @@ class OwnershipPermissionTests(APITestCase):
             nha_may=self.sh_factory,
             can_edit_operation_parameters=True,
             can_delete_operation_parameters=True,
-            can_import_excel=True
+            can_import_excel=True,
+            can_export_excel=True,
         )
 
         self.superuser = get_user_model().objects.create_superuser(
@@ -55,7 +57,8 @@ class OwnershipPermissionTests(APITestCase):
             nha_may=self.sh_factory,
             can_edit_operation_parameters=True,
             can_delete_operation_parameters=True,
-            can_import_excel=True
+            can_import_excel=True,
+            can_export_excel=True,
         )
 
         # Create devices
@@ -268,13 +271,110 @@ class OwnershipPermissionTests(APITestCase):
         self.client.force_authenticate(user=self.user_a)
         response = self.client.delete(reverse('quanlyvanhanh:thongsovanhanh-delete-by-day') + '?ngay=2026-06-11')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         response = self.client.delete(reverse('quanlyvanhanh:thongsotomay-delete-by-day') + '?ngay=2026-06-11')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         response = self.client.delete(reverse('quanlyvanhanh:thongsotram110kv-delete-by-day') + '?ngay=2026-06-11')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_superuser_delete_by_day_requires_and_respects_factory_scope(self):
+        vs_factory = NhaMay.objects.create(
+            ma_nha_may="VS",
+            ten_nha_may="Vinh Son",
+        )
+        vs_device = ThietBi.objects.create(
+            ten="To may H1 Vinh Son",
+            ma="VS.TB.H1",
+            ma_day_du="VS.TB.H1",
+            nha_may=vs_factory.ten_nha_may,
+        )
+        for device, factory_name in (
+            (self.sh_device, self.sh_factory.ten_nha_may),
+            (vs_device, vs_factory.ten_nha_may),
+        ):
+            ThongSoVanHanh.objects.create(
+                thiet_bi=device,
+                ma_thong_so="dien_ap",
+                ten_thong_so="Dien ap",
+                thoi_diem_nhap=self.now,
+                ngay_nhap="2026-06-12",
+                nha_may=factory_name,
+                nguoi_nhap=self.superuser,
+            )
+
+        self.client.force_authenticate(user=self.superuser)
+        url = reverse("quanlyvanhanh:thongsovanhanh-delete-by-day")
+
+        response = self.client.delete(f"{url}?ngay=2026-06-12")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            ThongSoVanHanh.objects.filter(ngay_nhap="2026-06-12").count(),
+            2,
+        )
+
+        response = self.client.delete(
+            f"{url}?ngay=2026-06-12&factory_code=SH"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            ThongSoVanHanh.objects.filter(
+                ngay_nhap="2026-06-12",
+                thiet_bi=self.sh_device,
+            ).exists()
+        )
+        self.assertTrue(
+            ThongSoVanHanh.objects.filter(
+                ngay_nhap="2026-06-12",
+                thiet_bi=vs_device,
+            ).exists()
+        )
+
+    def test_superuser_export_respects_factory_scope(self):
+        vs_factory = NhaMay.objects.create(
+            ma_nha_may="VS",
+            ten_nha_may="Vinh Son",
+        )
+        vs_device = ThietBi.objects.create(
+            ten="To may H1 Vinh Son",
+            ma="VS.TB.H1",
+            ma_day_du="VS.TB.H1",
+            nha_may=vs_factory.ten_nha_may,
+        )
+        for device, factory_name in (
+            (self.sh_device, self.sh_factory.ten_nha_may),
+            (vs_device, vs_factory.ten_nha_may),
+        ):
+            ThongSoVanHanh.objects.create(
+                thiet_bi=device,
+                ma_thong_so="dien_ap",
+                ten_thong_so="Dien ap",
+                gia_tri="110",
+                thoi_diem_nhap=self.now,
+                ngay_nhap="2026-06-13",
+                nha_may=factory_name,
+                nguoi_nhap=self.superuser,
+            )
+
+        self.client.force_authenticate(user=self.superuser)
+        url = reverse("quanlyvanhanh:export_thong_so")
+        response = self.client.get(f"{url}?date=2026-06-13&format=xlsx")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response = self.client.get(
+            f"{url}?date=2026-06-13&format=xlsx&factory_code=SH"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        workbook = load_workbook(io.BytesIO(response.content), read_only=True)
+        rows = list(workbook.active.iter_rows(values_only=True))
+        flattened = " ".join(
+            str(value)
+            for row in rows
+            for value in row
+            if value is not None
+        )
+        self.assertIn("SH.TB.H1", flattened)
+        self.assertNotIn("VS.TB.H1", flattened)
     def test_excel_import_overwriting_forbidden(self):
         # Create a record belonging to User A
         ThongSoVanHanh.objects.create(

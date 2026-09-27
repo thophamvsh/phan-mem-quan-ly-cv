@@ -1,4 +1,5 @@
 import io
+from django.db.models import Q
 from django.http import HttpResponse
 from datetime import datetime, timedelta, time
 import pandas as pd
@@ -7,7 +8,14 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from core.factory_scope import filter_queryset_by_factory, get_user_factory_code, has_profile_permission
+from core.factory_scope import (
+    ensure_factory_code_allowed,
+    filter_queryset_by_factory,
+    get_user_factory_code,
+    has_all_factory_access,
+    has_profile_permission,
+)
+from tochuc.models import NhaMay
 from .models import ThongSoVanHanh, ThongSoToMay, ThietBi
 
 
@@ -36,6 +44,7 @@ def export_thong_so(request):
         date = params.get('date')
         thiet_bi = params.get('thiet_bi', 'all')
         format_type = params.get('format', 'xlsx')
+        factory_code = (params.get('factory_code') or '').strip().upper()
 
 
         if not date:
@@ -43,6 +52,20 @@ def export_thong_so(request):
                 'Thiếu tham số date',
                 status=400
             )
+
+        if has_all_factory_access(request.user) and not factory_code:
+            return HttpResponse(
+                'Thiếu tham số factory_code',
+                status=400,
+            )
+
+        if factory_code:
+            ensure_factory_code_allowed(request.user, factory_code)
+            factory = NhaMay.objects.filter(
+                ma_nha_may__iexact=factory_code
+            ).first()
+            if not factory:
+                return HttpResponse('Nhà máy không tồn tại', status=400)
 
         # Parse ngày
         try:
@@ -60,6 +83,12 @@ def export_thong_so(request):
             "nha_may",
             "string",
         )
+        if factory_code:
+            queryset = queryset.filter(
+                Q(nha_may__iexact=factory.ma_nha_may)
+                | Q(nha_may__iexact=factory.ten_nha_may)
+                | Q(thiet_bi__ma_day_du__istartswith=f'{factory.ma_nha_may}.')
+            )
 
         # Filter theo thiết bị nếu không phải "all"
         if thiet_bi != 'all':

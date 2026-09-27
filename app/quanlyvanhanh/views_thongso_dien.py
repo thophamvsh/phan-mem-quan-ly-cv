@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -352,6 +352,7 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
         thiet_bi_ma = request.query_params.get("thiet_bi_ma")
         thiet_bi_id = request.query_params.get("thiet_bi_id")
         ngay_str = request.query_params.get("ngay")
+        factory_code = (request.query_params.get("factory_code") or "").strip().upper()
 
         if not ngay_str:
             return Response(
@@ -359,7 +360,28 @@ class ThongSoVanHanhViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if has_all_factory_access(request.user) and not factory_code:
+            return Response(
+                {"error": "Can cung cap nha may (factory_code) khi xoa du lieu theo ngay."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         queryset = self.get_queryset().filter(ngay_nhap=ngay_str)
+        if factory_code:
+            ensure_factory_code_allowed(request.user, factory_code)
+            factory = NhaMay.objects.filter(
+                ma_nha_may__iexact=factory_code
+            ).first()
+            if not factory:
+                return Response(
+                    {"error": "Nha may khong ton tai."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(
+                Q(nha_may__iexact=factory.ma_nha_may)
+                | Q(nha_may__iexact=factory.ten_nha_may)
+                | Q(thiet_bi__ma_day_du__istartswith=f"{factory.ma_nha_may}.")
+            )
         if thiet_bi_id:
             queryset = queryset.filter(thiet_bi_id=thiet_bi_id)
         elif thiet_bi_ma:
