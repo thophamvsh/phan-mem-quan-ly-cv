@@ -45,7 +45,9 @@ class WeeklySwitchQRLookupQuerySerializer(serializers.Serializer):
 class WeeklySwitchQRSaveItemSerializer(serializers.Serializer):
     row_id = serializers.UUIDField(required=True)
     expected_updated_at = serializers.DateTimeField(required=True)
-    trang_thai = serializers.ChoiceField(choices=("lam_viec", "du_phong"))
+    trang_thai = serializers.ChoiceField(
+        choices=("lam_viec", "du_phong"), required=False
+    )
     ghi_chu = serializers.CharField(required=False, allow_blank=True, max_length=2000)
 
 
@@ -73,10 +75,23 @@ class WeeklySwitchQRSaveSerializer(serializers.Serializer):
     def validate(self, attrs):
         legacy_fields = {"expected_updated_at", "trang_thai"}
         has_legacy = legacy_fields.issubset(attrs)
-        has_group = bool(attrs.get("working_device_id") or attrs.get("items"))
+        working_device_id = attrs.get("working_device_id")
+        items = attrs.get("items") or []
+        has_group = bool(working_device_id or items)
         if not has_legacy and not has_group:
             raise serializers.ValidationError(
                 "Vui lòng chọn thiết bị làm việc hoặc nhập trạng thái của cả nhóm."
+            )
+        if items and not working_device_id and any(
+            "trang_thai" not in item for item in items
+        ):
+            raise serializers.ValidationError(
+                {
+                    "items": (
+                        "Trạng thái là bắt buộc khi cập nhật nhóm không phải "
+                        "cặp dự phòng."
+                    )
+                }
             )
         return attrs
 

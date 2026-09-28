@@ -478,6 +478,42 @@ class WeeklySwitchQuickEntryTests(APITestCase):
         self.assertEqual(companion.trang_thai, "lam_viec")
         self.assertEqual(len(response.data["rows"]), 2)
 
+    def test_group_qr_accepts_pair_items_without_redundant_status(self):
+        _, companion = self._configure_complementary_pair()
+        self.row.trang_thai = ""
+        self.row.save(update_fields=["trang_thai", "updated_at"])
+        companion.trang_thai = ""
+        companion.save(update_fields=["trang_thai", "updated_at"])
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            self.save_url,
+            {
+                "identity": str(self.template.pk),
+                "log_id": str(self.log.pk),
+                "lan_id": str(self.run.pk),
+                "working_device_id": companion.thiet_bi_id,
+                "items": [
+                    {
+                        "row_id": str(self.row.pk),
+                        "expected_updated_at": self.row.updated_at.isoformat(),
+                    },
+                    {
+                        "row_id": str(companion.pk),
+                        "expected_updated_at": companion.updated_at.isoformat(),
+                    },
+                ],
+                "confirmed": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.row.refresh_from_db()
+        companion.refresh_from_db()
+        self.assertEqual(self.row.trang_thai, "du_phong")
+        self.assertEqual(companion.trang_thai, "lam_viec")
+
     def test_group_qr_rejects_incomplete_group_payload(self):
         self._configure_complementary_pair()
         self.row.refresh_from_db()
