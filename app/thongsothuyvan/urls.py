@@ -22,6 +22,7 @@ from .views import (
     SongHinhRealtimeAPIView,
     SongHinhRealtimeSnapshotViewSet,
     VinhSonRealtimeAPIView,
+    ThuongKonTumLatestDailyHydrologyAPIView,
     VinhSonRealtimeSnapshotViewSet,
 )
 from .sync_views import (
@@ -58,6 +59,7 @@ urlpatterns = [
     path("settings/", HydrologySettingsAPIView.as_view(), name="settings"),
     path("realtime/songhinh/", SongHinhRealtimeAPIView.as_view(), name="realtime-songhinh"),
     path("realtime/vinhson/", VinhSonRealtimeAPIView.as_view(), name="realtime-vinhson"),
+    path("latest-daily-hydrology/thuongkontum/", ThuongKonTumLatestDailyHydrologyAPIView.as_view(), name="latest-daily-hydrology-thuongkontum"),
     path("realtime/state/", RealtimeUpdateStateAPIView.as_view(), name="realtime-state"),
     path("realtime/manual-save/", RealtimeManualSaveAPIView.as_view(), name="realtime-manual-save"),
     path("sync/preview/", PreviewGoogleSheetAPIView.as_view(), name="sync-preview"),

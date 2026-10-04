@@ -22,6 +22,7 @@ from .views_settings import (
 from .views_realtime import (
     SongHinhRealtimeAPIView,
     VinhSonRealtimeAPIView,
+    ThuongKonTumLatestDailyHydrologyAPIView,
     RealtimeUpdateStateAPIView,
     RealtimeManualSaveAPIView,
     SongHinhRealtimeSnapshotViewSet,
