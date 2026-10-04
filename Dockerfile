@@ -41,6 +41,9 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:/scripts:$PATH" \
     DJANGO_SETTINGS_MODULE=app.settings
 
+# Đợi builder hoàn tất trước khi cài gói runtime, tránh hai apt chạy song song trên ARM.
+COPY --from=builder /opt/venv /opt/venv
+
 # chỉ cài runtime libs tối thiểu
 RUN apt-get -o Acquire::ForceIPv4=true update && apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     libpq5 libjpeg62-turbo libmagic1 zlib1g tzdata curl bash git \
@@ -54,9 +57,6 @@ RUN addgroup --system django && adduser --system --ingroup django django
 RUN mkdir -p /app /vol/web/static /vol/web/media /vol/web/logs && \
     chown -R django:django /app /vol && \
     chmod -R 755 /vol
-
-# nhận venv đã build
-COPY --from=builder /opt/venv /opt/venv
 
 # copy scripts trước (để giữ cache tốt hơn)
 COPY --chown=django:django ./scripts /scripts
