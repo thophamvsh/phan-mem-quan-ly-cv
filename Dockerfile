@@ -5,7 +5,7 @@ FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 # toolchain & headers để build các gói có C-extension (psycopg2, Pillow, cryptography…)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::ForceIPv4=true update && apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     build-essential libpq-dev git curl && \
     rm -rf /var/lib/apt/lists/*
 
@@ -42,7 +42,7 @@ ENV PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=app.settings
 
 # chỉ cài runtime libs tối thiểu
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::ForceIPv4=true update && apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     libpq5 libjpeg62-turbo libmagic1 zlib1g tzdata curl bash git \
     poppler-utils tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng && \
     rm -rf /var/lib/apt/lists/*
@@ -83,7 +83,7 @@ CMD ["run.sh"]
 FROM production AS development
 
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::ForceIPv4=true update && apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     vim nano htop jq tree && \
     rm -rf /var/lib/apt/lists/*
 USER django
