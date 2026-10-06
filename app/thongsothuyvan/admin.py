@@ -550,16 +550,18 @@ class ThongSoThuyVanCaiDatAdmin(admin.ModelAdmin):
         "nam",
         "loai",
         "thang",
+        "quy",
         "tuan",
         "sanluong_kehoach_nam",
         "sanluong_kehoach_thang",
+        "sanluong_kehoach_quy",
         "mucnuoc_gioihan_tuan",
         "mucnuoc_gioihan_tuan_ho_a",
         "mucnuoc_gioihan_tuan_ho_b",
         "updated_by",
         "updated_at",
     )
-    list_filter = ("nha_may", "nam", "loai", "thang", "tuan")
+    list_filter = ("nha_may", "nam", "loai", "thang", "quy", "tuan")
     search_fields = ("nha_may",)
 
 

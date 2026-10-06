@@ -27,22 +27,23 @@ def get_year_weeks(year):
     return weeks
 
 
-def get_setting_record(nhamay, nam, loai, thang=0, tuan=0):
+def get_setting_record(nhamay, nam, loai, thang=0, tuan=0, quy=0):
     return ThongSoThuyVanCaiDat.objects.filter(
         nha_may=nhamay,
         nam=nam,
         loai=loai,
         thang=thang,
+        quy=quy,
         tuan=tuan,
     ).first()
 
 
-def get_setting_field_value(nhamay, nam, loai, field, thang=0, tuan=0):
-    record = get_setting_record(nhamay, nam, loai, thang=thang, tuan=tuan)
+def get_setting_field_value(nhamay, nam, loai, field, thang=0, tuan=0, quy=0):
+    record = get_setting_record(nhamay, nam, loai, thang=thang, tuan=tuan, quy=quy)
     return getattr(record, field, None) if record else None
 
 
-def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
+def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0, quy=0):
     from .views_sanxuat import parse_float_or_none, user_can_edit_hydrology_settings
 
     numeric_defaults = {
@@ -50,7 +51,7 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
         for field, value in values.items()
         if field not in {"tuan_bat_dau", "tuan_ket_thuc"}
     }
-    existing = get_setting_record(nhamay, nam, loai, thang=thang, tuan=tuan)
+    existing = get_setting_record(nhamay, nam, loai, thang=thang, tuan=tuan, quy=quy)
     if existing is None and not any(value is not None for value in numeric_defaults.values()):
         return None, False
     if existing is not None and not user_can_edit_hydrology_settings(user):
@@ -79,6 +80,7 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
         nam=nam,
         loai=loai,
         thang=thang,
+        quy=quy,
         tuan=tuan,
         created_by=user,
         **defaults,
@@ -88,19 +90,20 @@ def upsert_hydrology_setting(user, nhamay, nam, loai, values, thang=0, tuan=0):
 
 def build_hydrology_settings_payload(year, plant_codes):
     settings_lookup = {
-        (record.nha_may, record.loai, record.thang, record.tuan): record
+        (record.nha_may, record.loai, record.thang, record.quy, record.tuan): record
         for record in ThongSoThuyVanCaiDat.objects.filter(
             nha_may__in=plant_codes,
             nam=year,
         )
     }
 
-    def get_prefetched_value(nhamay, loai, field, thang=0, tuan=0):
-        record = settings_lookup.get((nhamay, loai, thang, tuan))
+    def get_prefetched_value(nhamay, loai, field, thang=0, tuan=0, quy=0):
+        record = settings_lookup.get((nhamay, loai, thang, quy, tuan))
         return getattr(record, field, None) if record else None
 
     annual = {}
     monthly = {}
+    quarterly = {}
 
     for plant_code in plant_codes:
         annual[plant_code] = get_prefetched_value(
@@ -115,6 +118,14 @@ def build_hydrology_settings_payload(year, plant_codes):
                 ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
                 "sanluong_kehoach_thang",
                 thang=month,
+            )
+        quarterly[plant_code] = {}
+        for quarter in range(1, 5):
+            quarterly[plant_code][str(quarter)] = get_prefetched_value(
+                plant_code,
+                ThongSoThuyVanCaiDat.LOAI_KE_HOACH_QUY,
+                "sanluong_kehoach_quy",
+                quy=quarter,
             )
 
     weekly = []
@@ -163,6 +174,7 @@ def build_hydrology_settings_payload(year, plant_codes):
         "year": year,
         "annual": annual,
         "monthly": monthly,
+        "quarterly": quarterly,
         "weekly": weekly,
     }
 
@@ -238,6 +250,7 @@ class HydrologySettingsAPIView(APIView):
                 "plants": plants,
                 "annual": settings_payload["annual"],
                 "monthly": settings_payload["monthly"],
+                "quarterly": settings_payload["quarterly"],
                 "weekly": settings_payload["weekly"],
             }
         )
@@ -268,6 +281,7 @@ class HydrologySettingsAPIView(APIView):
 
         annual = request.data.get("annual") or {}
         monthly = request.data.get("monthly") or {}
+        quarterly = request.data.get("quarterly") or {}
         weekly = request.data.get("weekly") or []
         valid_week_numbers = {week["week"] for week in get_year_weeks(year)}
         changed = 0
@@ -312,6 +326,33 @@ class HydrologySettingsAPIView(APIView):
                         ThongSoThuyVanCaiDat.LOAI_KE_HOACH_THANG,
                         {"sanluong_kehoach_thang": value},
                         thang=month,
+                    )
+                    if obj:
+                        changed += 1
+
+            for plant_code, quarter_values in quarterly.items():
+                nhamay = normalize_plant_code(plant_code)
+                if nhamay not in HYDROLOGY_PLANTS:
+                    continue
+                if not user_can_access_plant(request.user, nhamay):
+                    return Response(
+                        {"error": "Bạn không có quyền cài đặt nhà máy này."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                for quarter_key, value in (quarter_values or {}).items():
+                    quarter = int(quarter_key)
+                    if quarter < 1 or quarter > 4:
+                        return Response(
+                            {"error": "Quý phải nằm trong khoảng 1–4."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    obj, _created = upsert_hydrology_setting(
+                        request.user,
+                        nhamay,
+                        year,
+                        ThongSoThuyVanCaiDat.LOAI_KE_HOACH_QUY,
+                        {"sanluong_kehoach_quy": value},
+                        quy=quarter,
                     )
                     if obj:
                         changed += 1

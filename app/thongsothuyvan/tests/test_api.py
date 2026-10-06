@@ -232,6 +232,47 @@ class ThongSoThuyVanAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_hydrology_settings_quarterly_target_round_trip_and_scope(self):
+        url = reverse("thongsothuyvan:settings")
+        self.client.force_authenticate(user=self.sh_user)
+        saved = self.client.post(
+            url,
+            {
+                "year": 2026,
+                "quarterly": {"songhinh": {"3": 123_000_000}},
+            },
+            format="json",
+        )
+        self.assertEqual(saved.status_code, status.HTTP_200_OK, saved.data)
+        record = ThongSoThuyVanCaiDat.objects.get(
+            nha_may="songhinh",
+            nam=2026,
+            loai=ThongSoThuyVanCaiDat.LOAI_KE_HOACH_QUY,
+            quy=3,
+        )
+        self.assertEqual(record.sanluong_kehoach_quy, 123_000_000)
+
+        response = self.client.get(url, {"year": 2026})
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["quarterly"]["songhinh"]["3"], 123_000_000)
+        self.assertNotIn("vinhson", response.data["quarterly"])
+
+        denied = self.client.post(
+            url,
+            {"year": 2026, "quarterly": {"vinhson": {"3": 1}}},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        cleared = self.client.post(
+            url,
+            {"year": 2026, "quarterly": {"songhinh": {"3": ""}}},
+            format="json",
+        )
+        self.assertEqual(cleared.status_code, status.HTTP_200_OK, cleared.data)
+        record.refresh_from_db()
+        self.assertIsNone(record.sanluong_kehoach_quy)
+
     def test_hydrology_settings_create_sets_created_and_updated_user(self):
         url = reverse("thongsothuyvan:settings")
 
