@@ -240,7 +240,7 @@ class ModuleGuide(models.Model):
         "nhat_ky_su_kien": SCOPE_PLANT,
         "quan_ly_thiet_bi": SCOPE_PLANT,
         "thong_so_van_hanh": SCOPE_PLANT,
-        "dashboard_nha_may": SCOPE_PLANT,
+        "dashboard_nha_may": SCOPE_PLANT_OPTIONAL,
         "cai_dat_he_thong": SCOPE_PLANT_OPTIONAL,
         "quan_ly_tai_khoan": SCOPE_GLOBAL,
         "quan_ly_ca_truc": SCOPE_PLANT,

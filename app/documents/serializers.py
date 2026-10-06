@@ -136,6 +136,9 @@ class DocumentChunkResultSerializer(serializers.Serializer):
 
 
 class ModuleGuideSerializer(serializers.ModelSerializer):
+    # DRF suy diễn UniqueValidator từ constraint một trường của bản Global.
+    # module_code không duy nhất trên toàn bảng: mỗi nhà máy có thể có tài liệu riêng.
+    module_code = serializers.ChoiceField(choices=ModuleGuide.MODULE_CHOICES)
     nha_may_name = serializers.CharField(source="nha_may.ten_nha_may", read_only=True)
     module_name = serializers.CharField(source="get_module_code_display", read_only=True)
     document_kind_name = serializers.CharField(

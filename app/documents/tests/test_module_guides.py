@@ -144,7 +144,7 @@ class ModuleGuideApiTests(APITestCase):
         self.assertEqual(len(values), len(set(values)))
         self.assertEqual(set(values), {value for value, _ in ModuleGuide.MODULE_CHOICES})
         scopes = {item["value"]: item["scope"] for item in options}
-        self.assertEqual(scopes["dashboard_nha_may"], ModuleGuide.SCOPE_PLANT)
+        self.assertEqual(scopes["dashboard_nha_may"], ModuleGuide.SCOPE_PLANT_OPTIONAL)
         self.assertEqual(scopes["cai_dat_he_thong"], ModuleGuide.SCOPE_PLANT_OPTIONAL)
         self.assertEqual(scopes["quan_ly_tai_khoan"], ModuleGuide.SCOPE_GLOBAL)
 
@@ -224,6 +224,20 @@ class ModuleGuideApiTests(APITestCase):
             status=ModuleGuide.STATUS_PUBLISHED,
             version="settings-global",
         )
+        dashboard_global = self.create_guide(
+            module_code="dashboard_nha_may",
+            plant=None,
+            creator=self.all_factory_manager,
+            status=ModuleGuide.STATUS_PUBLISHED,
+            version="dashboard-vsh",
+        )
+        dashboard_sh = self.create_guide(
+            module_code="dashboard_nha_may",
+            plant=self.sh,
+            creator=self.all_factory_manager,
+            status=ModuleGuide.STATUS_PUBLISHED,
+            version="dashboard-sh",
+        )
         self.create_guide(
             module_code="cai_dat_he_thong",
             plant=self.sh,
@@ -246,6 +260,23 @@ class ModuleGuideApiTests(APITestCase):
         self.assertEqual(optional_response.status_code, 200, optional_response.data)
         optional_items = optional_response.data.get("results", optional_response.data)
         self.assertEqual([item["id"] for item in optional_items], [optional_global.id])
+
+        dashboard_response = self.client.get(
+            f"{self.endpoint}?module_code=dashboard_nha_may"
+        )
+        self.assertEqual(dashboard_response.status_code, 200, dashboard_response.data)
+        dashboard_items = dashboard_response.data.get("results", dashboard_response.data)
+        self.assertEqual([item["id"] for item in dashboard_items], [dashboard_global.id])
+
+        dashboard_plant_response = self.client.get(
+            f"{self.endpoint}?module_code=dashboard_nha_may&nha_may={self.sh.id}"
+        )
+        self.assertEqual(dashboard_plant_response.status_code, 200, dashboard_plant_response.data)
+        dashboard_plant_items = dashboard_plant_response.data.get("results", dashboard_plant_response.data)
+        self.assertEqual(
+            {item["id"] for item in dashboard_plant_items},
+            {dashboard_global.id, dashboard_sh.id},
+        )
 
         plant_response = self.client.get(
             f"{self.endpoint}?module_code=nhat_ky_su_kien"
@@ -289,6 +320,57 @@ class ModuleGuideApiTests(APITestCase):
         payload["file"] = pdf_upload("vs.pdf")
         denied = self.client.post(self.endpoint, payload, format="multipart")
         self.assertEqual(denied.status_code, 403, denied.data)
+
+    def test_dashboard_global_and_plant_guides_can_share_module_code(self):
+        self.client.force_authenticate(self.all_factory_manager)
+        payload = {
+            "module_code": "dashboard_nha_may",
+            "title": "Hướng dẫn Dashboard",
+            "document_kind": "procedure",
+            "is_primary": True,
+            "order": 0,
+            "version_label": "v1",
+            "file": pdf_upload("dashboard-global.pdf", b"global"),
+        }
+        global_response = self.client.post(self.endpoint, payload, format="multipart")
+        self.assertEqual(global_response.status_code, 201, global_response.data)
+        self.assertIsNone(global_response.data["nha_may"])
+
+        payload["nha_may"] = self.sh.id
+        payload["file"] = pdf_upload("dashboard-sh.pdf", b"sh")
+        plant_response = self.client.post(self.endpoint, payload, format="multipart")
+        self.assertEqual(plant_response.status_code, 201, plant_response.data)
+        self.assertEqual(plant_response.data["nha_may"], self.sh.id)
+
+        payload["file"] = pdf_upload("dashboard-sh-duplicate.pdf", b"duplicate")
+        duplicate = self.client.post(self.endpoint, payload, format="multipart")
+        self.assertEqual(duplicate.status_code, 400, duplicate.data)
+
+    def test_published_global_dashboard_does_not_block_plant_draft(self):
+        self.create_guide(
+            module_code="dashboard_nha_may",
+            plant=None,
+            creator=self.all_factory_manager,
+            status=ModuleGuide.STATUS_PUBLISHED,
+            version="DS-01",
+        )
+        self.client.force_authenticate(self.all_factory_manager)
+        response = self.client.post(
+            self.endpoint,
+            {
+                "module_code": "dashboard_nha_may",
+                "nha_may": self.sh.id,
+                "title": "Dashboard Sông Hinh",
+                "document_kind": "procedure",
+                "is_primary": True,
+                "order": 0,
+                "version_label": "DS-01",
+                "file": pdf_upload("dashboard-sh.pdf", b"sh"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["nha_may"], self.sh.id)
 
     def test_all_factory_viewer_must_choose_plant_but_manager_can_use_management_mode(self):
         viewer = self.make_user(
