@@ -33,7 +33,11 @@ from .sync_views import (
     SaveGoogleSheetDataAPIView,
     SaveThuyVanThucTeAPIView,
 )
-from .vrain_views import SyncVrainRainfallAPIView, VrainRealtimeAPIView
+from .vrain_views import (
+    SyncVrainRainfallAPIView,
+    VrainRealtimeAPIView,
+    VrainSince19APIView,
+)
 
 app_name = "thongsothuyvan"
 
@@ -72,4 +76,5 @@ urlpatterns = [
     path("sync-thucte/save/", SaveThuyVanThucTeAPIView.as_view(), name="sync-thucte-save"),
     path("sync-vrain/", SyncVrainRainfallAPIView.as_view(), name="sync-vrain"),
     path("vrain-realtime/", VrainRealtimeAPIView.as_view(), name="vrain-realtime"),
+    path("vrain-since-19/", VrainSince19APIView.as_view(), name="vrain-since-19"),
 ]

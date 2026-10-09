@@ -69,12 +69,12 @@ def save_all_realtime_snapshots_task():
 @shared_task
 def sync_vrain_daily_rainfall_task():
     """
-    Celery task to sync VRAIN daily rainfall data.
+    Finalize yesterday's VRAIN daily rainfall data.
     """
     logger.info("Celery Task: sync_vrain_daily_rainfall_task started.")
     try:
         from thongsothuyvan.vrain_services import sync_vrain_daily_rainfall
-        sync_vrain_daily_rainfall()
+        sync_vrain_daily_rainfall(timezone.localdate() - timedelta(days=1))
         logger.info("Celery Task: sync_vrain_daily_rainfall_task completed successfully.")
     except Exception as e:
         logger.exception("Celery Task: sync_vrain_daily_rainfall_task failed.")

@@ -3,9 +3,11 @@ import os
 import sys
 import threading
 import time
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import close_old_connections
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +15,7 @@ _scheduler_started = False
 _scheduler_lock = threading.Lock()
 
 DEFAULT_HOURLY_GRACE_MINUTES = 5
-DEFAULT_VRAIN_INTERVAL_SECONDS = 60 * 60
+DEFAULT_VRAIN_RETRY_INTERVAL_SECONDS = 60 * 60
 DEFAULT_POLL_SECONDS = 60
 SKIP_COMMANDS = {
     "collectstatic",
@@ -76,18 +78,24 @@ def _scheduler_loop():
         getattr(settings, "REALTIME_SNAPSHOT_POLL_SECONDS", DEFAULT_POLL_SECONDS),
     )
     vrain_enabled = _env_bool("VRAIN_DAILY_SYNC_ENABLED", True)
-    vrain_interval_seconds = _env_int(
+    vrain_retry_interval_seconds = _env_int(
         "VRAIN_DAILY_SYNC_INTERVAL_SECONDS",
-        getattr(settings, "VRAIN_DAILY_SYNC_INTERVAL_SECONDS", DEFAULT_VRAIN_INTERVAL_SECONDS),
+        getattr(
+            settings,
+            "VRAIN_DAILY_SYNC_INTERVAL_SECONDS",
+            DEFAULT_VRAIN_RETRY_INTERVAL_SECONDS,
+        ),
     )
-    last_vrain_sync_at = 0
+    last_vrain_sync_date = None
+    last_vrain_attempt_at = None
 
     logger.info(
-        "Realtime snapshot scheduler started: hourly_grace=%sm poll=%ss vrain_enabled=%s vrain_interval=%ss",
+        "Realtime snapshot scheduler started: "
+        "hourly_grace=%sm poll=%ss vrain_enabled=%s vrain_retry=%ss",
         hourly_grace_minutes,
         poll_seconds,
         vrain_enabled,
-        vrain_interval_seconds,
+        vrain_retry_interval_seconds,
     )
 
     while True:
@@ -103,12 +111,22 @@ def _scheduler_loop():
             ):
                 save_all_realtime_snapshots(mark_run=False)
 
-            now = time.time()
-            if vrain_enabled and now - last_vrain_sync_at >= vrain_interval_seconds:
+            local_now = timezone.localtime()
+            now = time.monotonic()
+            if (
+                vrain_enabled
+                and local_now.hour >= 7
+                and last_vrain_sync_date != local_now.date()
+                and (
+                    last_vrain_attempt_at is None
+                    or now - last_vrain_attempt_at >= vrain_retry_interval_seconds
+                )
+            ):
                 from .vrain_services import sync_vrain_daily_rainfall
 
-                last_vrain_sync_at = now
-                sync_vrain_daily_rainfall()
+                last_vrain_attempt_at = now
+                sync_vrain_daily_rainfall(local_now.date() - timedelta(days=1))
+                last_vrain_sync_date = local_now.date()
         except Exception:
             logger.exception("Realtime snapshot scheduler failed")
         finally:

@@ -7,8 +7,11 @@ from rest_framework.views import APIView
 
 from .vrain_services import (
     VrainConfigError,
+    VrainFutureDateError,
     VrainNoDataError,
     get_vrain_realtime_24h,
+    get_vrain_since_19,
+    get_vrain_since_19_window,
     sync_vrain_daily_rainfall,
 )
 
@@ -33,6 +36,11 @@ def _vrain_error_response(error):
         return Response(
             {"ok": False, "error": f"Loi ket noi den VRAIN API: {error}"},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    if isinstance(error, VrainFutureDateError):
+        return Response(
+            {"ok": False, "error": str(error)},
+            status=status.HTTP_400_BAD_REQUEST,
         )
     if isinstance(error, ValueError):
         return Response(
@@ -76,5 +84,25 @@ class VrainRealtimeAPIView(APIView):
         except Exception as error:
             return _vrain_error_response(error)
 
+        cache.set(cache_key, response_data, 600)
+        return Response(response_data)
+
+
+class VrainSince19APIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        window = get_vrain_since_19_window()
+        cache_key = f"vrain_since_19_{window[0].date().isoformat()}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
+        try:
+            response_data = get_vrain_since_19(window)
+        except Exception as error:
+            return _vrain_error_response(error)
+
+        # VRAIN publishes a new sample approximately every 10 minutes.
         cache.set(cache_key, response_data, 600)
         return Response(response_data)

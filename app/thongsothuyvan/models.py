@@ -349,6 +349,11 @@ class ThongSoThuyVanThucTe(models.Model):
 
 
 class TramDoMuaVrain(models.Model):
+    class SyncStatus(models.TextChoices):
+        UNKNOWN = "unknown", "Chưa xác định"
+        PROVISIONAL = "provisional", "Tạm tính"
+        FINALIZED = "finalized", "Đã chốt"
+
     Thoi_gian = models.DateTimeField(verbose_name="Thời gian")
     Xa_Ea_M_doan = models.FloatField(verbose_name="Xã Ea M'đoan", null=True, blank=True)
     Thon_10_Xa_Ea_M_Doal = models.FloatField(verbose_name="Thôn 10 - Xã Ea M'Doal", null=True, blank=True)
@@ -359,6 +364,13 @@ class TramDoMuaVrain(models.Model):
     Ho_B_TD_Vinh_Son = models.FloatField(verbose_name="Hồ B - TĐ Vĩnh Sơn", null=True, blank=True)
     Ho_A_TD_Vinh_Son = models.FloatField(verbose_name="Hồ A - TĐ Vĩnh Sơn", null=True, blank=True)
     Ho_C_TD_Vinh_Son = models.FloatField(verbose_name="Hồ C - TĐ Vĩnh Sơn", null=True, blank=True)
+    sync_status = models.CharField(
+        "Trạng thái đồng bộ",
+        max_length=12,
+        choices=SyncStatus.choices,
+        default=SyncStatus.UNKNOWN,
+    )
+    synced_at = models.DateTimeField("Đồng bộ lúc", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

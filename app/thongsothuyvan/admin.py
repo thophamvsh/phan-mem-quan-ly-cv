@@ -783,6 +783,8 @@ class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     resource_class = TramDoMuaVrainResource
     list_display = (
         "Thoi_gian",
+        "sync_status",
+        "synced_at",
         "Xa_Ea_M_doan",
         "Thon_10_Xa_Ea_M_Doal",
         "UBND_xa_Song_Hinh",
@@ -793,4 +795,5 @@ class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
         "Ho_A_TD_Vinh_Son",
         "Ho_C_TD_Vinh_Son",
     )
+    list_filter = ("sync_status",)
     date_hierarchy = "Thoi_gian"

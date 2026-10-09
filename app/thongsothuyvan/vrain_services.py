@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pytz
 import requests
 from django.conf import settings
+from django.utils import timezone
 
 from .models import TramDoMuaVrain
 
@@ -29,6 +30,10 @@ class VrainNoDataError(ValueError):
 
 
 class VrainConfigError(RuntimeError):
+    pass
+
+
+class VrainFutureDateError(ValueError):
     pass
 
 
@@ -96,6 +101,8 @@ def _vn_now():
 def _parse_date(date_value):
     if not date_value:
         return _vn_now().date()
+    if isinstance(date_value, datetime):
+        return date_value.date()
     if hasattr(date_value, "year") and hasattr(date_value, "month"):
         return date_value
     return datetime.strptime(str(date_value), "%Y-%m-%d").date()
@@ -105,30 +112,48 @@ def sync_vrain_daily_rainfall(date_value=None):
     vn_tz = pytz.timezone("Asia/Ho_Chi_Minh")
     now_vn = _vn_now()
     target_date = _parse_date(date_value)
+    if target_date > now_vn.date():
+        raise VrainFutureDateError("Không thể đồng bộ lượng mưa của ngày tương lai")
     start_time = f"{target_date} 00:00:00"
     end_time = (
-        f"{target_date} {str(now_vn.hour).zfill(2)}:59:59"
+        now_vn.strftime("%Y-%m-%d %H:%M:%S")
         if target_date == now_vn.date()
         else f"{target_date} 23:59:59"
     )
 
     station_totals = _sum_station_totals(_fetch_station_stats(start_time, end_time))
     db_time = vn_tz.localize(datetime.combine(target_date, datetime.min.time()))
+    sync_status = (
+        TramDoMuaVrain.SyncStatus.PROVISIONAL
+        if target_date == now_vn.date()
+        else TramDoMuaVrain.SyncStatus.FINALIZED
+    )
+    synced_at = timezone.now()
 
     obj = TramDoMuaVrain.objects.filter(Thoi_gian=db_time).order_by("id").first()
     created = obj is None
     if created:
-        obj = TramDoMuaVrain.objects.create(Thoi_gian=db_time, **station_totals)
+        obj = TramDoMuaVrain.objects.create(
+            Thoi_gian=db_time,
+            sync_status=sync_status,
+            synced_at=synced_at,
+            **station_totals,
+        )
     else:
         for field_name, value in station_totals.items():
             setattr(obj, field_name, value)
-        obj.save(update_fields=list(station_totals.keys()))
+        obj.sync_status = sync_status
+        obj.synced_at = synced_at
+        obj.save(update_fields=[*station_totals.keys(), "sync_status", "synced_at"])
 
     return {
         "ok": True,
         "message": "Dong bo thanh cong",
         "date": str(target_date),
         "created": created,
+        "start_time": start_time,
+        "end_time": end_time,
+        "sync_status": sync_status,
         "data": station_totals,
     }
 
@@ -140,6 +165,27 @@ def get_vrain_realtime_24h():
     end_time = now_vn.strftime("%Y-%m-%d %H:%M:%S")
     station_totals = _sum_station_totals(_fetch_station_stats(start_time, end_time))
 
+    return {
+        "ok": True,
+        "start_time": start_time,
+        "end_time": end_time,
+        "data": station_totals,
+    }
+
+
+def get_vrain_since_19_window(now_vn=None):
+    now_vn = now_vn or _vn_now()
+    start_vn = now_vn.replace(hour=19, minute=0, second=0, microsecond=0)
+    if now_vn < start_vn:
+        start_vn -= timedelta(days=1)
+    return start_vn, now_vn
+
+
+def get_vrain_since_19(window=None):
+    start_vn, end_vn = window or get_vrain_since_19_window()
+    start_time = start_vn.strftime("%Y-%m-%d %H:%M:%S")
+    end_time = end_vn.strftime("%Y-%m-%d %H:%M:%S")
+    station_totals = _sum_station_totals(_fetch_station_stats(start_time, end_time))
     return {
         "ok": True,
         "start_time": start_time,
