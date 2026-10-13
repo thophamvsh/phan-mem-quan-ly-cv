@@ -221,3 +221,11 @@ __marimo__/
 *.json
 secrets/
 cold_storage/
+
+# Host backup runtime secrets/artifacts (examples remain tracked)
+backup.ini
+rclone.conf
+heartbeat.url
+*age-identity*.txt
+*.age
+*.dump

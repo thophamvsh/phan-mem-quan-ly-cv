@@ -1,0 +1,11 @@
+[Unit]
+Description=VSH daily backup at 02:30 Vietnam time
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Ho_Chi_Minh
+Persistent=true
+AccuracySec=1min
+Unit=vsh-backup.service
+
+[Install]
+WantedBy=timers.target

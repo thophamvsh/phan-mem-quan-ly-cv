@@ -1,0 +1,30 @@
+[backup]
+mount = /mnt/nvme
+mount_uuid = 15adcf22-8515-429d-a01b-99dba45c615e
+staging = /mnt/nvme/vsh-backup-staging
+repo = /var/www/backend/phan-mem-quan-ly-cv
+db_container = vsh-prod-db-1
+app_container = vsh-prod-app-1
+media = /var/www/backend/phan-mem-quan-ly-cv/vol/web/media
+security_logs = /mnt/nvme/security-logs/rsyslog
+# Confirm this path with docker inspect before installation.
+audit_archives = /mnt/nvme/vsh/audit-archives
+min_free_gib = 5
+remote = r2:vsh-prod-backups/daily/orangepi
+rclone_config = /etc/vsh-backup/rclone.conf
+recipient_file = /etc/vsh-backup/recipients.txt
+heartbeat_file = /etc/vsh-backup/heartbeat.url
+# Explicit allowlist. Secrets are managed separately, outside this archive.
+config_files =
+    /var/www/backend/phan-mem-quan-ly-cv/docker-compose.prod.yml
+    /etc/fstab
+    /etc/nginx/sites-available/vsh-tunnel
+    /etc/docker/daemon.json
+    /etc/containerd/config.toml
+    /etc/systemd/system/docker.service.d/10-nvme.conf
+    /etc/systemd/system/containerd.service.d/10-nvme.conf
+    /etc/systemd/system/rsyslog.service.d/10-nvme.conf
+    /etc/rsyslog.d/30-security-nvme.conf
+    /etc/logrotate.d/vsh-security-nvme
+    /etc/systemd/system/vsh-backup.service
+    /etc/systemd/system/vsh-backup.timer
