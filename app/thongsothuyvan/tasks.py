@@ -86,7 +86,7 @@ def sync_vrain_daily_rainfall_task():
 @shared_task
 def sync_missing_thuy_van_thuc_te_daily_task():
     """
-    Celery task to sync missing actual hydrology records through yesterday.
+    Sync Song Hinh actual hydrology through yesterday; Vinh Son is manual.
     """
     logger.info("Celery Task: sync_missing_thuy_van_thuc_te_daily_task started.")
     try:
@@ -95,7 +95,7 @@ def sync_missing_thuy_van_thuc_te_daily_task():
         service = GoogleSheetHydrologyService()
         results = {}
 
-        for nhamay in ("songhinh", "vinhson"):
+        for nhamay in ("songhinh",):
             from core.models import DataSyncAudit
             from core.sync_audit import record_data_sync, resolve_sync_plant
 

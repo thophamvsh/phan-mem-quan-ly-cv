@@ -34,7 +34,7 @@ class ThuyVanThucTeTaskTests(TestCase):
     @patch("thongsothuyvan.tasks.close_old_connections")
     @patch("thongsothuyvan.tasks.timezone.localdate", return_value=date(2026, 6, 23))
     @patch("thongsothuyvan.tasks.GoogleSheetHydrologyService")
-    def test_daily_task_syncs_missing_ranges_with_system_user(self, service_class, _localdate, _close_connections):
+    def test_daily_task_syncs_songhinh_only_even_when_vinhson_is_missing_days(self, service_class, _localdate, _close_connections):
         User = get_user_model()
         ThongSoThuyVanThucTe.objects.create(
             nha_may="songhinh",
@@ -44,7 +44,7 @@ class ThuyVanThucTeTaskTests(TestCase):
         )
         ThongSoThuyVanThucTe.objects.create(
             nha_may="vinhson",
-            ngay=date(2026, 6, 22),
+            ngay=date(2026, 6, 20),
             muc_nuoc_ho_a=768.1,
             qve_tong=60,
         )
@@ -63,7 +63,7 @@ class ThuyVanThucTeTaskTests(TestCase):
         self.assertEqual(system_user.username, "system_auto_sync")
         self.assertEqual(result["songhinh"]["start_date"], "2026-06-21")
         self.assertEqual(result["songhinh"]["end_date"], "2026-06-22")
-        self.assertTrue(result["vinhson"]["skipped"])
+        self.assertNotIn("vinhson", result)
         service_class.return_value.sync_thuc_te_range.assert_called_once_with(
             nhamay="songhinh",
             start_date=date(2026, 6, 21),
@@ -75,7 +75,7 @@ class ThuyVanThucTeTaskTests(TestCase):
             source=DataSyncAudit.Source.SCHEDULE,
             data_type="Thủy văn thực tế",
         )
-        self.assertEqual(audits.count(), 2)
+        self.assertEqual(audits.count(), 1)
         self.assertEqual(
             set(audits.values_list("status", flat=True)),
             {DataSyncAudit.Status.SUCCESS},
