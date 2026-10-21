@@ -122,9 +122,9 @@ if TRUST_PROXY_HEADERS and not TRUSTED_PROXY_CIDRS:
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
-    "save-realtime-snapshots-hourly": {
+    "save-realtime-snapshots-half-hourly": {
         "task": "thongsothuyvan.tasks.save_all_realtime_snapshots_task",
-        "schedule": crontab(minute=5),
+        "schedule": crontab(minute="0,30"),
     },
     "sync-vrain-rainfall-daily": {
         "task": "thongsothuyvan.tasks.sync_vrain_daily_rainfall_task",

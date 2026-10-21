@@ -52,7 +52,7 @@ def get_missing_thuc_te_sync_range(nhamay, end_date):
 @shared_task
 def save_all_realtime_snapshots_task():
     """
-    Celery task to save all realtime snapshots (hourly).
+    Save both plants' realtime snapshots at minute 00 and 30 of each hour.
     """
     logger.info("Celery Task: save_all_realtime_snapshots_task started.")
     try:

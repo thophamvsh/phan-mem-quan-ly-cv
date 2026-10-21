@@ -716,12 +716,13 @@ class SongHinhRealtimeSnapshotAdmin(admin.ModelAdmin):
         "qtran",
         "dung_tich_ho",
         "dung_tich_phong_lu",
+        "qve_tinh_toan",
         "created_at",
     )
     list_filter = ("time_stamp", "created_at")
     search_fields = ("id", "time_stamp")
     date_hierarchy = "time_stamp"
-    readonly_fields = ("created_at", "raw_data")
+    readonly_fields = ("created_at", "raw_data", "qve_tinh_toan", "qve_calculation")
 
 
 @admin.register(VinhSonRealtimeSnapshot)
@@ -736,12 +737,13 @@ class VinhSonRealtimeSnapshotAdmin(admin.ModelAdmin):
         "ph2",
         "qcm",
         "qtran",
+        "qve_tinh_toan",
         "created_at",
     )
     list_filter = ("time_stamp", "created_at")
     search_fields = ("id", "time_stamp")
     date_hierarchy = "time_stamp"
-    readonly_fields = ("created_at", "raw_data")
+    readonly_fields = ("created_at", "raw_data", "qve_tinh_toan", "qve_calculation")
 
 
 class TramDoMuaVrainResource(SafeWidgetResource):

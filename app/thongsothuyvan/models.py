@@ -62,6 +62,8 @@ class RealtimeUpdateState(models.Model):
 
 
 class SongHinhRealtimeSnapshot(models.Model):
+    qve_tinh_toan = models.FloatField(null=True, blank=True)
+    qve_calculation = models.JSONField(default=dict, blank=True)
     time_stamp = models.DateTimeField()
     mntl = models.FloatField()
     mnhl = models.FloatField()
@@ -88,6 +90,8 @@ class SongHinhRealtimeSnapshot(models.Model):
 
 
 class VinhSonRealtimeSnapshot(models.Model):
+    qve_tinh_toan = models.FloatField(null=True, blank=True)
+    qve_calculation = models.JSONField(default=dict, blank=True)
     time_stamp = models.DateTimeField()
     mntla = models.FloatField()
     mntla_td = models.FloatField(null=True, blank=True)

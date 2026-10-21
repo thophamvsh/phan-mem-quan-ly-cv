@@ -91,7 +91,7 @@ def _scheduler_loop():
 
     logger.info(
         "Realtime snapshot scheduler started: "
-        "hourly_grace=%sm poll=%ss vrain_enabled=%s vrain_retry=%ss",
+        "slots=00,30 grace=%sm poll=%ss vrain_enabled=%s vrain_retry=%ss",
         hourly_grace_minutes,
         poll_seconds,
         vrain_enabled,
@@ -102,11 +102,11 @@ def _scheduler_loop():
         try:
             close_old_connections()
             from .realtime_services import (
-                claim_realtime_snapshot_hourly_slot,
+                claim_realtime_snapshot_half_hourly_slot,
                 save_all_realtime_snapshots,
             )
 
-            if claim_realtime_snapshot_hourly_slot(
+            if claim_realtime_snapshot_half_hourly_slot(
                 grace_minutes=hourly_grace_minutes
             ):
                 save_all_realtime_snapshots(mark_run=False)

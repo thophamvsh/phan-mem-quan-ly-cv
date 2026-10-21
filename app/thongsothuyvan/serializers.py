@@ -255,9 +255,11 @@ class SongHinhRealtimeSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = SongHinhRealtimeSnapshot
         fields = "__all__"
+        read_only_fields = ("qve_tinh_toan", "qve_calculation")
 
 
 class VinhSonRealtimeSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = VinhSonRealtimeSnapshot
         fields = "__all__"
+        read_only_fields = ("qve_tinh_toan", "qve_calculation")

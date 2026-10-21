@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from .realtime_inflow import calculate_inflow, finite
 
 from .models import (
     RealtimeUpdateState,
@@ -91,7 +92,9 @@ def parse_realtime_timestamp(value):
     return parsed
 
 
-def get_capacity_by_level(model_class, mucnuoc):
+def get_capacity_by_level(model_class, mucnuoc, strict=False):
+    if finite(mucnuoc) is None:
+        return None
     try:
         level = Decimal(str(mucnuoc))
     except (InvalidOperation, TypeError, ValueError):
@@ -108,6 +111,8 @@ def get_capacity_by_level(model_class, mucnuoc):
         .first()
     )
 
+    if strict and (not lower or not upper):
+        return None
     if not lower and not upper:
         return None
     if lower and not upper:
@@ -202,10 +207,43 @@ def validate_required_fields(payload_data, required_fields, plant_name):
         )
 
 
+def save_snapshot_with_inflow(snapshot):
+    model = type(snapshot)
+    previous = model.objects.order_by("-time_stamp", "-pk").first()
+    is_vs = isinstance(snapshot, VinhSonRealtimeSnapshot)
+    reservoirs = (
+        ((Vinhson_HoA, "mntla"), (Vinhson_HoB, "mntlb"), (Vinhson_Hoc, "mntlc"))
+        if is_vs else ((SonghinhMnh, "mntl"),)
+    )
+    # Re-interpolate BOTH ends using the same current table without rounding.
+    # Do not reuse rounded display capacities or clamp out-of-range levels.
+    volumes_start = [
+        get_capacity_by_level(table, getattr(previous, level), strict=True)
+        for table, level in reservoirs
+    ] if previous else []
+    volumes_end = [
+        get_capacity_by_level(table, getattr(snapshot, level), strict=True)
+        for table, level in reservoirs
+    ]
+    snapshot.qve_tinh_toan, snapshot.qve_calculation = calculate_inflow(
+        previous.time_stamp if previous else None, snapshot.time_stamp,
+        volumes_start, volumes_end,
+        previous.qcm if previous else None, snapshot.qcm,
+        previous.qtran if previous else None, snapshot.qtran,
+    )
+    snapshot.qve_calculation["scope"] = "vinhson_A_B_C" if is_vs else "songhinh"
+    snapshot.qve_calculation["assumptions"] = (
+        "Qcm and Qtran at A only; excludes external outflows at B/C, evaporation and seepage."
+        if is_vs else "Excludes other outflows, evaporation and seepage."
+    )
+    snapshot.save()
+    return snapshot
+
+
 def save_songhinh_realtime_snapshot():
     payload_data = enrich_songhinh_payload(fetch_realtime_payload("SONGHINH"))
     validate_required_fields(payload_data, SONGHINH_REQUIRED_FIELDS, "Song Hinh")
-    snapshot = SongHinhRealtimeSnapshot.objects.create(
+    snapshot = save_snapshot_with_inflow(SongHinhRealtimeSnapshot(
         time_stamp=parse_realtime_timestamp(payload_data["time_stamp"]),
         mntl=payload_data["MNTL"],
         mnhl=payload_data["MNHL"],
@@ -223,14 +261,14 @@ def save_songhinh_realtime_snapshot():
         dung_tich_ho=payload_data["dung_tich_ho"],
         dung_tich_phong_lu=payload_data["dung_tich_phong_lu"],
         raw_data=payload_data,
-    )
+    ))
     return RealtimeSaveResult("songhinh", True, snapshot_id=snapshot.id)
 
 
 def save_vinhson_realtime_snapshot():
     payload_data = enrich_vinhson_payload(fetch_realtime_payload("VINHSON"))
     validate_required_fields(payload_data, VINHSON_REQUIRED_FIELDS, "Vinh Son")
-    snapshot = VinhSonRealtimeSnapshot.objects.create(
+    snapshot = save_snapshot_with_inflow(VinhSonRealtimeSnapshot(
         time_stamp=parse_realtime_timestamp(payload_data["time_stamp"]),
         mntla=payload_data["MNTLA"],
         mntla_td=payload_data.get("MNTLA_td"),
@@ -245,11 +283,11 @@ def save_vinhson_realtime_snapshot():
         dung_tich_ho_b=payload_data["dung_tich_ho_b"],
         dung_tich_ho_c=payload_data["dung_tich_ho_c"],
         raw_data=payload_data,
-    )
+    ))
     return RealtimeSaveResult("vinhson", True, snapshot_id=snapshot.id)
 
 
-def claim_realtime_snapshot_run(interval_seconds=3600):
+def claim_realtime_snapshot_run(interval_seconds=1800):
     now = timezone.now()
 
     with transaction.atomic():
@@ -265,26 +303,20 @@ def claim_realtime_snapshot_run(interval_seconds=3600):
         return True
 
 
-def claim_realtime_snapshot_hourly_slot(grace_minutes=5):
+def claim_realtime_snapshot_half_hourly_slot(grace_minutes=5):
+    """Claim one 00/30-minute slot; keep the existing DB field for compatibility."""
     now = timezone.localtime(timezone.now())
-    if now.minute > grace_minutes:
+    slot_minute = (now.minute // 30) * 30
+    if now.minute - slot_minute > min(max(grace_minutes, 0), 29):
         return False
 
-    current_slot = now.replace(minute=0, second=0, microsecond=0)
+    current_slot = now.replace(minute=slot_minute, second=0, microsecond=0)
 
     with transaction.atomic():
         state, _ = RealtimeUpdateState.objects.select_for_update().get_or_create(pk=1)
-        last_hourly_slot = (
-            timezone.localtime(state.last_hourly_slot).replace(
-                minute=0,
-                second=0,
-                microsecond=0,
-            )
-            if state.last_hourly_slot
-            else None
-        )
+        last_hourly_slot = state.last_hourly_slot
 
-        if last_hourly_slot == current_slot:
+        if last_hourly_slot and last_hourly_slot >= current_slot:
             return False
 
         state.last_run_at = timezone.now()
