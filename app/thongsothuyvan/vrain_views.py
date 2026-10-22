@@ -1,3 +1,4 @@
+import logging
 import requests
 from django.core.cache import cache
 from rest_framework import status
@@ -16,10 +17,14 @@ from .vrain_services import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def _vrain_error_response(error):
+    logger.warning("VRAIN request failed", exc_info=(type(error), error, error.__traceback__))
     if isinstance(error, VrainConfigError):
         return Response(
-            {"ok": False, "error": str(error)},
+            {"ok": False, "error": "Dịch vụ VRAIN chưa được cấu hình đầy đủ."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     if isinstance(error, VrainNoDataError):
@@ -29,12 +34,12 @@ def _vrain_error_response(error):
         )
     if isinstance(error, requests.HTTPError):
         return Response(
-            {"ok": False, "error": str(error)},
+            {"ok": False, "error": "Dịch vụ VRAIN tạm thời không khả dụng. Vui lòng thử lại sau."},
             status=status.HTTP_502_BAD_GATEWAY,
         )
     if isinstance(error, requests.RequestException):
         return Response(
-            {"ok": False, "error": f"Loi ket noi den VRAIN API: {error}"},
+            {"ok": False, "error": "Tạm thời không kết nối được VRAIN. Vui lòng thử lại sau."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     if isinstance(error, VrainFutureDateError):
@@ -48,7 +53,7 @@ def _vrain_error_response(error):
             status=status.HTTP_400_BAD_REQUEST,
         )
     return Response(
-        {"ok": False, "error": f"Loi he thong: {error}"},
+        {"ok": False, "error": "Không thể xử lý dữ liệu VRAIN. Vui lòng thử lại sau."},
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
 
