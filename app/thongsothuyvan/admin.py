@@ -800,3 +800,5 @@ class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     )
     list_filter = ("sync_status",)
     date_hierarchy = "Thoi_gian"
+
+from . import vrain_history_admin  # noqa: F401,E402

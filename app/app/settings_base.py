@@ -394,3 +394,16 @@ AI_TOOLS_RAINFALL_STATIONS = {
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
 
 
+
+
+# Parallel VRAIN evidence collection. Never infer interval semantics from cadence alone.
+VRAIN_HISTORY_ENABLED = env_bool("VRAIN_HISTORY_ENABLED", False)
+VRAIN_INTERVAL_CONTRACT_VERIFIED = env_bool("VRAIN_INTERVAL_CONTRACT_VERIFIED", False)
+VRAIN_HISTORY_BASE_URL = "https://kttv-open.vrain.vn/v1/stations/stats"
+VRAIN_HISTORY_ALLOW_LOCAL_TEST = False
+CELERY_BEAT_SCHEDULE["capture-vrain-history"] = {
+    "task": "thongsothuyvan.tasks.sync_vrain_history_task",
+    "schedule": crontab(minute="2,12,22,32,42,52"),
+}
+
+VRAIN_HISTORY_HTTP_TIMEOUT = env_int_range("VRAIN_HISTORY_HTTP_TIMEOUT", 20, 1, 60)

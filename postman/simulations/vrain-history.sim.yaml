@@ -1,0 +1,5 @@
+simulation: vrain-history
+routing: path
+mocks:
+  - routeKey: vrain
+    path: ../mocks/vrain/default.js

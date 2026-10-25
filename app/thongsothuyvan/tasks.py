@@ -191,3 +191,20 @@ def sync_missing_thuy_van_thuc_te_daily_task():
         raise
     finally:
         close_old_connections()
+
+
+@shared_task
+def sync_vrain_history_task():
+    from .vrain_history_services import sync_history, advance_backfill
+    from .vrain_history_models import VrainBackfillJob
+    result = sync_history()
+    if result["status"] in {"error", "no_data", "partial"}:
+        raise RuntimeError("VRAIN history capture incomplete; inspect VrainSyncRun")
+    # Current data first; at most one historical hour per scheduled run.
+    if result["status"] in {"success", "captured_unverified"}:
+        job = VrainBackfillJob.objects.filter(status="pending").order_by("pk").first()
+        if job:
+            backfill = advance_backfill(job)
+            if backfill["status"] in {"error", "no_data", "partial"}:
+                raise RuntimeError("VRAIN backfill incomplete; inspect VrainSyncRun")
+    return result

@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta
 
 import pytz
@@ -7,6 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from .models import TramDoMuaVrain
+from .vrain_credentials import VrainConfigError, _get_api_key
 
 
 STATIONS_MAPPING = {
@@ -29,19 +29,8 @@ class VrainNoDataError(ValueError):
     pass
 
 
-class VrainConfigError(RuntimeError):
-    pass
-
-
 class VrainFutureDateError(ValueError):
     pass
-
-
-def _get_api_key():
-    api_key = getattr(settings, "VRAIN_API_KEY", os.environ.get("VRAIN_API_KEY"))
-    if not api_key:
-        raise VrainConfigError("VRAIN_API_KEY chua duoc cau hinh tren server")
-    return api_key
 
 
 def _fetch_station_stats(start_time, end_time):

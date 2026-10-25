@@ -1,3 +1,5 @@
+from .vrain_history_views import VrainSourceSamplesAPIView
+from .vrain_history_views import VrainHistoryAPIView, VrainSummaryAPIView, VrainSyncStatusAPIView
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .views import (
@@ -56,6 +58,10 @@ router.register(r"realtime-songhinh-snapshots", SongHinhRealtimeSnapshotViewSet,
 router.register(r"realtime-vinhson-snapshots", VinhSonRealtimeSnapshotViewSet, basename="realtime-vinhson-snapshots")
 
 urlpatterns = [
+    path("vrain-source-samples/", VrainSourceSamplesAPIView.as_view(), name="vrain-source-samples"),
+    path("vrain-intervals/", VrainHistoryAPIView.as_view(), name="vrain-intervals"),
+    path("vrain-summary/", VrainSummaryAPIView.as_view(), name="vrain-summary"),
+    path("vrain-sync-status/", VrainSyncStatusAPIView.as_view(), name="vrain-sync-status"),
     path("rain-forecast/", RainForecastAPIView.as_view(), name="rain-forecast"),
     path("", include(router.urls)),
     path("dashboard-summary/", DashboardSummaryAPIView.as_view(), name="dashboard-summary"),

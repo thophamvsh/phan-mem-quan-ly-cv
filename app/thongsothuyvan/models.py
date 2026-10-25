@@ -382,3 +382,5 @@ class TramDoMuaVrain(models.Model):
         ordering = ["-Thoi_gian"]
         verbose_name = "Trạm đo mưa Vrain"
         verbose_name_plural = "Trạm đo mưa Vrain"
+
+from .vrain_history_models import VrainStation, VrainSyncRun, VrainSourceSample, VrainRainfallRevision, VrainRainfallInterval, VrainSyncLease, VrainBackfillJob  # noqa: F401,E402
