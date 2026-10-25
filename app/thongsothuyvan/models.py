@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from .rain_forecast_models import RainForecastLocation, RainForecastRevision, RainForecastFetch, RainForecastLock  # noqa: F401
 
 
 class BaseThuyVan(models.Model):

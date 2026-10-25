@@ -93,14 +93,17 @@ class NumberUtilityTests(SimpleTestCase):
 
 
 class WeatherUtilityTests(SimpleTestCase):
-    @patch("ai_tools.water_tools.weather_service.requests.get")
-    def test_rainfall_forecast_handles_success_http_error_and_exception(self, get):
+    @patch("thongsothuyvan.rain_forecast_services.cache")
+    @patch("thongsothuyvan.rain_forecast_provider.requests.get")
+    def test_rainfall_forecast_handles_success_http_error_and_exception(self, get, cache):
+        cache.get.return_value = None
+        cache.add.return_value = True
         response = Mock(status_code=200)
         response.json.return_value = {
             "daily": {"time": ["2026-06-01", "2026-06-02"], "precipitation_sum": [1.5, None]}
         }
         get.return_value = response
-        self.assertEqual(get_rainfall_forecast(1, 2), {"2026-06-01": 1.5, "2026-06-02": 0.0})
+        self.assertEqual(get_rainfall_forecast(1, 2), {"2026-06-01": 1.5})
 
         get.return_value = Mock(status_code=500)
         self.assertEqual(get_rainfall_forecast(1, 2), {})

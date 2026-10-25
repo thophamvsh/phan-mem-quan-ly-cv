@@ -1,4 +1,4 @@
-import requests
+import logging
 from typing import Dict, Tuple
 from datetime import date
 import calendar
@@ -9,19 +9,13 @@ def get_rainfall_forecast(lat: float, lon: float) -> Dict[str, float]:
     Trả về dict ánh xạ ngày định dạng YYYY-MM-DD với lượng mưa (mm).
     Ví dụ: {'2026-06-01': 5.2, '2026-06-02': 0.0, ...}
     """
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=precipitation_sum&timezone=Asia/Bangkok"
+    from thongsothuyvan.rain_forecast_services import chatbot_forecast
     try:
-        resp = requests.get(url, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            daily = data.get("daily", {})
-            times = daily.get("time", [])
-            precip = daily.get("precipitation_sum", [])
-            return {t: float(p) if p is not None else 0.0 for t, p in zip(times, precip)}
-        else:
-            print(f"[WARN] Weather API status code: {resp.status_code}")
-    except Exception as e:
-        print(f"[WARN] Lỗi lấy dự báo thời tiết Open-Meteo: {e}")
+        # Missing days are absent, never silently converted to zero rainfall.
+        return {row["date"]: row["precipitation"] for row in chatbot_forecast(lat, lon)
+                if row["precipitation"] is not None}
+    except Exception:
+        logging.getLogger(__name__).warning("Rain forecast unavailable for water tool")
     return {}
 
 def get_reservoir_useful_capacity(res_key: str, level: float) -> float:

@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from . import rain_forecast_admin  # noqa: F401
 import inspect
 import math
 from datetime import date, datetime, timedelta

@@ -12,6 +12,16 @@ AUTO_SYNC_USER_EMAIL = "system_auto_sync@example.local"
 AUTO_SYNC_USERNAME = "system_auto_sync"
 
 
+@shared_task
+def refresh_rain_forecast_task():
+    from thongsothuyvan.rain_forecast_services import refresh_forecasts
+    result = refresh_forecasts()
+    if result["status"] == "partial":
+        # Mark Celery FAILURE for external monitoring, not a false success.
+        raise RuntimeError("Rain forecast incomplete; inspect sanitized forecast fetch logs")
+    return result
+
+
 def get_auto_sync_user():
     from django.contrib.auth import get_user_model
 

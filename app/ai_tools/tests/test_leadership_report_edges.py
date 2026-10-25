@@ -18,9 +18,12 @@ from thongsothuyvan.models import ThongSoThuyVanCaiDat, ThongsoSanxuat
 
 
 class LeadershipWeatherEdgeTests(SimpleTestCase):
-    @patch("ai_tools.leadership_report.services.report_service.requests.get")
-    def test_fetch_weather_forecast_handles_partial_daily_arrays(self, get):
-        response = Mock()
+    @patch("thongsothuyvan.rain_forecast_services.cache")
+    @patch("thongsothuyvan.rain_forecast_provider.requests.get")
+    def test_fetch_weather_forecast_handles_partial_daily_arrays(self, get, cache):
+        cache.get.return_value = None
+        cache.add.return_value = True
+        response = Mock(status_code=200)
         response.json.return_value = {
             "daily": {
                 "time": ["2026-06-14", "2026-06-15"],

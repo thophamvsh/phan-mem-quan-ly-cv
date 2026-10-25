@@ -40,6 +40,7 @@ from .vrain_views import (
 )
 
 app_name = "thongsothuyvan"
+from .rain_forecast_views import RainForecastAPIView
 
 router = DefaultRouter()
 router.register(r"song-hinh-mnh", SonghinhMnhViewSet, basename="songhinh-mnh")
@@ -55,6 +56,7 @@ router.register(r"realtime-songhinh-snapshots", SongHinhRealtimeSnapshotViewSet,
 router.register(r"realtime-vinhson-snapshots", VinhSonRealtimeSnapshotViewSet, basename="realtime-vinhson-snapshots")
 
 urlpatterns = [
+    path("rain-forecast/", RainForecastAPIView.as_view(), name="rain-forecast"),
     path("", include(router.urls)),
     path("dashboard-summary/", DashboardSummaryAPIView.as_view(), name="dashboard-summary"),
     path("gio-phat-summary/", GioPhatSummaryAPIView.as_view(), name="gio-phat-summary"),

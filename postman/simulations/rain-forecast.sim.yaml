@@ -1,0 +1,5 @@
+simulation: rain-forecast
+routing: path
+mocks:
+  - routeKey: weather
+    path: ../mocks/open-meteo/default.js

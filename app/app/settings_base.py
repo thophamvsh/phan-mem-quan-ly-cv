@@ -121,7 +121,17 @@ if TRUST_PROXY_HEADERS and not TRUSTED_PROXY_CIDRS:
 
 from celery.schedules import crontab
 
+RAIN_FORECAST_ENABLED = env_bool("RAIN_FORECAST_ENABLED", False)
+OPEN_METEO_BASE_URL = os.environ.get("OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast")
+OPEN_METEO_API_KEY = os.environ.get("OPEN_METEO_API_KEY", "")
+RAIN_FORECAST_STALE_HOURS = 6
+RAIN_FORECAST_ALLOW_LOCAL_TEST = False
+
 CELERY_BEAT_SCHEDULE = {
+    "refresh-rain-forecast": {
+        "task": "thongsothuyvan.tasks.refresh_rain_forecast_task",
+        "schedule": crontab(hour="*/3", minute=15),
+    },
     "save-realtime-snapshots-half-hourly": {
         "task": "thongsothuyvan.tasks.save_all_realtime_snapshots_task",
         "schedule": crontab(minute="0,30"),

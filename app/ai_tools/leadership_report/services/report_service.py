@@ -1,5 +1,4 @@
 import json
-import requests
 from datetime import datetime, time, timedelta
 from django.utils import timezone
 
@@ -23,7 +22,6 @@ from ..utils.formatting import (
 )
 
 
-OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_CODE_TEXT = {
     0: "Trời quang",
     1: "Ít mây",
@@ -112,46 +110,8 @@ def _weather_text(code):
 
 
 def _fetch_weather_forecast(location):
-    response = requests.get(
-        OPEN_METEO_FORECAST_URL,
-        params={
-            "latitude": location["latitude"],
-            "longitude": location["longitude"],
-            "daily": ",".join(
-                (
-                    "weather_code",
-                    "temperature_2m_max",
-                    "temperature_2m_min",
-                    "precipitation_sum",
-                    "precipitation_probability_max",
-                )
-            ),
-            "forecast_days": 7,
-            "timezone": "Asia/Bangkok",
-        },
-        timeout=10,
-    )
-    response.raise_for_status()
-    daily = response.json().get("daily") or {}
-    times = daily.get("time") or []
-    weather_codes = daily.get("weather_code") or []
-    temp_max_values = daily.get("temperature_2m_max") or []
-    temp_min_values = daily.get("temperature_2m_min") or []
-    precipitation_values = daily.get("precipitation_sum") or []
-    precipitation_probability_values = daily.get("precipitation_probability_max") or []
-    return [
-        {
-            "date": day,
-            "weather_code": weather_codes[index] if index < len(weather_codes) else None,
-            "temperature_max": temp_max_values[index] if index < len(temp_max_values) else None,
-            "temperature_min": temp_min_values[index] if index < len(temp_min_values) else None,
-            "precipitation": precipitation_values[index] if index < len(precipitation_values) else None,
-            "precipitation_probability": (
-                precipitation_probability_values[index] if index < len(precipitation_probability_values) else None
-            ),
-        }
-        for index, day in enumerate(times[:7])
-    ]
+    from thongsothuyvan.rain_forecast_services import chatbot_forecast
+    return chatbot_forecast(location["latitude"], location["longitude"], location_code=location.get("forecast_location"))
 
 
 def _rainfall_records_by_period(start_date, end_date):

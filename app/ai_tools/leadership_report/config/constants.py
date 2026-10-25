@@ -74,8 +74,8 @@ LEADERSHIP_RAINFALL_STATIONS = (
 )
 
 LEADERSHIP_WEATHER_LOCATIONS = (
-    {"name": "Sông Hinh", "latitude": 12.92, "longitude": 108.98},
-    {"name": "Vĩnh Sơn", "latitude": 14.35, "longitude": 108.77},
+    {"name": "Sông Hinh", "latitude": 12.926840, "longitude": 108.946392, "forecast_location": "songhinh"},
+    {"name": "Vĩnh Sơn", "latitude": 14.365095, "longitude": 108.694488, "forecast_location": "vinhson_a"},
     {"name": "Thượng Kon Tum", "latitude": 14.72, "longitude": 108.36},
 )
 
