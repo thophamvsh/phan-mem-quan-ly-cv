@@ -101,10 +101,22 @@ class VrainSourceSamplesAPIView(VrainHistoryAPIView):
             start = parse_datetime(request.query_params.get("start", ""))
             end = parse_datetime(request.query_params.get("end", ""))
             page = int(request.query_params.get("page", "1"))
-            if start is None or end is None or timezone.is_naive(start) or timezone.is_naive(end) or not start < end or end-start > timedelta(days=1) or end > timezone.now() or not 1 <= page <= 10000:
+            if start is None or end is None or timezone.is_naive(start) or timezone.is_naive(end) or not start < end:
                 raise ValueError()
         except (ValueError, TypeError):
-            return Response({"detail": "Supply aware start/end in the past, at most 24 hours, and a positive page."}, status=400)
+            return Response({"detail": "Supply timezone-aware ISO start/end and an integer page.", "code": "invalid_time_window"}, status=400)
+        if not 1 <= page <= 10000:
+            return Response({"detail": "Page must be between 1 and 10000.", "code": "invalid_page"}, status=400)
+        if end-start > timedelta(days=1):
+            return Response({"detail": "The source window must not exceed 24 hours.", "code": "window_too_large"}, status=400)
+        now = timezone.now()
+        # Browser and server clocks are independent. Tolerate small drift but
+        # always query only up to server time; never include future observations.
+        if end > now + timedelta(minutes=5):
+            return Response({"detail": "The requested end is more than 5 minutes ahead of server time.", "code": "client_clock_ahead"}, status=400)
+        end = min(end, now)
+        if start >= end:
+            return Response({"detail": "The source window must include time before server time.", "code": "invalid_time_window"}, status=400)
         stations = VrainStation.objects.filter(plant=plant, enabled=True).order_by("source_station_code")
         code = request.query_params.get("station")
         if code:

@@ -225,3 +225,18 @@ class HistoryTests(TestCase):
         self.assertEqual(len(second["results"]),10)
         self.assertFalse(second["has_more"])
         self.assertFalse({r["time_point"] for r in first["results"]} & {r["time_point"] for r in second["results"]})
+
+    def test_source_matrix_tolerates_small_clock_skew_and_caps_at_server_now(self):
+        self.sync()
+        server_now = self.end - timedelta(minutes=1)
+        with patch("thongsothuyvan.vrain_history_views.timezone.now", return_value=server_now):
+            response = self.request(VrainSourceSamplesAPIView, start=self.start.isoformat(), end=self.end.isoformat())
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data["end"], server_now)
+            self.assertEqual(response.data["total_timestamps"], 2)
+            future = self.request(VrainSourceSamplesAPIView, start=self.start.isoformat(), end=(server_now+timedelta(minutes=6)).isoformat())
+            self.assertEqual(future.status_code, 400)
+            self.assertEqual(future.data["code"], "client_clock_ahead")
+            too_long = self.request(VrainSourceSamplesAPIView, start=(server_now-timedelta(hours=25)).isoformat(), end=server_now.isoformat())
+            self.assertEqual(too_long.status_code, 400)
+            self.assertEqual(too_long.data["code"], "window_too_large")
