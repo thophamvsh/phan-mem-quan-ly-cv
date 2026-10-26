@@ -208,3 +208,20 @@ def sync_vrain_history_task():
             if backfill["status"] in {"error", "no_data", "partial"}:
                 raise RuntimeError("VRAIN backfill incomplete; inspect VrainSyncRun")
     return result
+
+
+@shared_task
+def publish_inflow_b0_sh_task():
+    from .inflow_b0_services import publish_b0
+    result=publish_b0()
+    if result["status"] in {"error","unavailable"}:
+        raise RuntimeError("SH B0 publication unavailable; inspect InflowB0Run")
+    return result
+
+
+@shared_task
+def reconcile_inflow_b0_sh_task():
+    from .inflow_b0_services import reconcile_b0
+    result=reconcile_b0()
+    if result["status"]=="error":raise RuntimeError("SH B0 reconciliation failed; inspect InflowB0Run")
+    return result

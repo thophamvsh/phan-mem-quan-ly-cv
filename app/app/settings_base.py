@@ -407,3 +407,17 @@ CELERY_BEAT_SCHEDULE["capture-vrain-history"] = {
 }
 
 VRAIN_HISTORY_HTTP_TIMEOUT = env_int_range("VRAIN_HISTORY_HTTP_TIMEOUT", 20, 1, 60)
+
+
+# Prospective SH B0 shadow forecasts only; manual commands remain available.
+INFLOW_B0_SH_ENABLED = env_bool("INFLOW_B0_SH_ENABLED", False)
+INFLOW_B0_SH_MAX_SOURCE_AGE_DAYS = env_int_range("INFLOW_B0_SH_MAX_SOURCE_AGE_DAYS", 2, 1, 7)
+if INFLOW_B0_SH_ENABLED:
+    CELERY_BEAT_SCHEDULE["publish-sh-b0-shadow"] = {
+        "task": "thongsothuyvan.tasks.publish_inflow_b0_sh_task",
+        "schedule": crontab(hour=7, minute=30),
+    }
+    CELERY_BEAT_SCHEDULE["reconcile-sh-b0-shadow"] = {
+        "task": "thongsothuyvan.tasks.reconcile_inflow_b0_sh_task",
+        "schedule": crontab(hour=7, minute=45),
+    }

@@ -229,3 +229,6 @@ heartbeat.url
 *age-identity*.txt
 *.age
 *.dump
+
+# Local SH training datasets/models/reports (business data)
+research/inflow_sh/runs/

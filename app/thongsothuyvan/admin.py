@@ -802,3 +802,5 @@ class TramDoMuaVrainAdmin(XLSXOnlyMixin, ImportExportModelAdmin):
     date_hierarchy = "Thoi_gian"
 
 from . import vrain_history_admin  # noqa: F401,E402
+
+from . import inflow_b0_admin  # noqa: F401,E402

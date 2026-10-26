@@ -384,3 +384,5 @@ class TramDoMuaVrain(models.Model):
         verbose_name_plural = "Trạm đo mưa Vrain"
 
 from .vrain_history_models import VrainStation, VrainSyncRun, VrainSourceSample, VrainRainfallRevision, VrainRainfallInterval, VrainSyncLease, VrainBackfillJob  # noqa: F401,E402
+
+from .inflow_b0_models import InflowB0Forecast, InflowB0Run, InflowB0Evaluation  # noqa: F401,E402
